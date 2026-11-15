@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://j5d32uynf6wm"
-path="res://.godot/imported/torso_secondary_sheet.png-7207bca55aa6a9e0de00b71f77870252.ctex"
+uid="uid://c4xk2r6rukmit"
+path="res://.godot/imported/CardFrame03_Single_Orange.png-f191679c033be813b8198e5a4b06203e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/torso_secondary_sheet.png"
-dest_files=["res://.godot/imported/torso_secondary_sheet.png-7207bca55aa6a9e0de00b71f77870252.ctex"]
+source_file="res://assets/Layer Lab/Sprite/Components/Frame/CardFrame03_Single_Orange.png"
+dest_files=["res://.godot/imported/CardFrame03_Single_Orange.png-f191679c033be813b8198e5a4b06203e.ctex"]
 
 [params]
 

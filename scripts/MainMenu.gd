@@ -1,5 +1,6 @@
 extends Control
 
+const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
 const TEX_ICON: Texture2D = preload("res://icon.svg")
 
@@ -10,6 +11,11 @@ var _callsign_label: Label
 var _loadout_label: Label
 var _transitioning: bool = false
 var _diff_buttons: Array[Button] = []
+var _agent_select_overlay: Control
+var _agent_preview: SoldierPreview
+var _agent_kit_title: Label
+var _agent_kit_body: Label
+var _agent_cards: Array[Button] = []
 
 
 func _ready() -> void:
@@ -17,31 +23,56 @@ func _ready() -> void:
 	_play_enter_animation()
 
 
-func _make_style(bg: Color, border: Color, corner: int = 12) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(corner)
-	sb.content_margin_left = 18
-	sb.content_margin_right = 18
-	sb.content_margin_top = 14
-	sb.content_margin_bottom = 14
-	return sb
+func _variant_for_color(col: Color) -> String:
+	if col.r > 0.80 and col.g < 0.45 and col.b < 0.45:
+		return "red"
+	if col.r > 0.80 and col.g > 0.72 and col.b < 0.45:
+		return "yellow"
+	if col.r > 0.80 and col.g > 0.40:
+		return "orange"
+	if col.g > 0.75 and col.r < 0.52:
+		return "green"
+	if col.b > 0.80 and col.r > 0.58 and col.g < 0.65:
+		return "purple"
+	if col.b > 0.82 and col.g > 0.68:
+		return "sky"
+	return "blue"
 
 
-func _make_arcade_button(text_str: String, accent: Color, min_h: float = 54.0, font_sz: int = 18, fill_bg: Color = Color(0.11, 0.15, 0.22, 0.95)) -> Button:
+func _make_style(bg: Color, border: Color, corner: int = 12) -> StyleBox:
+	var variant: String = _variant_for_color(border)
+	if variant == "yellow" or variant == "red":
+		variant = "orange"
+	elif variant == "sky":
+		variant = "blue"
+	var mh: int = 12 if corner <= 8 else 16
+	var mv: int = 8 if corner <= 8 else 14
+	var tint := Color(maxf(bg.r + 0.14, 0.20), maxf(bg.g + 0.14, 0.22), maxf(bg.b + 0.14, 0.28), maxf(bg.a, 0.94))
+	return UIStyle.make_card_stylebox(variant, tint, mh, mv)
+
+
+func _make_arcade_button(text_str: String, accent: Color, min_h: float = 54.0, font_sz: int = 18, _fill_bg: Color = Color(0.11, 0.15, 0.22, 0.95)) -> Button:
 	var btn := Button.new()
 	btn.text = text_str
 	btn.custom_minimum_size = Vector2(0, min_h)
+	var upper := text_str.to_upper()
+	var icon_name := ""
+	if upper.contains("SOLO") or upper.contains("BATTLE"):
+		icon_name = "battle"
+	elif upper.contains("AGENT"):
+		icon_name = "thunder"
+	elif upper.contains("WIFI") or upper.contains("HOST") or upper.contains("LOBBY"):
+		icon_name = "wifi"
+	elif upper.contains("CUSTOMIZE"):
+		icon_name = "user"
+	elif upper.contains("SETTINGS"):
+		icon_name = "gear"
+	elif upper.contains("CREDITS"):
+		icon_name = "target"
+	elif upper.contains("QUIT") or upper.contains("CLOSE"):
+		icon_name = "close"
+	UIStyle.style_layer_button(btn, _variant_for_color(accent), icon_name, 16, 10)
 	btn.add_theme_font_size_override("font_size", font_sz)
-
-	var normal := _make_style(fill_bg, accent, 10)
-	var hover := _make_style(fill_bg.lightened(0.14), accent.lightened(0.35), 10)
-	var pressed := _make_style(accent.darkened(0.45), accent.lightened(0.5), 10)
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", hover)
-	btn.add_theme_stylebox_override("pressed", pressed)
 	return btn
 
 
@@ -87,6 +118,7 @@ func _build_ui() -> void:
 
 	var title_lbl := Label.new()
 	title_lbl.text = "NAMELESS CLASH"
+	title_lbl.add_theme_font_override("font", UIStyle.FONT_MAIN)
 	title_lbl.add_theme_font_size_override("font_size", 36)
 	title_lbl.modulate = Color(1.0, 0.84, 0.28)
 	title_v.add_child(title_lbl)
@@ -178,12 +210,18 @@ func _build_ui() -> void:
 	nav_hdr.modulate = Color(0.55, 0.86, 1.0)
 	nav_v.add_child(nav_hdr)
 
-	var btn_solo := _make_arcade_button("▶  PLAY SOLO (VS BOTS)", Color(0.30, 0.92, 0.48), 74.0, 22, Color(0.09, 0.28, 0.16, 0.98))
+	var btn_solo := _make_arcade_button("▶  PLAY SOLO (GUNFIGHT)", Color(0.30, 0.92, 0.48), 66.0, 20, Color(0.09, 0.28, 0.16, 0.98))
 	btn_solo.pressed.connect(func():
 		NetworkManager.disconnect_network()
+		if NetworkManager.is_agent_clash_mode():
+			NetworkManager.match_mode = 0
 		_transition_to(NetworkManager.go_to_arena)
 	)
 	nav_v.add_child(btn_solo)
+
+	var btn_agent := _make_arcade_button("⚡ AGENT CLASH (ABILITIES MODE)", Color(0.78, 0.42, 1.0), 62.0, 19, Color(0.20, 0.10, 0.34, 0.98))
+	btn_agent.pressed.connect(_open_agent_select)
+	nav_v.add_child(btn_agent)
 
 	var diff_row := HBoxContainer.new()
 	diff_row.add_theme_constant_override("separation", 8)
@@ -236,6 +274,7 @@ func _build_ui() -> void:
 	bottom_row.add_child(btn_quit)
 
 	_build_credits_overlay()
+	_build_agent_select_overlay()
 
 
 func _build_credits_overlay() -> void:
@@ -338,3 +377,186 @@ func _close_credits() -> void:
 	var tw := create_tween()
 	tw.tween_property(_credits_overlay, "modulate:a", 0.0, 0.14)
 	tw.finished.connect(func(): _credits_overlay.visible = false)
+
+
+func _build_agent_select_overlay() -> void:
+	_agent_select_overlay = ColorRect.new()
+	_agent_select_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_agent_select_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
+	_agent_select_overlay.visible = false
+	add_child(_agent_select_overlay)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 36)
+	margin.add_theme_constant_override("margin_right", 36)
+	margin.add_theme_constant_override("margin_top", 26)
+	margin.add_theme_constant_override("margin_bottom", 26)
+	_agent_select_overlay.add_child(margin)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.15, 0.98), Color(0.78, 0.42, 1.0, 0.95), 16))
+	margin.add_child(panel)
+
+	var root_v := VBoxContainer.new()
+	root_v.add_theme_constant_override("separation", 12)
+	panel.add_child(root_v)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 12)
+	root_v.add_child(top_row)
+
+	var hdr := Label.new()
+	hdr.text = "⚡ AGENT CLASH — SELECT YOUR HERO & ABILITY KIT"
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr.add_theme_font_size_override("font_size", 24)
+	hdr.modulate = Color(0.86, 0.65, 1.0)
+	top_row.add_child(hdr)
+
+	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 44.0, 16, Color(0.24, 0.10, 0.12))
+	close_btn.custom_minimum_size = Vector2(110, 44)
+	close_btn.pressed.connect(_close_agent_select)
+	top_row.add_child(close_btn)
+
+	var split := HBoxContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 16)
+	root_v.add_child(split)
+
+	# Left Kit Preview Column
+	var left_card := PanelContainer.new()
+	left_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_card.size_flags_stretch_ratio = 0.85
+	left_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.96), Color(0.32, 0.62, 0.98, 0.8), 12))
+	split.add_child(left_card)
+
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 8)
+	left_card.add_child(lv)
+
+	_agent_kit_title = Label.new()
+	_agent_kit_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_agent_kit_title.add_theme_font_size_override("font_size", 22)
+	_agent_kit_title.modulate = Color(1.0, 0.86, 0.34)
+	lv.add_child(_agent_kit_title)
+
+	var stage := PanelContainer.new()
+	stage.custom_minimum_size = Vector2(0, 150)
+	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
+	lv.add_child(stage)
+
+	var anchor_wrap := Control.new()
+	stage.add_child(anchor_wrap)
+	var anchor := Control.new()
+	anchor.set_anchors_preset(Control.PRESET_CENTER)
+	anchor_wrap.add_child(anchor)
+
+	_agent_preview = SoldierPreview.new()
+	_agent_preview.scale = Vector2(3.6, 3.6)
+	anchor.add_child(_agent_preview)
+
+	_agent_kit_body = Label.new()
+	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_agent_kit_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_agent_kit_body.add_theme_font_size_override("font_size", 14)
+	_agent_kit_body.modulate = Color(0.84, 0.94, 1.0)
+	lv.add_child(_agent_kit_body)
+
+	var act_row := HBoxContainer.new()
+	act_row.add_theme_constant_override("separation", 10)
+	lv.add_child(act_row)
+
+	var play_solo_btn := _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 52.0, 17, Color(0.09, 0.30, 0.16))
+	play_solo_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	play_solo_btn.pressed.connect(func():
+		NetworkManager.disconnect_network()
+		NetworkManager.match_mode = 2
+		_close_agent_select()
+		_transition_to(NetworkManager.go_to_arena)
+	)
+	act_row.add_child(play_solo_btn)
+
+	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 52.0, 16, Color(0.10, 0.22, 0.36))
+	lobby_btn.custom_minimum_size = Vector2(145, 52)
+	lobby_btn.pressed.connect(func():
+		NetworkManager.match_mode = 2
+		_close_agent_select()
+		_transition_to(NetworkManager.go_to_lobby)
+	)
+	act_row.add_child(lobby_btn)
+
+	# Right 24-Agent Grid
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_stretch_ratio = 1.15
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	split.add_child(scroll)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(grid)
+
+	_agent_cards.clear()
+	for i in range(AgentData.AGENTS.size()):
+		var ag: Dictionary = AgentData.AGENTS[i]
+		var cb := Button.new()
+		cb.custom_minimum_size = Vector2(0, 62)
+		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cb.add_theme_font_size_override("font_size", 14)
+		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		cb.pressed.connect(_select_agent.bind(i))
+		grid.add_child(cb)
+		_agent_cards.append(cb)
+
+	_refresh_agent_select_ui()
+
+
+func _select_agent(idx: int) -> void:
+	ProfileManager.apply_archetype_preset(idx, true)
+	if is_instance_valid(_preview):
+		_preview.refresh_from_profile()
+	_refresh_agent_select_ui()
+
+
+func _refresh_agent_select_ui() -> void:
+	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	var ag: Dictionary = AgentData.get_agent(idx)
+	var bw: Dictionary = ag["base_weapon"]
+	var abils: Array = ag["abilities"]
+	var ult: Dictionary = ag["ultimate"]
+	if is_instance_valid(_agent_kit_title):
+		_agent_kit_title.text = "%s — %s" % [str(ag["agent_name"]).to_upper(), str(ag["role"])]
+	if is_instance_valid(_agent_preview):
+		_agent_preview.refresh_from_profile()
+	if is_instance_valid(_agent_kit_body):
+		_agent_kit_body.text = (
+			"∞ BASE WEAPON: %s (%d DMG)\n" % [str(bw["name"]), int(bw["damage"])]
+			+ "[Q] %s (%.1fs): %s\n" % [str(abils[0]["name"]), float(abils[0]["cooldown"]), str(abils[0]["desc"])]
+			+ "[E] %s (%.1fs): %s\n" % [str(abils[1]["name"]), float(abils[1]["cooldown"]), str(abils[1]["desc"])]
+			+ "[C] %s (%.1fs): %s\n" % [str(abils[2]["name"]), float(abils[2]["cooldown"]), str(abils[2]["desc"])]
+			+ "★ ULTIMATE [X] (%.0fs): %s — %s\n" % [float(ult["cooldown"]), str(ult["name"]), str(ult["desc"])]
+			+ "Ground Axes/Swords spawn across the map — grab & throw with [F]!"
+		)
+	for i in range(_agent_cards.size()):
+		var is_sel: bool = (i == idx)
+		var ac: Color = ag["accent"] as Color
+		var bg_c: Color = Color(0.22, 0.14, 0.34) if is_sel else Color(0.10, 0.14, 0.22)
+		var bd_c: Color = ac if is_sel else Color(0.28, 0.42, 0.62)
+		_agent_cards[i].add_theme_stylebox_override("normal", _make_style(bg_c, bd_c, 8))
+		_agent_cards[i].add_theme_stylebox_override("hover", _make_style(bg_c.lightened(0.14), bd_c.lightened(0.25), 8))
+		_agent_cards[i].add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 8))
+
+
+func _open_agent_select() -> void:
+	_refresh_agent_select_ui()
+	_agent_select_overlay.visible = true
+	_agent_select_overlay.modulate.a = 0.0
+	create_tween().tween_property(_agent_select_overlay, "modulate:a", 1.0, 0.16)
+
+
+func _close_agent_select() -> void:
+	if is_instance_valid(_agent_select_overlay):
+		_agent_select_overlay.visible = false

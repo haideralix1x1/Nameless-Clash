@@ -6,168 +6,192 @@ const PROFILE_PATH: String = "user://player_profile.cfg"
 
 const ARCHETYPES: Array[Dictionary] = [
 	{
-		"name": "The Soldier",
+		"callsign": "Rex Vance",
+		"name": "Rex Vance (The Soldier)",
 		"desc": "Frontline chibi trooper with a Steel M1 Helmet, olive shirt, and dual chest ammo pouches.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 0
 	},
 	{
-		"name": "The Explorer",
+		"callsign": "Atlas Jones",
+		"name": "Atlas Jones (The Explorer)",
 		"desc": "Rugged field scout wearing a wide Sun Hat, open utility vest, silver belt buckle, and heavy backpack.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 1
 	},
 	{
-		"name": "The Outlaw",
+		"callsign": "Cole Cassidy",
+		"name": "Cole Cassidy (The Outlaw)",
 		"desc": "Gritty bearded marksman with a dark Cowboy Hat, red neckerchief, dark vest, and thigh holster.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 5
 	},
 	{
-		"name": "Camo Commando",
+		"callsign": "Jax Striker",
+		"name": "Jax Striker (Camo Commando)",
 		"desc": "Cheerful jungle commando wearing spotted woodland camo gear and field canteen.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 1
 	},
 	{
-		"name": "Spec-Ops Goggles",
+		"callsign": "Rook Frost",
+		"name": "Rook Frost (Spec-Ops)",
 		"desc": "SWAT breaching specialist in a dark tactical helmet with twin white ski goggles.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 3
 	},
 	{
-		"name": "Golden Spartan",
+		"callsign": "Leonidas",
+		"name": "Leonidas (Golden Spartan)",
 		"desc": "Ancient Greek champion clad in golden bronze cuirass, crimson plume, and billowing cape.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 2
 	},
 	{
-		"name": "Roman Centurion",
+		"callsign": "Maximus",
+		"name": "Maximus (Roman Centurion)",
 		"desc": "Imperial legion officer with silver Galea crest helmet and segmented steel armor.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 0
 	},
 	{
-		"name": "Viking Berserker",
+		"callsign": "Ragnar",
+		"name": "Ragnar (Viking Berserker)",
 		"desc": "Fearsome northern raider with horned iron helm, braided orange beard, and round shield.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
 	},
 	{
-		"name": "Crusader Knight",
+		"callsign": "Galahad",
+		"name": "Galahad (Crusader Knight)",
 		"desc": "Heavy armored paladin in white Templar cross tabard, horned great-helm, and broadsword.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 2
 	},
 	{
-		"name": "Royal King",
+		"callsign": "King Arthur",
+		"name": "King Arthur (Royal King)",
 		"desc": "Majestic monarch crowned with jewels, snowy white beard, and crimson royal mantle.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 8
 	},
 	{
-		"name": "Pirate Buccaneer",
+		"callsign": "Blackbeard",
+		"name": "Blackbeard (Pirate Captain)",
 		"desc": "Swashbuckling sea captain sporting an eyepatch, skull tricorne hat, and steel cutlass.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 5
 	},
 	{
-		"name": "Shadow Ninja",
+		"callsign": "Kenshin",
+		"name": "Kenshin (Shadow Ninja)",
 		"desc": "Silent shinobi assassin with purple cloth mask, silver forehead plate, and back katana.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{
-		"name": "Brain Zombie",
+		"callsign": "Rotjaw",
+		"name": "Rotjaw (Brain Zombie)",
 		"desc": "Undead brawler with exposed pink brain, glowing yellow zombie eyes, and tattered jacket.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
 	},
 	{
-		"name": "Skull Skeleton",
+		"callsign": "Marrow",
+		"name": "Marrow (Skull Skeleton)",
 		"desc": "Risen bone warrior featuring hollow skull sockets, horned cap, and exposed ribcage.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 7
 	},
 	{
-		"name": "Spooky Ghost",
+		"callsign": "Wraith",
+		"name": "Wraith (Spooky Ghost)",
 		"desc": "Haunting phantom floating in an alabaster shroud with grim reaper scythe slung behind.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{
-		"name": "Ancient Mummy",
+		"callsign": "Imhotep",
+		"name": "Imhotep (Ancient Mummy)",
 		"desc": "Bandage-wrapped tomb guardian with glowing amber eyes and golden pharaoh band.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 3
 	},
 	{
-		"name": "Cyber Robot",
+		"callsign": "Aegis-7",
+		"name": "Aegis-7 (Cyber Robot)",
 		"desc": "Heavy steel automaton powered by glowing yellow optic sensors and twin thrusters.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 10
 	},
 	{
-		"name": "Bio-Hazard Cyborg",
+		"callsign": "Viper-X",
+		"name": "Viper-X (Bio-Hazard Cyborg)",
 		"desc": "Toxic hazard trooper sealed inside an emerald gas-mask visor and pressurized rig.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 7
 	},
 	{
-		"name": "Shadow Cat",
+		"callsign": "Nyx",
+		"name": "Nyx (Shadow Cat)",
 		"desc": "Agile black feline fighter with pointed ears, golden collar bell, whiskers, and curled tail.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{
-		"name": "Dragon Hero",
+		"callsign": "Ryu",
+		"name": "Ryu (Dragon Hero)",
 		"desc": "Spiky emerald-haired champion equipped with ornate gold-trimmed fantasy armor and blade.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 1
 	},
 	{
-		"name": "Fierce Orc",
+		"callsign": "Grom",
+		"name": "Grom (Fierce Orc)",
 		"desc": "Purple-skinned ogre warlord boasting twin ivory tusks, cyan mohawk, and bone necklace.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 10
 	},
 	{
-		"name": "Magma Golem",
+		"callsign": "Ignis",
+		"name": "Ignis (Magma Golem)",
 		"desc": "Volcanic stone colossus pulsing with molten orange magma eyes and glowing rock cracks.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 5
 	},
 	{
-		"name": "Crystal Golem",
+		"callsign": "Prism",
+		"name": "Prism (Crystal Golem)",
 		"desc": "Radiant pink quartz elemental crowned with sharp crystal spires and faceted stone armor.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 8
 	},
 	{
-		"name": "Tribal Monk",
+		"callsign": "Zenyu",
+		"name": "Zenyu (Tribal Monk)",
 		"desc": "Battle-hardened brawler with crimson headband, prayer bead necklace, and wooden bo-staff.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,

@@ -46,6 +46,129 @@ const RESOURCE_PATHS: Array[String] = [
 	"res://assets/weapons/weapon_10_rpg7.tres"
 ]
 
+const GUN_PRESETS: Array[Dictionary] = [
+	{
+		"name": "Assault Specialist",
+		"primary": 0,
+		"secondary": 9,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"desc": "AK-47 + Glock 17 + 3 Frag Bombs",
+		"accent": "green"
+	},
+	{
+		"name": "Tactical Carbine",
+		"primary": 1,
+		"secondary": 3,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"desc": "M4A1 + MP5 + 3 Frag Bombs",
+		"accent": "blue"
+	},
+	{
+		"name": "Heavy Striker",
+		"primary": 2,
+		"secondary": 4,
+		"bombs": 3,
+		"bomb_type": "cluster",
+		"desc": "SCAR-H + Kriss Vector + 3 Cluster Bombs",
+		"accent": "orange"
+	},
+	{
+		"name": "Breacher CQB",
+		"primary": 5,
+		"secondary": 6,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"desc": "SPAS-12 + Remington 870 + 3 Frag Bombs",
+		"accent": "purple"
+	},
+	{
+		"name": "Sniper Recon",
+		"primary": 7,
+		"secondary": 8,
+		"bombs": 2,
+		"bomb_type": "frag",
+		"desc": "AWM + Dragunov SVD + 2 Frag Bombs",
+		"accent": "sky"
+	},
+	{
+		"name": "Demolitionist",
+		"primary": 10,
+		"secondary": 9,
+		"bombs": 4,
+		"bomb_type": "cluster",
+		"desc": "RPG-7 + Glock 17 + 4 Cluster Bombs",
+		"accent": "red"
+	}
+]
+
+
+static func _get_network_manager() -> Node:
+	var ml: MainLoop = Engine.get_main_loop()
+	if ml is SceneTree:
+		return (ml as SceneTree).root.get_node_or_null("NetworkManager")
+	return null
+
+
+static func is_weapon_allowed(weapon_id: int) -> bool:
+	var nm: Node = _get_network_manager()
+	if nm == null:
+		return true
+	if bool(nm.get("only_pistols")):
+		return weapon_id == 9
+	if not bool(nm.get("allow_shotguns")) and (weapon_id == 5 or weapon_id == 6):
+		return false
+	if not bool(nm.get("allow_snipers")) and (weapon_id == 7 or weapon_id == 8):
+		return false
+	if not bool(nm.get("allow_explosives")) and weapon_id == 10:
+		return false
+	return true
+
+
+static func get_allowed_weapon_ids() -> Array[int]:
+	var out: Array[int] = []
+	for i in range(RESOURCE_PATHS.size()):
+		if is_weapon_allowed(i):
+			out.append(i)
+	if out.is_empty():
+		out.append(9)
+	return out
+
+
+static func sanitize_weapon_id(weapon_id: int) -> int:
+	var idx: int = wrapi(weapon_id, 0, RESOURCE_PATHS.size())
+	if is_weapon_allowed(idx):
+		return idx
+	var allowed: Array[int] = get_allowed_weapon_ids()
+	return allowed[0]
+
+
+static func get_effective_preset(preset_idx: int) -> Dictionary:
+	var idx: int = clampi(preset_idx, 0, GUN_PRESETS.size() - 1)
+	var d: Dictionary = GUN_PRESETS[idx].duplicate(true)
+	var orig_pri: int = int(d["primary"])
+	var orig_sec: int = int(d["secondary"])
+	var pri: int = sanitize_weapon_id(orig_pri)
+	var sec: int = orig_sec
+	if not is_weapon_allowed(sec):
+		sec = 9 if is_weapon_allowed(9) else sanitize_weapon_id(orig_sec)
+	d["primary"] = pri
+	d["secondary"] = sec
+
+	var nm: Node = _get_network_manager()
+	var bombs_allowed: bool = true if nm == null else bool(nm.get("allow_explosives"))
+	if not bombs_allowed:
+		d["bombs"] = 0
+
+	var w_pri: WeaponData = get_weapon(pri, 0, 0)
+	var w_sec: WeaponData = get_weapon(sec, 0, 0)
+	var b_count: int = int(d["bombs"])
+	var b_label: String = "NO BOMBS" if b_count <= 0 else ("%d %s Bombs" % [b_count, str(d["bomb_type"]).capitalize()])
+	var rule_tag: String = " [FILTERED]" if (pri != orig_pri or sec != orig_sec or not bombs_allowed) else ""
+	d["effective_desc"] = "%s + %s + %s%s" % [w_pri.display_name, w_sec.display_name, b_label, rule_tag]
+	return d
+
 
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
 	var idx: int = clampi(weapon_id, 0, RESOURCE_PATHS.size() - 1)

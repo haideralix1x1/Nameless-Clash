@@ -1,5 +1,6 @@
 extends Control
 
+const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
 
 var _name_input: LineEdit
@@ -23,12 +24,22 @@ var _bot_count_label: Label
 var _bot_diff_opt: OptionButton
 var _local_bot_count: int = 3
 
+var _chk_unlimited_jetpack: CheckBox
+var _chk_only_pistols: CheckBox
+var _chk_allow_snipers: CheckBox
+var _chk_allow_shotguns: CheckBox
+var _chk_allow_explosives: CheckBox
+var _gravity_slider: HSlider
+var _gravity_val_lbl: Label
+var _syncing_rules_ui: bool = false
+
 
 func _ready() -> void:
 	_local_bot_count = NetworkManager.bot_count
 	_build_ui()
 	NetworkManager.player_list_updated.connect(_refresh_players)
 	NetworkManager.match_settings_updated.connect(_refresh_match_settings_ui)
+	NetworkManager.game_rules_updated.connect(_refresh_rules_ui)
 	NetworkManager.lan_servers_updated.connect(_refresh_lan_servers)
 	NetworkManager.connection_succeeded.connect(_on_connected)
 	NetworkManager.connection_failed.connect(_on_conn_failed)
@@ -44,23 +55,34 @@ func _exit_tree() -> void:
 	NetworkManager.stop_lan_discovery()
 
 
-func _make_style(bg: Color, border: Color, corner: int = 12, margin_h: int = 14, margin_v: int = 10) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(corner)
-	sb.content_margin_left = margin_h
-	sb.content_margin_right = margin_h
-	sb.content_margin_top = margin_v
-	sb.content_margin_bottom = margin_v
-	return sb
+func _variant_for_color(col: Color) -> String:
+	if col.r > 0.80 and col.g < 0.45 and col.b < 0.45:
+		return "red"
+	if col.r > 0.80 and col.g > 0.72 and col.b < 0.45:
+		return "yellow"
+	if col.r > 0.80 and col.g > 0.40:
+		return "orange"
+	if col.g > 0.75 and col.r < 0.52:
+		return "green"
+	if col.b > 0.80 and col.r > 0.58 and col.g < 0.65:
+		return "purple"
+	if col.b > 0.82 and col.g > 0.68:
+		return "sky"
+	return "blue"
 
 
-func _style_button(btn: Button, bg: Color, border: Color, corner: int = 10) -> void:
-	btn.add_theme_stylebox_override("normal", _make_style(bg, border, corner, 14, 10))
-	btn.add_theme_stylebox_override("hover", _make_style(bg.lightened(0.14), border.lightened(0.3), corner, 14, 10))
-	btn.add_theme_stylebox_override("pressed", _make_style(border.darkened(0.4), border.lightened(0.45), corner, 14, 10))
+func _make_style(bg: Color, border: Color, _corner: int = 12, margin_h: int = 14, margin_v: int = 10) -> StyleBox:
+	var variant: String = _variant_for_color(border)
+	if variant == "yellow" or variant == "red":
+		variant = "orange"
+	elif variant == "sky":
+		variant = "blue"
+	var tint := Color(maxf(bg.r + 0.14, 0.20), maxf(bg.g + 0.14, 0.22), maxf(bg.b + 0.14, 0.28), maxf(bg.a, 0.94))
+	return UIStyle.make_card_stylebox(variant, tint, margin_h, margin_v)
+
+
+func _style_button(btn: Button, _bg: Color, border: Color, _corner: int = 10) -> void:
+	UIStyle.style_layer_button(btn, _variant_for_color(border), "", 14, 10)
 
 
 func _build_ui() -> void:
@@ -284,6 +306,57 @@ func _build_ui() -> void:
 
 	lv.add_child(HSeparator.new())
 
+	var rules_hdr := Label.new()
+	rules_hdr.text = "MATCH RULES & WEAPON LIMITS"
+	rules_hdr.add_theme_font_size_override("font_size", 14)
+	rules_hdr.modulate = Color(0.68, 0.90, 1.0)
+	lv.add_child(rules_hdr)
+
+	var grav_row := HBoxContainer.new()
+	grav_row.add_theme_constant_override("separation", 8)
+	lv.add_child(grav_row)
+	var grav_lbl := Label.new()
+	grav_lbl.text = "Gravity (0-1):"
+	grav_lbl.custom_minimum_size = Vector2(115, 0)
+	grav_lbl.add_theme_font_size_override("font_size", 14)
+	grav_row.add_child(grav_lbl)
+	_gravity_slider = HSlider.new()
+	_gravity_slider.min_value = 0.0
+	_gravity_slider.max_value = 1.0
+	_gravity_slider.step = 0.05
+	_gravity_slider.value = NetworkManager.gravity_scale
+	_gravity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gravity_slider.value_changed.connect(func(v: float):
+		if is_instance_valid(_gravity_val_lbl):
+			_gravity_val_lbl.text = "%.2fx" % v
+		_on_rules_ui_changed()
+	)
+	grav_row.add_child(_gravity_slider)
+	_gravity_val_lbl = Label.new()
+	_gravity_val_lbl.text = "%.2fx" % NetworkManager.gravity_scale
+	_gravity_val_lbl.custom_minimum_size = Vector2(52, 0)
+	_gravity_val_lbl.add_theme_font_size_override("font_size", 14)
+	grav_row.add_child(_gravity_val_lbl)
+
+	var rules_grid := GridContainer.new()
+	rules_grid.columns = 2
+	rules_grid.add_theme_constant_override("h_separation", 8)
+	rules_grid.add_theme_constant_override("v_separation", 4)
+	lv.add_child(rules_grid)
+
+	_chk_unlimited_jetpack = _make_rule_checkbox("Unlimited Jetpack", NetworkManager.unlimited_jetpack)
+	rules_grid.add_child(_chk_unlimited_jetpack)
+	_chk_only_pistols = _make_rule_checkbox("Pistols Only", NetworkManager.only_pistols)
+	rules_grid.add_child(_chk_only_pistols)
+	_chk_allow_snipers = _make_rule_checkbox("Allow Snipers", NetworkManager.allow_snipers)
+	rules_grid.add_child(_chk_allow_snipers)
+	_chk_allow_shotguns = _make_rule_checkbox("Allow Shotguns", NetworkManager.allow_shotguns)
+	rules_grid.add_child(_chk_allow_shotguns)
+	_chk_allow_explosives = _make_rule_checkbox("Allow Explosives", NetworkManager.allow_explosives)
+	rules_grid.add_child(_chk_allow_explosives)
+
+	lv.add_child(HSeparator.new())
+
 	_host_btn = Button.new()
 	_host_btn.text = "CREATE WIFI ROOM"
 	_host_btn.custom_minimum_size = Vector2(0, 52)
@@ -467,8 +540,48 @@ func _refresh_match_settings_ui() -> void:
 	if is_instance_valid(_bot_diff_opt):
 		_bot_diff_opt.selected = clampi(NetworkManager.bot_difficulty, 0, 2)
 	_refresh_bot_label()
+	_refresh_rules_ui()
 	_refresh_team_button()
 	_refresh_controls_state()
+
+
+func _make_rule_checkbox(title_txt: String, initial: bool) -> CheckBox:
+	var chk := CheckBox.new()
+	chk.text = title_txt
+	chk.button_pressed = initial
+	chk.add_theme_font_size_override("font_size", 13)
+	chk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chk.toggled.connect(func(_on: bool): _on_rules_ui_changed())
+	return chk
+
+
+func _on_rules_ui_changed() -> void:
+	if _syncing_rules_ui:
+		return
+	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
+		return
+	SettingsManager.unlimited_jetpack = _chk_unlimited_jetpack.button_pressed
+	SettingsManager.only_pistols = _chk_only_pistols.button_pressed
+	SettingsManager.allow_snipers = _chk_allow_snipers.button_pressed
+	SettingsManager.allow_shotguns = _chk_allow_shotguns.button_pressed
+	SettingsManager.allow_explosives = _chk_allow_explosives.button_pressed
+	SettingsManager.gravity_scale = clampf(float(_gravity_slider.value), 0.0, 1.0)
+	SettingsManager.apply_and_save()
+
+
+func _refresh_rules_ui() -> void:
+	if not is_instance_valid(_chk_unlimited_jetpack):
+		return
+	_syncing_rules_ui = true
+	_chk_unlimited_jetpack.button_pressed = NetworkManager.unlimited_jetpack
+	_chk_only_pistols.button_pressed = NetworkManager.only_pistols
+	_chk_allow_snipers.button_pressed = NetworkManager.allow_snipers
+	_chk_allow_shotguns.button_pressed = NetworkManager.allow_shotguns
+	_chk_allow_explosives.button_pressed = NetworkManager.allow_explosives
+	_gravity_slider.value = clampf(NetworkManager.gravity_scale, 0.0, 1.0)
+	if is_instance_valid(_gravity_val_lbl):
+		_gravity_val_lbl.text = "%.2fx" % _gravity_slider.value
+	_syncing_rules_ui = false
 
 
 func _refresh_controls_state() -> void:
@@ -489,6 +602,13 @@ func _refresh_controls_state() -> void:
 	_bot_plus_btn.disabled = not can_edit_match
 	if is_instance_valid(_bot_diff_opt):
 		_bot_diff_opt.disabled = not can_edit_match
+	if is_instance_valid(_chk_unlimited_jetpack):
+		_chk_unlimited_jetpack.disabled = not can_edit_match
+		_chk_only_pistols.disabled = not can_edit_match
+		_chk_allow_snipers.disabled = not can_edit_match
+		_chk_allow_shotguns.disabled = not can_edit_match
+		_chk_allow_explosives.disabled = not can_edit_match
+		_gravity_slider.editable = can_edit_match
 	_room_ip_banner.text = "Room IP: " + NetworkManager.get_primary_local_ip()
 	_refresh_team_button()
 
@@ -512,15 +632,17 @@ func _refresh_players() -> void:
 			var av: Dictionary = ProfileManager.sanitize_avatar(info.get("avatar", {}))
 			var t_id: int = int(info.get("team", 0))
 			var role: String = "Host" if pid == 1 else "Ready"
-			var team_txt: String = "Solo" if NetworkManager.match_mode == 0 else ("Blue Team" if t_id == 0 else "Red Team")
-			border_col = NetworkManager.get_team_color(t_id if NetworkManager.match_mode == 1 else int(info.get("color_index", 0)))
-			var arch_lbl: String = ProfileManager.ARCHETYPES[clampi(int(av["archetype_id"]), 0, ProfileManager.ARCHETYPES.size() - 1)]["name"]
+			var team_txt: String = "Solo" if not NetworkManager.is_team_mode() else ("Blue Team" if t_id == 0 else "Red Team")
+			border_col = NetworkManager.get_team_color(t_id if NetworkManager.is_team_mode() else int(info.get("color_index", 0)))
+			var a_idx: int = clampi(int(av["archetype_id"]), 0, ProfileManager.ARCHETYPES.size() - 1)
+			var arch_lbl: String = ProfileManager.ARCHETYPES[a_idx]["name"]
+			var load_lbl: String = str(AgentData.get_agent(a_idx)["base_weapon"]["name"]) if NetworkManager.is_agent_clash_mode() else ProfileManager.WEAPON_NAMES[int(av["primary_weapon_id"])]
 			slot_text = "%s (%s)  •  %s  •  %s  •  %s" % [
 				str(info.get("name", "Trooper")),
 				arch_lbl,
 				role,
 				team_txt,
-				ProfileManager.WEAPON_NAMES[int(av["primary_weapon_id"])]
+				load_lbl
 			]
 
 		var sb := _make_style(bg_col, border_col, 8, 12, 5)

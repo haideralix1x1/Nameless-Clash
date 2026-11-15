@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bf63g4tfblje6"
-path="res://.godot/imported/torso_primary_sheet.png-0abbc99c1176edccc4c8ebddb19ca6b8.ctex"
+uid="uid://c66pf5jmrpnnx"
+path="res://.godot/imported/Button01_Dark.Png-242168057873d6f1df3a29b939006017.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/torso_primary_sheet.png"
-dest_files=["res://.godot/imported/torso_primary_sheet.png-0abbc99c1176edccc4c8ebddb19ca6b8.ctex"]
+source_file="res://assets/Layer Lab/Sprite/Components/Button/Button01_Dark.Png"
+dest_files=["res://.godot/imported/Button01_Dark.Png-242168057873d6f1df3a29b939006017.ctex"]
 
 [params]
 

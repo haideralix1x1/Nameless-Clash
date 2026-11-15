@@ -6,6 +6,8 @@ signal ammo_changed(current: int, mag_size: int, is_reloading: bool)
 signal weapon_changed(weapon_data: WeaponData, dual_wield: bool)
 signal died_signal(respawn_seconds: float)
 signal respawned_signal
+signal bombs_changed(count: int, bomb_type: String)
+signal agent_state_changed(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float)
 
 const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
@@ -95,6 +97,24 @@ var _bot_allow_fire: bool = true
 var _bot_aim_error: float = 0.0
 var _spawn_points: Array[Vector2] = []
 
+# Agent Clash Mode state
+var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var ability_max_cooldowns: Array[float] = [6.0, 8.0, 8.5, 22.0]
+var held_throwable_id: int = -1
+var stun_timer: float = 0.0
+var speed_boost_timer: float = 0.0
+var speed_boost_mult: float = 1.0
+var _melee_swing_timer: float = 0.0
+var _agent_weapon_node: Node2D = null
+var _agent_hud_sync_accum: float = 0.0
+
+# Normal Gunfight Mode Preset & Bomb state
+var selected_gun_preset_id: int = 0
+var bomb_count: int = 3
+var max_bombs: int = 3
+var bomb_type: String = "frag"
+var _bomb_cooldown: float = 0.0
+
 @onready var _collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var _modular_rig: ModularCharacter = $ModularRig
 @onready var _weapon_pivot: Node2D = $WeaponPivot
@@ -142,10 +162,12 @@ func setup_player(
 	skin_color = av["skin_color"] as Color
 	helmet_color = av["helmet_color"] as Color
 	gear_color = av["gear_color"] as Color
-	primary_weapon_id = int(av["primary_weapon_id"])
-	secondary_weapon_id = int(av["secondary_weapon_id"])
+	primary_weapon_id = WeaponData.sanitize_weapon_id(int(av["primary_weapon_id"]))
+	secondary_weapon_id = WeaponData.sanitize_weapon_id(int(av["secondary_weapon_id"]))
 	_equipped_primary_id = primary_weapon_id
 	current_weapon_id = primary_weapon_id
+	max_bombs = 3 if NetworkManager.allow_explosives else 0
+	bomb_count = max_bombs
 	weapon_skin_id = int(av["weapon_skin_id"])
 	m4a1_rail_mod = int(av["m4a1_rail_mod"])
 
@@ -162,6 +184,7 @@ func setup_player(
 
 func _ready() -> void:
 	add_to_group("players")
+	_init_agent_kit()
 	_apply_modular_textures()
 	_apply_weapon(current_weapon_id)
 	_apply_team_visuals()
@@ -171,6 +194,30 @@ func _ready() -> void:
 	_muzzle_flash.visible = false
 	_update_overhead_ui()
 	_emit_hud_signals()
+
+
+func _init_agent_kit() -> void:
+	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	var ag: Dictionary = AgentData.get_agent(archetype_id)
+	var abils: Array = ag["abilities"]
+	var ult: Dictionary = ag["ultimate"]
+	ability_max_cooldowns = [
+		float(abils[0]["cooldown"]),
+		float(abils[1]["cooldown"]),
+		float(abils[2]["cooldown"]),
+		float(ult["cooldown"])
+	]
+	if _agent_weapon_node == null and is_instance_valid(_weapon_pivot):
+		var vis := AgentWeaponVisual.new()
+		vis.name = "AgentWeaponVisual"
+		_weapon_pivot.add_child(vis)
+		_agent_weapon_node = vis
+	if _agent_weapon_node != null:
+		var bw: Dictionary = ag["base_weapon"]
+		_agent_weapon_node.set("weapon_style", str(bw["style"]))
+		_agent_weapon_node.set("weapon_color", bw["color"] as Color)
+		_agent_weapon_node.visible = NetworkManager.is_agent_clash_mode() and not is_dead
+		_agent_weapon_node.queue_redraw()
 
 
 func _apply_modular_textures() -> void:
@@ -222,6 +269,9 @@ func _physics_process(delta: float) -> void:
 	if _fire_anim_timer > 0.0:
 		_fire_anim_timer = maxf(0.0, _fire_anim_timer - delta)
 
+	if _melee_swing_timer > 0.0:
+		_melee_swing_timer = maxf(0.0, _melee_swing_timer - delta)
+
 	if _hit_flash_timer > 0.0:
 		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
 
@@ -231,7 +281,7 @@ func _physics_process(delta: float) -> void:
 		var s: float = _shake_amount * SettingsManager.screen_shake_intensity
 		var target_off: Vector2 = Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO
 		_camera.offset = _camera.offset.lerp(target_off, 0.45)
-		var target_zoom_val: float = _weapon.scope_zoom if (not is_dead and _weapon != null) else 1.05
+		var target_zoom_val: float = _weapon.scope_zoom if (not NetworkManager.is_agent_clash_mode() and not is_dead and _weapon != null) else 1.05
 		var target_zoom := Vector2(target_zoom_val, target_zoom_val)
 		_camera.zoom = _camera.zoom.lerp(target_zoom, clampf(delta * 8.0, 0.0, 1.0))
 
@@ -248,8 +298,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _process_dead(delta: float) -> void:
+	var grav_eff: float = GRAVITY * clampf(NetworkManager.gravity_scale, 0.0, 1.0)
 	velocity.x = move_toward(velocity.x, 0.0, FRICTION * delta)
-	velocity.y = minf(velocity.y + GRAVITY * delta, 700.0)
+	velocity.y = minf(velocity.y + grav_eff * delta, 700.0)
 	is_jetpacking = false
 	move_and_slide()
 
@@ -263,8 +314,25 @@ func _process_dead(delta: float) -> void:
 func _process_alive(delta: float) -> void:
 	if _fire_cooldown > 0.0:
 		_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
+	if _bomb_cooldown > 0.0:
+		_bomb_cooldown = maxf(0.0, _bomb_cooldown - delta)
 
-	if is_reloading:
+	if NetworkManager.is_agent_clash_mode():
+		for i in range(4):
+			if ability_cooldowns[i] > 0.0:
+				ability_cooldowns[i] = maxf(0.0, ability_cooldowns[i] - delta)
+		if stun_timer > 0.0:
+			stun_timer = maxf(0.0, stun_timer - delta)
+		if speed_boost_timer > 0.0:
+			speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
+			if speed_boost_timer <= 0.0:
+				speed_boost_mult = 1.0
+		_agent_hud_sync_accum += delta
+		if is_local_human and _agent_hud_sync_accum >= 0.08:
+			_agent_hud_sync_accum = 0.0
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+	if not NetworkManager.is_agent_clash_mode() and is_reloading:
 		_reload_timer -= delta
 		if _reload_timer <= 0.0:
 			if _weapon.single_shell_reload:
@@ -286,14 +354,23 @@ func _process_alive(delta: float) -> void:
 	var want_jet: bool = false
 	var want_fire: bool = false
 
+	var is_stunned: bool = NetworkManager.is_agent_clash_mode() and stun_timer > 0.0
+
 	if is_bot:
 		var bot_cmd: Dictionary = _compute_bot_input(delta)
-		move_dir = float(bot_cmd["move_x"])
-		want_jump = bool(bot_cmd["jump"])
-		want_crouch = bool(bot_cmd["crouch"])
-		want_jet = bool(bot_cmd["jetpack"])
-		want_fire = bool(bot_cmd["fire"])
-		aim_angle = float(bot_cmd["aim_angle"])
+		if not is_stunned:
+			move_dir = float(bot_cmd["move_x"])
+			want_jump = bool(bot_cmd["jump"])
+			want_crouch = bool(bot_cmd["crouch"])
+			want_jet = bool(bot_cmd["jetpack"])
+			want_fire = bool(bot_cmd["fire"])
+			aim_angle = float(bot_cmd["aim_angle"])
+	elif is_stunned:
+		move_dir = 0.0
+		want_jump = false
+		want_crouch = false
+		want_jet = false
+		want_fire = false
 	else:
 		var kb_x: float = Input.get_axis("move_left", "move_right")
 		if absf(virtual_move.x) > 0.12:
@@ -324,25 +401,43 @@ func _process_alive(delta: float) -> void:
 
 		want_fire = virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui)
 
-		if Input.is_action_just_pressed("reload"):
-			start_reload()
-		if Input.is_action_just_pressed("switch_weapon"):
-			cycle_weapon()
-		if Input.is_action_just_pressed("toggle_dual_wield"):
-			toggle_dual_wield()
+		if NetworkManager.is_agent_clash_mode():
+			if Input.is_action_just_pressed("ability_1"):
+				use_agent_ability(0)
+			if Input.is_action_just_pressed("ability_2"):
+				use_agent_ability(1)
+			if Input.is_action_just_pressed("ability_3"):
+				use_agent_ability(2)
+			if Input.is_action_just_pressed("ability_ult"):
+				use_agent_ability(3)
+			if Input.is_action_just_pressed("throw_item"):
+				throw_held_item()
+		else:
+			if Input.is_action_just_pressed("reload"):
+				start_reload()
+			if Input.is_action_just_pressed("switch_weapon"):
+				cycle_weapon()
+			if Input.is_action_just_pressed("toggle_dual_wield"):
+				toggle_dual_wield()
+			if Input.is_action_just_pressed("throw_item"):
+				throw_bomb()
 
 	facing_right = cos(aim_angle) >= 0.0
 
-	is_crouching = want_crouch and is_on_floor() and not want_jet
+	is_crouching = want_crouch and is_on_floor() and not want_jet and not is_stunned
 	_update_crouch_collider(is_crouching)
 
-	var speed_mult: float = _weapon.move_speed_multiplier if _weapon != null else 1.0
+	var speed_mult: float = 1.0 if NetworkManager.is_agent_clash_mode() else (_weapon.move_speed_multiplier if _weapon != null else 1.0)
+	if NetworkManager.is_agent_clash_mode() and speed_boost_timer > 0.0:
+		speed_mult *= speed_boost_mult
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		speed_mult *= (0.72 if bot_diff == 0 else (0.86 if bot_diff == 1 else 1.0))
 	var target_speed: float = (CROUCH_SPEED if is_crouching else MOVE_SPEED) * speed_mult * move_dir
 	var accel: float = GROUND_ACCEL if is_on_floor() else AIR_ACCEL
-	if absf(move_dir) > 0.05:
+	if is_stunned:
+		velocity.x = move_toward(velocity.x, 0.0, FRICTION * 2.5 * delta)
+	elif absf(move_dir) > 0.05:
 		velocity.x = move_toward(velocity.x, target_speed, accel * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, (FRICTION if is_on_floor() else AIR_ACCEL * 0.45) * delta)
@@ -357,15 +452,24 @@ func _process_alive(delta: float) -> void:
 			velocity.x = wall_normal.x * WALL_JUMP_X
 			_play_local_sfx("res://assets/audio/jump.wav", -6.0)
 
-	if want_jet and jetpack_fuel > 0.5 and not is_crouching:
+	var grav_eff: float = GRAVITY * clampf(NetworkManager.gravity_scale, 0.0, 1.0)
+	var has_fuel: bool = NetworkManager.unlimited_jetpack or (jetpack_fuel > 0.5)
+	if want_jet and has_fuel and not is_crouching:
 		is_jetpacking = true
 		velocity.y = maxf(velocity.y - JETPACK_THRUST * delta, JETPACK_MAX_UP_SPEED)
-		jetpack_fuel = maxf(0.0, jetpack_fuel - FUEL_CONSUME_RATE * delta)
-		_fuel_recharge_delay = 0.35
+		if NetworkManager.unlimited_jetpack:
+			jetpack_fuel = MAX_FUEL
+		else:
+			jetpack_fuel = maxf(0.0, jetpack_fuel - FUEL_CONSUME_RATE * delta)
+			_fuel_recharge_delay = 0.35
 	else:
 		is_jetpacking = false
-		velocity.y += GRAVITY * delta
-		if _fuel_recharge_delay > 0.0:
+		velocity.y += grav_eff * delta
+		if not is_on_floor() and want_crouch and NetworkManager.gravity_scale < 0.25:
+			velocity.y = minf(velocity.y + 420.0 * delta, 320.0)
+		if NetworkManager.unlimited_jetpack:
+			jetpack_fuel = MAX_FUEL
+		elif _fuel_recharge_delay > 0.0:
 			_fuel_recharge_delay = maxf(0.0, _fuel_recharge_delay - delta)
 		else:
 			var rate: float = FUEL_RECHARGE_GROUND if is_on_floor() else FUEL_RECHARGE_AIR
@@ -377,15 +481,18 @@ func _process_alive(delta: float) -> void:
 	velocity.y = minf(velocity.y, 760.0)
 	move_and_slide()
 
-	if want_fire and _fire_cooldown <= 0.0:
-		if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
-			is_reloading = false
-			_emit_ammo()
-		if not is_reloading:
-			if current_ammo <= 0:
-				start_reload()
-			else:
-				_fire_weapon()
+	if want_fire and _fire_cooldown <= 0.0 and not is_stunned:
+		if NetworkManager.is_agent_clash_mode():
+			_fire_agent_base_weapon()
+		else:
+			if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
+				is_reloading = false
+				_emit_ammo()
+			if not is_reloading:
+				if current_ammo <= 0:
+					start_reload()
+				else:
+					_fire_weapon()
 
 	if is_local_human:
 		fuel_changed.emit(jetpack_fuel, MAX_FUEL)
@@ -400,7 +507,7 @@ func _apply_auto_aim_assist(raw_angle: float) -> float:
 			continue
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
-		if NetworkManager.match_mode == 1 and int(node.get("team_id")) == team_id:
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
 			continue
 		var delta_v: Vector2 = node.global_position - _weapon_pivot.global_position
 		if delta_v.length() > 700.0:
@@ -522,6 +629,8 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 
 
 func start_reload() -> void:
+	if NetworkManager.is_agent_clash_mode():
+		return
 	if is_reloading or current_ammo >= _weapon.mag_size or is_dead:
 		return
 	is_reloading = true
@@ -530,7 +639,7 @@ func start_reload() -> void:
 
 
 func cycle_weapon() -> void:
-	if is_dead:
+	if NetworkManager.is_agent_clash_mode() or is_dead:
 		return
 	if _equipped_primary_id != secondary_weapon_id:
 		var next_id: int = secondary_weapon_id if current_weapon_id != secondary_weapon_id else _equipped_primary_id
@@ -544,13 +653,67 @@ func cycle_weapon() -> void:
 
 
 func set_weapon(new_weapon_id: int) -> void:
-	current_weapon_id = wrapi(new_weapon_id, 0, WeaponData.get_weapon_count())
+	current_weapon_id = WeaponData.sanitize_weapon_id(new_weapon_id)
 	_apply_weapon(current_weapon_id)
 	if NetworkManager.is_network_active() and _is_controlled_locally():
 		sync_weapon_rpc.rpc(current_weapon_id, is_dual_wielding, m4a1_rail_mod)
 
 
+func apply_gun_preset(preset_idx: int) -> void:
+	if NetworkManager.is_agent_clash_mode():
+		return
+	selected_gun_preset_id = clampi(preset_idx, 0, WeaponData.GUN_PRESETS.size() - 1)
+	var preset: Dictionary = WeaponData.get_effective_preset(selected_gun_preset_id)
+	primary_weapon_id = int(preset["primary"])
+	secondary_weapon_id = int(preset["secondary"])
+	_equipped_primary_id = primary_weapon_id
+	bomb_type = str(preset.get("bomb_type", "frag"))
+	max_bombs = int(preset.get("bombs", 3))
+	bomb_count = max_bombs
+	set_weapon(primary_weapon_id)
+	if is_local_human:
+		bombs_changed.emit(bomb_count, bomb_type)
+
+
+func throw_bomb() -> void:
+	if NetworkManager.is_agent_clash_mode() or is_dead or bomb_count <= 0 or _bomb_cooldown > 0.0 or not NetworkManager.allow_explosives:
+		return
+	bomb_count = maxi(0, bomb_count - 1)
+	_bomb_cooldown = 0.65
+	if is_local_human:
+		bombs_changed.emit(bomb_count, bomb_type)
+	if NetworkManager.is_network_active():
+		throw_bomb_rpc.rpc(_muzzle_primary.global_position, aim_angle, bomb_type)
+	else:
+		_throw_bomb_local(_muzzle_primary.global_position, aim_angle, bomb_type)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func throw_bomb_rpc(origin: Vector2, angle: float, b_type: String) -> void:
+	_throw_bomb_local(origin, angle, b_type)
+
+
+func _throw_bomb_local(origin: Vector2, angle: float, b_type: String) -> void:
+	var local_auth: bool = _is_controlled_locally()
+	if b_type == "cluster":
+		for off in [-0.14, 0.0, 0.14]:
+			_spawn_styled_projectile(
+				origin, angle + off, 700.0, 48, "frag_bomb",
+				Color(1.0, 0.42, 0.15), "Cluster Bomb", 0.0, 12.0,
+				true, 125.0, 1.35, false, local_auth, 1.8, 1.0, 0.72
+			)
+	else:
+		_spawn_styled_projectile(
+			origin, angle, 740.0, 82, "frag_bomb",
+			Color(0.28, 0.92, 0.42), "Frag Bomb", 0.0, 10.0,
+			true, 155.0, 1.5, false, local_auth, 1.9, 1.05, 0.72
+		)
+	_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.65)
+
+
 func toggle_dual_wield() -> void:
+	if NetworkManager.is_agent_clash_mode():
+		return
 	if not _weapon.supports_dual_wield or is_dead:
 		return
 	is_dual_wielding = not is_dual_wielding
@@ -569,7 +732,9 @@ func sync_weapon_rpc(weapon_id: int, dual: bool, rail_mod: int = 0) -> void:
 
 
 func _apply_weapon(weapon_id: int) -> void:
-	_weapon = WeaponData.get_weapon(weapon_id, weapon_skin_id, m4a1_rail_mod)
+	var safe_id: int = WeaponData.sanitize_weapon_id(weapon_id)
+	current_weapon_id = safe_id
+	_weapon = WeaponData.get_weapon(safe_id, weapon_skin_id, m4a1_rail_mod)
 	if not _weapon.supports_dual_wield:
 		is_dual_wielding = false
 	is_reloading = false
@@ -581,11 +746,30 @@ func _apply_weapon(weapon_id: int) -> void:
 func _apply_weapon_visuals() -> void:
 	if not is_node_ready():
 		return
+	if NetworkManager.is_agent_clash_mode():
+		_primary_weapon.visible = false
+		_secondary_weapon.visible = false
+		if _agent_weapon_node != null:
+			var ag: Dictionary = AgentData.get_agent(archetype_id)
+			var bw: Dictionary = ag["base_weapon"]
+			_agent_weapon_node.set("weapon_style", str(bw["style"]))
+			_agent_weapon_node.set("weapon_color", bw["color"] as Color)
+			_agent_weapon_node.visible = not is_dead
+			_agent_weapon_node.queue_redraw()
+		return
+
+	_primary_weapon.visible = true
+	if _agent_weapon_node != null:
+		_agent_weapon_node.visible = false
 	var w: WeaponData = WeaponData.get_weapon(current_weapon_id, weapon_skin_id, m4a1_rail_mod)
 	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
 	_primary_weapon.frame = sheet_frame
 	_secondary_weapon.frame = sheet_frame
 	_secondary_weapon.visible = is_dual_wielding and w.supports_dual_wield and not is_dead
+
+
+func can_grab_throwable() -> bool:
+	return NetworkManager.is_agent_clash_mode() and held_throwable_id == -1 and not is_dead
 
 
 func apply_pickup(pickup_type: String, value: int) -> void:
@@ -595,9 +779,19 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 		health = mini(max_health, health + value)
 		if is_local_human:
 			health_changed.emit(health, max_health)
+	elif pickup_type == "throwable":
+		if NetworkManager.is_agent_clash_mode():
+			held_throwable_id = clampi(value, 0, AgentData.THROWABLE_ITEMS.size() - 1)
+			if is_local_human:
+				agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	elif pickup_type == "weapon":
-		_equipped_primary_id = wrapi(value, 0, WeaponData.get_weapon_count())
-		set_weapon(_equipped_primary_id)
+		if not NetworkManager.is_agent_clash_mode():
+			_equipped_primary_id = WeaponData.sanitize_weapon_id(value)
+			set_weapon(_equipped_primary_id)
+			if NetworkManager.allow_explosives and bomb_count < max_bombs:
+				bomb_count = mini(max_bombs, bomb_count + 1)
+				if is_local_human:
+					bombs_changed.emit(bomb_count, bomb_type)
 	_play_local_sfx("res://assets/audio/pickup.wav", -2.0)
 
 
@@ -640,6 +834,9 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	is_dead = true
 	is_jetpacking = false
 	is_reloading = false
+	stun_timer = 0.0
+	speed_boost_timer = 0.0
+	speed_boost_mult = 1.0
 	_respawn_timer = RESPAWN_TIME
 	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name)
 
@@ -681,6 +878,12 @@ func _respawn_self() -> void:
 	jetpack_fuel = MAX_FUEL
 	is_dead = false
 	is_reloading = false
+	stun_timer = 0.0
+	speed_boost_timer = 0.0
+	speed_boost_mult = 1.0
+	held_throwable_id = -1
+	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
 	current_ammo = _weapon.mag_size
 	spawn_invuln_timer = 1.6
 
@@ -727,13 +930,18 @@ func _update_visual_state(delta: float) -> void:
 
 	if _modular_rig != null:
 		_modular_rig.set_sync_frame(safe_frame, flip_x)
-		if NetworkManager.match_mode == 1:
+		if NetworkManager.is_team_mode():
 			_modular_rig.apply_layer_colors(NetworkManager.get_team_color(team_id), 0.36)
 		else:
 			_modular_rig.apply_layer_colors(Color.WHITE, 0.0)
 
 	if _hit_flash_timer > 0.0:
 		_modular_rig.modulate = Color(1.0, 0.35, 0.35, 1.0)
+	elif stun_timer > 0.0:
+		var stun_pulse: float = 0.65 + 0.35 * sin(Time.get_ticks_msec() * 0.035)
+		_modular_rig.modulate = Color(0.55 + stun_pulse * 0.45, 0.92, 1.0, 1.0)
+	elif speed_boost_timer > 0.0:
+		_modular_rig.modulate = Color(0.76, 1.0, 0.84, 1.0)
 	elif spawn_invuln_timer > 0.0:
 		var pulse: float = 0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.02)
 		_modular_rig.modulate = Color(1.0, 1.0, 1.0, pulse)
@@ -742,10 +950,17 @@ func _update_visual_state(delta: float) -> void:
 
 	_weapon_pivot.visible = not is_dead
 	_weapon_pivot.position.y = 9.0 if is_crouching else 6.0
-	_weapon_pivot.rotation = aim_angle
+	var swing_offset: float = 0.0
+	if NetworkManager.is_agent_clash_mode() and _melee_swing_timer > 0.0:
+		var swing_prog: float = 1.0 - (_melee_swing_timer / 0.22)
+		var swing_dir: float = 1.0 if facing_right else -1.0
+		swing_offset = lerpf(-0.95, 0.95, swing_prog) * swing_dir
+	_weapon_pivot.rotation = aim_angle + swing_offset
 	var flip_gun: bool = cos(aim_angle) < 0.0
 	_primary_weapon.flip_v = flip_gun
 	_secondary_weapon.flip_v = flip_gun
+	if _agent_weapon_node != null:
+		_agent_weapon_node.scale.y = -1.0 if flip_gun else 1.0
 
 	var p_ratio: float = clampf(SettingsManager.particle_intensity, 0.0, 1.5)
 	var target_amt: int = clampi(int(round(24.0 * p_ratio)), 1, 36)
@@ -762,13 +977,18 @@ func _update_visual_state(delta: float) -> void:
 
 
 func _apply_team_visuals() -> void:
-	var label_col: Color = NetworkManager.get_team_color(team_id if NetworkManager.match_mode == 1 else color_index)
+	var label_col: Color = NetworkManager.get_team_color(team_id if NetworkManager.is_team_mode() else color_index)
 	_name_label.modulate = label_col.lightened(0.35)
 
 
 func _update_overhead_ui() -> void:
 	_overhead_ui.visible = not is_dead
-	_name_label.text = player_name
+	if NetworkManager.is_agent_clash_mode() and stun_timer > 0.0:
+		_name_label.text = "⚡ STUNNED %.1fs" % stun_timer
+		_name_label.modulate = Color(0.45, 0.95, 1.0)
+	else:
+		_name_label.text = player_name
+		_apply_team_visuals()
 	var ratio: float = clampf(float(health) / float(max_health), 0.0, 1.0)
 	_health_fill.size.x = 44.0 * ratio
 	if ratio > 0.5:
@@ -786,6 +1006,10 @@ func _emit_hud_signals() -> void:
 	fuel_changed.emit(jetpack_fuel, MAX_FUEL)
 	weapon_changed.emit(_weapon, is_dual_wielding)
 	_emit_ammo()
+	if NetworkManager.is_agent_clash_mode():
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+	else:
+		bombs_changed.emit(bomb_count, bomb_type)
 
 
 func _emit_ammo() -> void:
@@ -817,7 +1041,7 @@ func _compute_bot_input(delta: float) -> Dictionary:
 			continue
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
-		if NetworkManager.match_mode == 1 and int(node.get("team_id")) == team_id:
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
 			continue
 		var d: float = global_position.distance_to(node.global_position)
 		if d < nearest_dist:
@@ -853,8 +1077,16 @@ func _compute_bot_input(delta: float) -> Dictionary:
 	var want_fire: bool = false
 	var desired_angle: float = aim_angle
 
+	var agent_mode: bool = NetworkManager.is_agent_clash_mode()
+	var is_melee_agent: bool = false
+	if agent_mode:
+		var bw: Dictionary = AgentData.get_agent(archetype_id)["base_weapon"]
+		is_melee_agent = not bool(bw["ranged"])
+
 	var sight_range: float = 440.0 if diff == 0 else (580.0 if diff == 1 else 760.0)
 	var jet_chase_dy: float = -120.0 if diff == 0 else (-80.0 if diff == 1 else -65.0)
+	var engage_max: float = 115.0 if is_melee_agent else 360.0
+	var engage_min: float = 60.0 if is_melee_agent else 160.0
 
 	if nearest_target != null:
 		var to_target: Vector2 = nearest_target.global_position - _weapon_pivot.global_position
@@ -866,9 +1098,9 @@ func _compute_bot_input(delta: float) -> Dictionary:
 		else:
 			desired_angle = lerp_angle(aim_angle, to_target.angle() + _bot_aim_error, clampf(delta * 3.5, 0.0, 1.0))
 
-		if dist > 360.0:
+		if dist > engage_max:
 			move_x = signf(to_target.x)
-		elif dist < 160.0:
+		elif dist < engage_min:
 			move_x = -signf(to_target.x)
 
 		if to_target.y < jet_chase_dy and jetpack_fuel > 25.0:
@@ -887,7 +1119,19 @@ func _compute_bot_input(delta: float) -> Dictionary:
 				1
 			)
 			if space_state.intersect_ray(ray).is_empty():
-				want_fire = true
+				if agent_mode:
+					aim_angle = desired_angle
+					if held_throwable_id >= 0 and dist < 520.0 and stun_timer <= 0.0:
+						throw_held_item()
+					var cast_chance: float = 0.04 if diff == 0 else (0.10 if diff == 1 else 0.20)
+					if stun_timer <= 0.0 and randf() < cast_chance:
+						for slot_i in [3, 0, 1, 2]:
+							if ability_cooldowns[slot_i] <= 0.0:
+								use_agent_ability(slot_i)
+								break
+					want_fire = (not is_melee_agent) or dist < 135.0
+				else:
+					want_fire = true
 
 	if is_on_wall() and is_on_floor():
 		want_jump = true
@@ -900,3 +1144,517 @@ func _compute_bot_input(delta: float) -> Dictionary:
 		"fire": want_fire,
 		"aim_angle": desired_angle
 	}
+
+
+# --- AGENT CLASH MODE ABILITIES, STUN, THROWABLES & BARRIERS ---
+
+func apply_stun(duration: float, attacker_id: int = -1) -> void:
+	if not NetworkManager.is_agent_clash_mode() or is_dead or duration <= 0.0:
+		return
+	if attacker_id >= 0 and attacker_id == peer_id:
+		return
+	if NetworkManager.is_network_active():
+		sync_stun_rpc.rpc(duration, attacker_id)
+	else:
+		_apply_stun_local(duration, attacker_id)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_stun_rpc(duration: float, attacker_id: int = -1) -> void:
+	_apply_stun_local(duration, attacker_id)
+
+
+func _apply_stun_local(duration: float, attacker_id: int = -1) -> void:
+	if is_dead or (attacker_id >= 0 and attacker_id == peer_id):
+		return
+	stun_timer = maxf(stun_timer, duration)
+	is_jetpacking = false
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+
+func gain_ult_charge(seconds_reduced: float) -> void:
+	if NetworkManager.is_agent_clash_mode():
+		ability_cooldowns[3] = maxf(0.0, ability_cooldowns[3] - seconds_reduced)
+
+
+func _fire_agent_base_weapon() -> void:
+	var ag: Dictionary = AgentData.get_agent(archetype_id)
+	var bw: Dictionary = ag["base_weapon"]
+	var cd: float = float(bw["cooldown"])
+	if speed_boost_timer > 0.0:
+		cd *= 0.72
+	if is_bot:
+		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+		cd *= (1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0))
+	_fire_cooldown = cd
+	_melee_swing_timer = 0.22
+	_fire_anim_timer = 0.16
+
+	var dmg: int = int(bw["damage"])
+	var col: Color = bw["color"] as Color
+	var w_label: String = str(bw["name"])
+	if bool(bw["ranged"]):
+		if NetworkManager.is_network_active():
+			spawn_agent_base_ranged_rpc.rpc(_muzzle_primary.global_position, aim_angle, dmg, col, w_label)
+		else:
+			_spawn_styled_projectile(_muzzle_primary.global_position, aim_angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
+			_play_local_sfx("res://assets/audio/shoot_smg.wav", -6.0, 1.45)
+	else:
+		var reach: float = float(bw["range"])
+		if _is_controlled_locally():
+			var hit_count: int = _apply_melee_arc(global_position, Vector2.from_angle(aim_angle), reach, 72.0, dmg, 0.0, 220.0, w_label)
+			if hit_count > 0:
+				gain_ult_charge(1.5 * float(hit_count))
+		if NetworkManager.is_network_active():
+			spawn_slash_vfx_rpc.rpc(_weapon_pivot.global_position, aim_angle, col)
+		else:
+			_spawn_styled_projectile(_weapon_pivot.global_position + Vector2.from_angle(aim_angle) * 26.0, aim_angle, 520.0, 0, "slash_wave", col, w_label, 0.0, 0.0, false, 40.0, 1.0, true, false, 0.12, 1.1)
+			_play_local_sfx("res://assets/audio/jump.wav", -4.0, 1.5)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_agent_base_ranged_rpc(origin: Vector2, angle: float, dmg: int, col: Color, w_label: String) -> void:
+	_spawn_styled_projectile(origin, angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
+	_play_local_sfx("res://assets/audio/shoot_smg.wav", -6.0, 1.45)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_slash_vfx_rpc(origin: Vector2, angle: float, col: Color) -> void:
+	_spawn_styled_projectile(origin + Vector2.from_angle(angle) * 26.0, angle, 520.0, 0, "slash_wave", col, "Slash", 0.0, 0.0, false, 40.0, 1.0, true, false, 0.12, 1.1)
+	_play_local_sfx("res://assets/audio/jump.wav", -4.0, 1.5)
+
+
+func use_agent_ability(slot_idx: int) -> void:
+	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0:
+		return
+	if slot_idx < 0 or slot_idx > 3 or ability_cooldowns[slot_idx] > 0.0:
+		return
+	ability_cooldowns[slot_idx] = ability_max_cooldowns[slot_idx]
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+	if NetworkManager.is_network_active():
+		execute_ability_rpc.rpc(slot_idx, global_position, aim_angle)
+	else:
+		_execute_ability_local(slot_idx, global_position, aim_angle)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func execute_ability_rpc(slot_idx: int, cast_pos: Vector2, cast_angle: float) -> void:
+	_execute_ability_local(slot_idx, cast_pos, cast_angle)
+
+
+func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float) -> void:
+	var ab: Dictionary = AgentData.get_ability_slot(archetype_id, slot_idx)
+	var kind: String = str(ab.get("kind", "cleave"))
+	var dmg: int = int(ab.get("damage", 25))
+	var stun_dur: float = float(ab.get("stun", 0.0))
+	var col: Color = ab.get("color", Color.WHITE) as Color
+	var ab_name: String = str(ab.get("name", "Ability"))
+	var p_style: String = str(ab.get("proj_style", "fireball"))
+	var origin: Vector2 = cast_pos + Vector2(0.0, 4.0) + Vector2.from_angle(cast_angle) * 28.0
+	var local_auth: bool = _is_controlled_locally()
+	_fire_anim_timer = 0.22
+	_melee_swing_timer = 0.22
+
+	match kind:
+		"cleave":
+			_cast_cleave_or_giant(origin, cast_angle, dmg, stun_dur, col, ab_name, 1, 0.0, 1.85, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -5.0, 1.35)
+		"ult_giant_sword":
+			_cast_cleave_or_giant(origin, cast_angle, dmg, stun_dur, col, ab_name, 3, 0.20, 2.35, local_auth)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.15)
+		"fireball":
+			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, 1, local_auth, p_style)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -4.0, 1.15)
+		"flame_wave":
+			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, int(ab.get("shots", 3)), local_auth, "fireball")
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.3)
+		"lava_bomb":
+			_cast_lava_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth, str(ab.get("proj_style", "fireball")))
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 0.95)
+		"ult_firestorm":
+			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, int(ab.get("shots", 7)), local_auth, p_style)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.95)
+		"ice_shards":
+			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 4)), 22.0, "ice_shard", col, ab_name, stun_dur, 1080.0, 0.0, false, local_auth, 1.0, 1.2)
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -3.0, 1.45)
+		"spear_throw":
+			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 1)), 0.0, "thrown_spear", col, ab_name, stun_dur, 1140.0, 0.0, false, local_auth, 1.3, 1.4)
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.72)
+		"axe_volley":
+			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 2)), 14.0, "thrown_axe", col, ab_name, stun_dur, 880.0, 18.0, false, local_auth, 1.4, 1.35)
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.78)
+		"shuriken_fan":
+			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 3)), 18.0, "shuriken", col, ab_name, stun_dur, 1120.0, 22.0, false, local_auth, 1.15, 1.25)
+			_play_local_sfx("res://assets/audio/shoot_smg.wav", -4.0, 1.65)
+		"ghost_wisps":
+			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 3)), 18.0, "ghost_wisp", col, ab_name, stun_dur, 760.0, 0.0, true, local_auth, 1.45, 1.25)
+			_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 0.65)
+		"teleport":
+			_cast_teleport(cast_pos, cast_angle, 260.0, dmg, stun_dur, col, ab_name, false, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 1.4)
+		"ult_blink_slash":
+			_cast_teleport(cast_pos, cast_angle, 310.0, dmg, stun_dur, col, ab_name, true, local_auth)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.25)
+		"speed":
+			speed_boost_timer = float(ab.get("duration", 4.0))
+			speed_boost_mult = float(ab.get("speed_mult", 1.8))
+			if local_auth:
+				health = mini(max_health, health + 15)
+				if is_local_human:
+					health_changed.emit(health, max_health)
+			_spawn_vfx_burst(cast_pos, 65.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.25)
+		"dash_speed":
+			speed_boost_timer = float(ab.get("duration", 3.8))
+			speed_boost_mult = float(ab.get("speed_mult", 1.75))
+			velocity += Vector2.from_angle(cast_angle) * 620.0
+			if local_auth and dmg > 0:
+				var d_hits: int = _apply_melee_arc(cast_pos, Vector2.from_angle(cast_angle), 130.0, 75.0, dmg, stun_dur, 320.0, ab_name)
+				if d_hits > 0:
+					gain_ult_charge(2.0 * float(d_hits))
+			_spawn_vfx_burst(cast_pos, 75.0, col)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 1.4)
+		"dash_stun":
+			velocity += Vector2.from_angle(cast_angle) * 600.0
+			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/explosion.wav", -4.0, 1.35)
+		"stun_bolt", "stun_aoe", "stun_bomb":
+			# Always throw a visible Stun Bomb along aim that stuns enemies in its landing circle (never stuns self)
+			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.15)
+		"ult_stun_nova":
+			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth, 280.0, 740.0)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+		"wall":
+			_spawn_barrier_wall(cast_pos, cast_angle, int(ab.get("wall_hp", 240)), float(ab.get("duration", 5.5)), col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 0.72)
+		"gun_burst":
+			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 6)), 7.0, col, ab_name, stun_dur, 1280.0, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -3.0)
+		"shotgun_blast":
+			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 6)), 18.0, col, ab_name, stun_dur, 1060.0, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0)
+		"ult_gun_storm":
+			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 14)), 14.0, col, ab_name, stun_dur, 1340.0, local_auth)
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/shoot_scar.wav", -2.0, 0.92)
+
+
+func _cast_cleave_or_giant(origin: Vector2, angle: float, dmg: int, stun_dur: float, col: Color, ab_name: String, count: int, spread: float, proj_scale: float, local_auth: bool) -> void:
+	if local_auth:
+		var reach: float = 165.0 if count == 1 else 210.0
+		var hits: int = _apply_melee_arc(global_position, Vector2.from_angle(angle), reach, 82.0, dmg, stun_dur, 380.0, ab_name)
+		if hits > 0 and count == 1:
+			gain_ult_charge(2.0 * float(hits))
+	for i in range(count):
+		var off: float = (float(i) - float(count - 1) * 0.5) * spread
+		_spawn_styled_projectile(origin, angle + off, 780.0, dmg, "slash_wave", col, ab_name, stun_dur, 0.0, false, 60.0, 1.5, true, local_auth, 0.55, proj_scale)
+
+
+func _cast_fireballs(origin: Vector2, angle: float, dmg: int, stun_dur: float, col: Color, ab_name: String, count: int, local_auth: bool, style: String = "fireball") -> void:
+	var spread: float = 0.16 if count > 1 else 0.0
+	for i in range(count):
+		var off: float = (float(i) - float(count - 1) * 0.5) * spread
+		_spawn_styled_projectile(origin, angle + off, 840.0, dmg, style, col, ab_name, stun_dur, 0.0, true, 135.0, 1.4, false, local_auth, 1.35, 1.25)
+
+
+func _cast_stun_bomb(origin: Vector2, angle: float, dmg: int, stun_dur: float, col: Color, ab_name: String, local_auth: bool, radius: float = 175.0, speed: float = 820.0) -> void:
+	var final_stun: float = maxf(stun_dur, 1.4)
+	_spawn_styled_projectile(origin, angle, speed, dmg, "stun_bomb", col, ab_name, final_stun, 6.0, true, radius, 0.9, false, local_auth, 0.95, 1.25, 0.48)
+
+
+func _cast_lava_bomb(origin: Vector2, angle: float, dmg: int, stun_dur: float, col: Color, ab_name: String, local_auth: bool, style: String = "fireball") -> void:
+	_spawn_styled_projectile(origin, angle, 780.0, dmg, style, col, ab_name, stun_dur, 10.0, true, 165.0, 1.6, false, local_auth, 1.15, 1.35, 0.52)
+
+
+func _cast_multi_proj(origin: Vector2, angle: float, dmg: int, count: int, spread_deg: float, style: String, col: Color, ab_name: String, stun_dur: float, speed: float, spin_spd: float, pierce_w: bool, local_auth: bool, life: float, proj_scale: float) -> void:
+	for i in range(count):
+		var off: float = 0.0
+		if count > 1:
+			var frac: float = (float(i) / float(count - 1)) - 0.5
+			off = deg_to_rad(spread_deg) * frac
+		_spawn_styled_projectile(origin, angle + off, speed, dmg, style, col, ab_name, stun_dur, spin_spd, false, 60.0, 1.1, pierce_w, local_auth, life, proj_scale)
+
+
+func _cast_teleport(cast_pos: Vector2, angle: float, max_dist: float, dmg: int, stun_dur: float, col: Color, ab_name: String, with_beams: bool, local_auth: bool) -> void:
+	_spawn_vfx_burst(cast_pos, 70.0, col)
+	var dir: Vector2 = Vector2.from_angle(angle)
+	var raw_target: Vector2 = cast_pos + dir * max_dist
+	var dest: Vector2 = raw_target
+	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var ray := PhysicsRayQueryParameters2D.create(cast_pos, raw_target, 1)
+	var hit: Dictionary = space_state.intersect_ray(ray)
+	if not hit.is_empty():
+		dest = (hit["position"] as Vector2) - dir * 32.0
+	dest.x = clampf(dest.x, 72.0, 2168.0)
+	dest.y = clampf(dest.y, 72.0, 1140.0)
+	global_position = dest
+	velocity.y = minf(velocity.y, 80.0)
+	_spawn_vfx_burst(dest, 115.0 if not with_beams else 160.0, col)
+	if local_auth:
+		var hits: int = _apply_radial_aoe(dest, 125.0 if not with_beams else 165.0, dmg, stun_dur, 300.0, ab_name)
+		if hits > 0 and not with_beams:
+			gain_ult_charge(2.0 * float(hits))
+	if with_beams:
+		_spawn_styled_projectile(dest + dir * 24.0, angle - 0.16, 860.0, dmg, "slash_wave", col, ab_name, stun_dur, 0.0, false, 60.0, 1.4, true, local_auth, 0.65, 2.2)
+		_spawn_styled_projectile(dest + dir * 24.0, angle + 0.16, 860.0, dmg, "slash_wave", col, ab_name, stun_dur, 0.0, false, 60.0, 1.4, true, local_auth, 0.65, 2.2)
+
+
+func _cast_gun_burst(origin: Vector2, angle: float, dmg: int, shots: int, spread_deg: float, col: Color, ab_name: String, stun_dur: float, speed: float, local_auth: bool) -> void:
+	for i in range(shots):
+		var frac: float = (float(i) / float(maxi(1, shots - 1))) - 0.5
+		var off: float = deg_to_rad(spread_deg) * frac
+		_spawn_styled_projectile(origin, angle + off, speed, dmg, "bullet", col, ab_name, stun_dur, 0.0, false, 60.0, 0.85, false, local_auth, 1.1, 1.15)
+
+
+func _spawn_barrier_wall(cast_pos: Vector2, angle: float, wall_hp: int, duration: float, col: Color) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var dir: Vector2 = Vector2.from_angle(angle)
+	var wall_pos: Vector2 = cast_pos + dir * 105.0
+	wall_pos.x = clampf(wall_pos.x, 76.0, 2164.0)
+	wall_pos.y = clampf(wall_pos.y, 96.0, 1120.0)
+	var wall := BarrierWall.new()
+	wall.global_position = wall_pos
+	wall.setup_wall(wall_hp, duration, col)
+	parent_node.add_child(wall)
+
+
+func _apply_melee_arc(origin: Vector2, dir: Vector2, reach: float, half_deg: float, dmg: int, stun_dur: float, kb_str: float, label: String) -> int:
+	var cos_limit: float = cos(deg_to_rad(half_deg))
+	var hit_count: int = 0
+	for node in get_tree().get_nodes_in_group("players"):
+		if node == self or not is_instance_valid(node) or int(node.get("peer_id")) == peer_id:
+			continue
+		if node.has_method("is_alive") and not node.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		var delta_v: Vector2 = node.global_position - origin
+		var dist: float = delta_v.length()
+		if dist > reach:
+			continue
+		var facing_ok: bool = dist < 36.0 or dir.dot(delta_v.normalized()) >= cos_limit
+		if facing_ok and node.has_method("apply_hit"):
+			var kb: Vector2 = (delta_v.normalized() if dist > 1.0 else dir) * kb_str
+			node.apply_hit(dmg, peer_id, label, player_name, kb)
+			if stun_dur > 0.0 and node.has_method("apply_stun"):
+				node.apply_stun(stun_dur, peer_id)
+			hit_count += 1
+	for wall in get_tree().get_nodes_in_group("barrier_walls"):
+		if is_instance_valid(wall) and wall.has_method("apply_wall_damage"):
+			if origin.distance_to(wall.global_position) <= reach + 32.0:
+				wall.apply_wall_damage(dmg)
+	return hit_count
+
+
+func _apply_radial_aoe(origin: Vector2, radius: float, dmg: int, stun_dur: float, kb_str: float, label: String) -> int:
+	var hit_count: int = 0
+	for node in get_tree().get_nodes_in_group("players"):
+		if node == self or not is_instance_valid(node) or int(node.get("peer_id")) == peer_id:
+			continue
+		if node.has_method("is_alive") and not node.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		var dist: float = origin.distance_to(node.global_position)
+		if dist <= radius and node.has_method("apply_hit"):
+			var dir: Vector2 = (node.global_position - origin).normalized()
+			if dir.length_squared() < 0.01:
+				dir = Vector2.UP
+			node.apply_hit(dmg, peer_id, label, player_name, dir * kb_str + Vector2(0.0, -120.0))
+			if stun_dur > 0.0 and node.has_method("apply_stun"):
+				node.apply_stun(stun_dur, peer_id)
+			hit_count += 1
+	for wall in get_tree().get_nodes_in_group("barrier_walls"):
+		if is_instance_valid(wall) and wall.has_method("apply_wall_damage"):
+			if origin.distance_to(wall.global_position) <= radius:
+				wall.apply_wall_damage(dmg)
+	return hit_count
+
+
+func throw_held_item() -> void:
+	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0:
+		return
+	if held_throwable_id < 0:
+		return
+	var item_id: int = held_throwable_id
+	held_throwable_id = -1
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+	if NetworkManager.is_network_active():
+		throw_item_rpc.rpc(item_id, _muzzle_primary.global_position, aim_angle)
+	else:
+		_throw_item_local(item_id, _muzzle_primary.global_position, aim_angle)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func throw_item_rpc(item_id: int, origin: Vector2, angle: float) -> void:
+	_throw_item_local(item_id, origin, angle)
+
+
+func _throw_item_local(item_id: int, origin: Vector2, angle: float) -> void:
+	var item: Dictionary = AgentData.get_throwable(item_id)
+	_spawn_styled_projectile(
+		origin,
+		angle,
+		float(item["speed"]),
+		int(item["damage"]),
+		str(item["style"]),
+		item["color"] as Color,
+		str(item["name"]),
+		float(item["stun"]),
+		18.0,
+		bool(item.get("explosive", false)),
+		125.0,
+		1.8,
+		false,
+		_is_controlled_locally(),
+		1.8,
+		1.35
+	)
+	_play_local_sfx("res://assets/audio/jump.wav", -3.0, 0.75)
+
+
+func _spawn_styled_projectile(
+	origin: Vector2,
+	angle: float,
+	speed: float,
+	dmg: int,
+	style: String,
+	col: Color,
+	w_label: String,
+	stun_dur: float,
+	spin_spd: float,
+	explosive: bool,
+	exp_radius: float,
+	kb_mult: float,
+	pierce_w: bool,
+	deal_dmg: bool,
+	life: float = 1.6,
+	proj_scale: float = 1.0,
+	grav_mult: float = 0.0
+) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var b := BULLET_SCENE.instantiate()
+	b.global_position = origin
+	b.velocity = Vector2.from_angle(angle) * speed
+	b.damage = dmg
+	b.shooter_peer_id = peer_id
+	b.shooter_team = team_id
+	b.shooter_name = player_name
+	b.shooter_rid = get_rid()
+	b.weapon_name = w_label
+	b.bullet_color = col
+	b.visual_style = style
+	b.spin_speed = spin_spd
+	b.stun_duration = stun_dur
+	b.is_explosive = explosive
+	b.explosion_radius = exp_radius
+	b.knockback_mult = kb_mult
+	b.pierce_walls = pierce_w
+	b.gravity_mult = grav_mult
+	b.can_deal_damage = deal_dmg
+	b.max_lifetime = life
+	b.scale = Vector2(proj_scale, proj_scale)
+	parent_node.add_child(b)
+
+
+func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var exp := EXPLOSION_SCENE.instantiate()
+	exp.global_position = pos
+	exp.explosion_radius = radius
+	exp.max_damage = 0
+	exp.ring_color = col
+	exp.can_deal_damage = false
+	parent_node.add_child(exp)
+
+
+class AgentWeaponVisual extends Node2D:
+	var weapon_style: String = "sword"
+	var weapon_color: Color = Color(0.85, 0.90, 0.98)
+
+	func _draw() -> void:
+		match weapon_style:
+			"greatsword":
+				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
+				draw_line(Vector2(10, -8), Vector2(10, 8), Color(0.95, 0.78, 0.28), 4.0)
+			"axe":
+				draw_line(Vector2(4, 0), Vector2(36, 0), Color(0.55, 0.34, 0.16), 4.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(24, -13), Vector2(38, -8), Vector2(38, 10), Vector2(24, 12)]), weapon_color)
+			"bow":
+				draw_arc(Vector2(10, 0), 18.0, -1.15, 1.15, 16, Color(0.68, 0.45, 0.20), 4.0)
+				draw_line(Vector2(17, -16), Vector2(17, 16), weapon_color, 1.8)
+			"scythe":
+				draw_line(Vector2(2, 0), Vector2(42, 0), Color(0.32, 0.28, 0.38), 4.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(38, -2), Vector2(46, 12), Vector2(30, 18), Vector2(34, 4)]), weapon_color)
+			"spear":
+				draw_line(Vector2(0, 0), Vector2(38, 0), Color(0.65, 0.45, 0.22), 3.5)
+				draw_colored_polygon(PackedVector2Array([Vector2(36, -5), Vector2(50, 0), Vector2(36, 5)]), weapon_color)
+			"hammer":
+				draw_line(Vector2(4, 0), Vector2(34, 0), Color(0.50, 0.30, 0.15), 4.0)
+				draw_rect(Rect2(28.0, -11.0, 13.0, 22.0), weapon_color)
+			"staff":
+				draw_line(Vector2(-6, 0), Vector2(42, 0), Color(0.75, 0.50, 0.24), 4.5)
+				draw_circle(Vector2(42, 0), 4.0, weapon_color)
+			"claws", "daggers":
+				draw_line(Vector2(10, -5), Vector2(28, -7), weapon_color, 3.0)
+				draw_line(Vector2(10, 0), Vector2(30, 0), weapon_color, 3.0)
+				draw_line(Vector2(10, 5), Vector2(28, 7), weapon_color, 3.0)
+			_:
+				draw_line(Vector2(6, 0), Vector2(36, 0), weapon_color, 4.5)
+				draw_colored_polygon(PackedVector2Array([Vector2(35, -3), Vector2(44, 0), Vector2(35, 3)]), Color.WHITE)
+				draw_line(Vector2(10, -6), Vector2(10, 6), Color(0.95, 0.78, 0.28), 3.0)
+
+
+class BarrierWall extends StaticBody2D:
+	var hp: int = 240
+	var max_hp: int = 240
+	var time_left: float = 5.5
+	var wall_color: Color = Color(0.42, 0.86, 1.0)
+
+	func setup_wall(w_hp: int, duration: float, col: Color) -> void:
+		max_hp = maxi(40, w_hp)
+		hp = max_hp
+		time_left = duration
+		wall_color = col
+		collision_layer = 1
+		collision_mask = 0
+		add_to_group("barrier_walls")
+		var cs := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(34.0, 144.0)
+		cs.shape = rect
+		add_child(cs)
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		time_left -= delta
+		if time_left <= 0.0:
+			queue_free()
+
+	func apply_wall_damage(dmg: int) -> void:
+		hp -= maxi(1, dmg)
+		queue_redraw()
+		if hp <= 0:
+			queue_free()
+
+	func _draw() -> void:
+		var r := Rect2(-17.0, -72.0, 34.0, 144.0)
+		draw_rect(r, Color(wall_color.r, wall_color.g, wall_color.b, 0.78))
+		draw_rect(r, Color.WHITE, false, 2.5)
+		var hp_frac: float = clampf(float(hp) / float(max_hp), 0.0, 1.0)
+		draw_rect(Rect2(-16.0, -82.0, 32.0 * hp_frac, 5.0), wall_color.lightened(0.35))

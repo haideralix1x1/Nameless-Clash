@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bn7qg8nmrji5y"
-path="res://.godot/imported/headgear_sheet.png-006891f8a65f1c7243065df70165e72c.ctex"
+uid="uid://dlrc1a2un3dhw"
+path="res://.godot/imported/Button01_Orange.Png-f84f9111df8a7faabd99daf27519db0e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/headgear_sheet.png"
-dest_files=["res://.godot/imported/headgear_sheet.png-006891f8a65f1c7243065df70165e72c.ctex"]
+source_file="res://assets/Layer Lab/Sprite/Components/Button/Button01_Orange.Png"
+dest_files=["res://.godot/imported/Button01_Orange.Png-f84f9111df8a7faabd99daf27519db0e.ctex"]
 
 [params]
 

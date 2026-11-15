@@ -2,6 +2,7 @@ extends CanvasLayer
 
 signal add_bot_requested
 
+const UIStyle = preload("res://scripts/UIStyle.gd")
 const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 const STICK_RADIUS: float = 76.0
 const KNOB_RADIUS: float = 28.0
@@ -42,15 +43,37 @@ var _add_bot_btn: Button
 var _btn_reload: Button
 var _btn_switch: Button
 var _btn_dual: Button
+var _btn_bomb: Button
+var _btn_presets: Button
+
+var _preset_overlay: PanelContainer
+var _preset_timer_label: Label
+var _preset_cards: Array[Button] = []
+var _preset_time_left: float = 0.0
+var _preset_selection_done: bool = false
+var _chosen_preset_idx: int = -1
+
+var _agent_action_panel: VBoxContainer
+var _btn_ability_1: Button
+var _btn_ability_2: Button
+var _btn_ability_3: Button
+var _btn_ult: Button
+var _btn_throw: Button
+var _stun_banner: PanelContainer
+var _stun_label: Label
 
 
 func _ready() -> void:
 	_build_ui()
 	NetworkManager.player_list_updated.connect(_refresh_scoreboard)
 	NetworkManager.killfeed_event.connect(_on_killfeed_event)
+	if NetworkManager.has_signal("game_rules_updated"):
+		NetworkManager.game_rules_updated.connect(_sync_mode_hud_visibility)
 	SettingsManager.touch_layout_changed.connect(_update_stick_and_button_positions)
 	_refresh_scoreboard()
 	_update_stick_and_button_positions()
+	if not NetworkManager.is_agent_clash_mode():
+		_open_preset_selector(10.0)
 
 
 func _process(delta: float) -> void:
@@ -58,6 +81,17 @@ func _process(delta: float) -> void:
 	_tick_killfeed(delta)
 	_push_input_to_player()
 	_update_scope_overlay()
+
+	if not NetworkManager.is_agent_clash_mode() and Input.is_action_just_pressed("loadout_menu"):
+		_open_preset_selector(10.0)
+
+	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
+		_preset_time_left = maxf(0.0, _preset_time_left - delta)
+		if is_instance_valid(_preset_timer_label):
+			_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET  (%.1fs)" % _preset_time_left
+		if _preset_time_left <= 0.001:
+			var fallback_idx: int = _chosen_preset_idx if _chosen_preset_idx >= 0 else 0
+			_confirm_preset(fallback_idx)
 
 	if Input.is_action_just_pressed("open_lobby"):
 		NetworkManager.go_to_lobby()
@@ -67,7 +101,8 @@ func _update_scope_overlay() -> void:
 	if not is_instance_valid(_scope_overlay):
 		return
 	var show_scope: bool = (
-		local_player != null
+		not NetworkManager.is_agent_clash_mode()
+		and local_player != null
 		and local_player.is_alive()
 		and _active_weapon != null
 		and _active_weapon.scope_zoom < 0.95
@@ -87,6 +122,54 @@ func bind_local_player(player: Node) -> void:
 	local_player.weapon_changed.connect(_on_weapon_changed)
 	local_player.died_signal.connect(_on_player_died)
 	local_player.respawned_signal.connect(_on_player_respawned)
+	if local_player.has_signal("bombs_changed"):
+		local_player.bombs_changed.connect(_on_bombs_changed)
+	if local_player.has_signal("agent_state_changed"):
+		local_player.agent_state_changed.connect(_on_agent_state_changed)
+	if _chosen_preset_idx >= 0 and not NetworkManager.is_agent_clash_mode() and local_player.has_method("apply_gun_preset"):
+		local_player.apply_gun_preset(_chosen_preset_idx)
+	_on_fuel_changed(float(local_player.get("jetpack_fuel")), 100.0)
+	_on_bombs_changed(int(local_player.get("bomb_count")), str(local_player.get("bomb_type")))
+	_sync_mode_hud_visibility()
+	if NetworkManager.is_agent_clash_mode():
+		_refresh_agent_hud(local_player.ability_cooldowns, local_player.ability_max_cooldowns, local_player.held_throwable_id, local_player.stun_timer)
+
+
+func _sync_mode_hud_visibility() -> void:
+	var is_agent: bool = NetworkManager.is_agent_clash_mode()
+	if is_instance_valid(_btn_reload):
+		_btn_reload.visible = not is_agent
+	if is_instance_valid(_btn_switch):
+		_btn_switch.visible = not is_agent
+	if is_instance_valid(_btn_dual):
+		_btn_dual.visible = not is_agent
+	if is_instance_valid(_btn_bomb):
+		_btn_bomb.visible = (not is_agent) and NetworkManager.allow_explosives
+	if is_instance_valid(_btn_presets):
+		_btn_presets.visible = not is_agent
+	if is_agent and is_instance_valid(_preset_overlay):
+		_preset_overlay.visible = false
+	if is_instance_valid(_agent_action_panel):
+		_agent_action_panel.visible = is_agent
+	if is_instance_valid(_btn_ability_1):
+		_btn_ability_1.visible = is_agent
+	if is_instance_valid(_btn_ability_2):
+		_btn_ability_2.visible = is_agent
+	if is_instance_valid(_btn_ability_3):
+		_btn_ability_3.visible = is_agent
+	if is_instance_valid(_btn_ult):
+		_btn_ult.visible = is_agent
+	if is_instance_valid(_btn_throw):
+		_btn_throw.visible = is_agent
+	if is_agent and local_player != null:
+		var ag: Dictionary = AgentData.get_agent(int(local_player.get("archetype_id")))
+		var bw: Dictionary = ag["base_weapon"]
+		_weapon_name_label.text = "%s (%s)" % [str(bw["name"]), str(ag["agent_name"])]
+		_ammo_label.text = "∞ BASE WEAPON"
+		_ammo_label.modulate = Color(0.45, 0.96, 1.0)
+		_dual_badge.visible = false
+	elif is_instance_valid(_stun_banner):
+		_stun_banner.visible = false
 
 
 func _update_stick_and_button_positions() -> void:
@@ -99,6 +182,11 @@ func _update_stick_and_button_positions() -> void:
 		_btn_switch.position = SettingsManager.get_touch_element_px("btn_switch", vp_size) - _btn_switch.size * 0.5
 	if is_instance_valid(_btn_dual):
 		_btn_dual.position = SettingsManager.get_touch_element_px("btn_dual", vp_size) - _btn_dual.size * 0.5
+	if is_instance_valid(_btn_bomb):
+		var sw_pos := SettingsManager.get_touch_element_px("btn_switch", vp_size)
+		_btn_bomb.position = Vector2(clampf(sw_pos.x - 122.0, 220.0, vp_size.x - 240.0), sw_pos.y - _btn_bomb.size.y * 0.5)
+	if is_instance_valid(_btn_presets):
+		_btn_presets.position = Vector2((vp_size.x - _btn_presets.size.x) * 0.5, vp_size.y - _btn_presets.size.y - 14.0)
 	if is_instance_valid(_stick_canvas):
 		_stick_canvas.queue_redraw()
 
@@ -164,6 +252,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _is_over_control(screen_pos: Vector2) -> bool:
+	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
+		if _preset_overlay.get_global_rect().has_point(screen_pos):
+			return true
 	var hovered: Control = get_viewport().gui_get_hovered_control()
 	if hovered != null and hovered is BaseButton:
 		return hovered.get_global_rect().has_point(screen_pos)
@@ -216,17 +307,25 @@ func _on_stick_canvas_draw() -> void:
 	_stick_canvas.draw_circle(_right_center + _right_knob_offset, KNOB_RADIUS, knob_col_r)
 
 
-func _make_panel_style(bg: Color, border: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 8
-	sb.content_margin_bottom = 8
-	return sb
+func _variant_for_color(col: Color) -> String:
+	if col.r > 0.82 and col.g < 0.45 and col.b < 0.45:
+		return "red"
+	if col.r > 0.82 and col.g > 0.72 and col.b < 0.45:
+		return "gold"
+	if col.r > 0.82 and col.g > 0.40:
+		return "orange"
+	if col.g > 0.75 and col.r < 0.50:
+		return "green"
+	if col.b > 0.82 and col.r > 0.60:
+		return "purple"
+	if col.b > 0.85 and col.g > 0.80:
+		return "sky"
+	return "blue"
+
+
+func _make_panel_style(bg: Color, border: Color) -> StyleBox:
+	var variant: String = _variant_for_color(border)
+	return UIStyle.make_card_stylebox(variant, Color(maxf(bg.r + 0.14, 0.20), maxf(bg.g + 0.14, 0.22), maxf(bg.b + 0.14, 0.28), maxf(bg.a, 0.92)), 12, 10)
 
 
 func _on_scope_overlay_draw() -> void:
@@ -275,11 +374,9 @@ func _make_hud_btn_style(bg: Color, border: Color) -> StyleBoxFlat:
 	return sb
 
 
-func _style_action_button(btn: Button, bg: Color, border: Color, font_sz: int = 15) -> void:
+func _style_action_button(btn: Button, _bg: Color, border: Color, font_sz: int = 15) -> void:
+	UIStyle.style_layer_button(btn, _variant_for_color(border), "", 12, 8)
 	btn.add_theme_font_size_override("font_size", font_sz)
-	btn.add_theme_stylebox_override("normal", _make_hud_btn_style(bg, border))
-	btn.add_theme_stylebox_override("hover", _make_hud_btn_style(bg.lightened(0.14), border.lightened(0.3)))
-	btn.add_theme_stylebox_override("pressed", _make_hud_btn_style(border.darkened(0.35), border.lightened(0.45)))
 
 
 func _build_ui() -> void:
@@ -410,6 +507,93 @@ func _build_ui() -> void:
 	)
 	add_child(_btn_dual)
 
+	_btn_bomb = Button.new()
+	_btn_bomb.text = "[F] FRAG x3"
+	_btn_bomb.custom_minimum_size = Vector2(126, 48)
+	_btn_bomb.size = Vector2(126, 48)
+	_btn_bomb.focus_mode = Control.FOCUS_NONE
+	_style_action_button(_btn_bomb, Color(0.28, 0.14, 0.06, 0.94), Color(1.0, 0.56, 0.16, 0.95), 14)
+	_btn_bomb.pressed.connect(func():
+		if local_player != null and local_player.has_method("throw_bomb"):
+			local_player.throw_bomb()
+	)
+	add_child(_btn_bomb)
+
+	_btn_presets = Button.new()
+	_btn_presets.text = "PRESETS [B]"
+	_btn_presets.custom_minimum_size = Vector2(150, 42)
+	_btn_presets.size = Vector2(150, 42)
+	_btn_presets.focus_mode = Control.FOCUS_NONE
+	_style_action_button(_btn_presets, Color(0.22, 0.18, 0.06, 0.94), Color(1.0, 0.80, 0.24, 0.95), 14)
+	_btn_presets.pressed.connect(func(): _open_preset_selector(10.0))
+	add_child(_btn_presets)
+
+	# Agent Clash Mode Bottom-Center Ability & Throwable Controls
+	_agent_action_panel = VBoxContainer.new()
+	_agent_action_panel.anchor_left = 0.5
+	_agent_action_panel.anchor_right = 0.5
+	_agent_action_panel.anchor_top = 1.0
+	_agent_action_panel.anchor_bottom = 1.0
+	_agent_action_panel.offset_left = -300
+	_agent_action_panel.offset_right = 300
+	_agent_action_panel.offset_top = -126
+	_agent_action_panel.offset_bottom = -12
+	_agent_action_panel.add_theme_constant_override("separation", 6)
+	_agent_action_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_agent_action_panel)
+
+	var top_agent_row := HBoxContainer.new()
+	top_agent_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_agent_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_agent_action_panel.add_child(top_agent_row)
+
+	_btn_throw = Button.new()
+	_btn_throw.text = "[F] PICKUP THROWABLE"
+	_btn_throw.custom_minimum_size = Vector2(230, 38)
+	_btn_throw.focus_mode = Control.FOCUS_NONE
+	_style_action_button(_btn_throw, Color(0.16, 0.22, 0.14, 0.92), Color(0.95, 0.80, 0.28, 0.95), 14)
+	_btn_throw.pressed.connect(func():
+		if local_player != null:
+			local_player.throw_held_item()
+	)
+	top_agent_row.add_child(_btn_throw)
+
+	var ab_row := HBoxContainer.new()
+	ab_row.add_theme_constant_override("separation", 8)
+	ab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	ab_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_agent_action_panel.add_child(ab_row)
+
+	_btn_ability_1 = _create_agent_btn("[Q] ABIL 1", Color(0.10, 0.18, 0.30, 0.94), Color(0.38, 0.78, 1.0), 0)
+	_btn_ability_2 = _create_agent_btn("[E] ABIL 2", Color(0.10, 0.18, 0.30, 0.94), Color(0.45, 0.95, 0.65), 1)
+	_btn_ability_3 = _create_agent_btn("[C] ABIL 3", Color(0.18, 0.14, 0.30, 0.94), Color(0.76, 0.50, 1.0), 2)
+	_btn_ult = _create_agent_btn("[X] ULTIMATE", Color(0.32, 0.14, 0.08, 0.96), Color(1.0, 0.72, 0.20), 3)
+	ab_row.add_child(_btn_ability_1)
+	ab_row.add_child(_btn_ability_2)
+	ab_row.add_child(_btn_ability_3)
+	ab_row.add_child(_btn_ult)
+
+	_stun_banner = PanelContainer.new()
+	_stun_banner.anchor_left = 0.5
+	_stun_banner.anchor_right = 0.5
+	_stun_banner.offset_left = -130
+	_stun_banner.offset_right = 130
+	_stun_banner.offset_top = 18
+	_stun_banner.offset_bottom = 60
+	_stun_banner.visible = false
+	_stun_banner.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.20, 0.32, 0.94), Color(0.38, 0.94, 1.0, 0.98)))
+	add_child(_stun_banner)
+
+	_stun_label = Label.new()
+	_stun_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stun_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_stun_label.add_theme_font_size_override("font_size", 18)
+	_stun_label.modulate = Color(0.55, 0.96, 1.0)
+	_stun_label.text = "⚡ STUNNED!"
+	_stun_banner.add_child(_stun_label)
+
+	_sync_mode_hud_visibility()
+
 	# Top-Right Match & Scoreboard Panel
 	var right_panel := PanelContainer.new()
 	right_panel.anchor_left = 1.0
@@ -486,6 +670,7 @@ func _build_ui() -> void:
 	_respawn_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_respawn_label.text = "KIA - RESPAWNING IN 3.0s"
 	_respawn_panel.add_child(_respawn_label)
+	_build_preset_overlay()
 
 
 func _on_health_changed(current: int, maximum: int) -> void:
@@ -496,11 +681,19 @@ func _on_health_changed(current: int, maximum: int) -> void:
 
 func _on_fuel_changed(current: float, maximum: float) -> void:
 	_fuel_bar.max_value = maximum
-	_fuel_bar.value = current
-	_fuel_label.text = "JET %d%%" % int(round(current))
+	if NetworkManager.unlimited_jetpack:
+		_fuel_bar.value = maximum
+		_fuel_label.text = "JET ∞"
+	else:
+		_fuel_bar.value = current
+		_fuel_label.text = "JET %d%%" % int(round(current))
 
 
 func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
+	if NetworkManager.is_agent_clash_mode():
+		_ammo_label.text = "∞ BASE WEAPON"
+		_ammo_label.modulate = Color(0.45, 0.96, 1.0)
+		return
 	if is_reloading:
 		if _active_weapon != null and _active_weapon.single_shell_reload:
 			_ammo_label.text = "LOADING SHELL (%d/%d)" % [current, mag_size]
@@ -517,6 +710,12 @@ func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 
 func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 	_active_weapon = weapon_data
+	if NetworkManager.is_agent_clash_mode() and local_player != null:
+		var ag: Dictionary = AgentData.get_agent(int(local_player.get("archetype_id")))
+		var bw: Dictionary = ag["base_weapon"]
+		_weapon_name_label.text = "%s (%s)" % [str(bw["name"]), str(ag["agent_name"])]
+		_dual_badge.visible = false
+		return
 	_weapon_name_label.text = weapon_data.display_name
 	_dual_badge.visible = dual_wield and weapon_data.supports_dual_wield
 	var atlas: AtlasTexture = _weapon_icon.texture as AtlasTexture
@@ -581,7 +780,163 @@ func _refresh_scoreboard() -> void:
 	for pid in ids:
 		var p: Dictionary = NetworkManager.players[pid]
 		var team_tag: String = ""
-		if NetworkManager.match_mode == 1:
+		if NetworkManager.is_team_mode():
 			team_tag = "[BLUE] " if int(p.get("team", 0)) == 0 else "[RED] "
 		rows.append("%s%s  |  K:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("deaths", 0))])
 	_scoreboard_label.text = "\n".join(rows)
+
+
+func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -> Button:
+	var btn := Button.new()
+	btn.text = title
+	btn.custom_minimum_size = Vector2(142, 60)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(btn, bg, border, 12)
+	btn.pressed.connect(func():
+		if local_player != null:
+			local_player.use_agent_ability(slot_idx)
+	)
+	return btn
+
+
+func _on_agent_state_changed(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float) -> void:
+	_refresh_agent_hud(cooldowns, max_cooldowns, held_throwable, stun_left)
+
+
+func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float) -> void:
+	if not NetworkManager.is_agent_clash_mode():
+		return
+	var arch_id: int = int(local_player.get("archetype_id")) if local_player != null else ProfileManager.archetype_id
+	var keys: Array[String] = ["[Q]", "[E]", "[C]", "[X] ULT"]
+	var btns: Array[Button] = [_btn_ability_1, _btn_ability_2, _btn_ability_3, _btn_ult]
+	for i in range(4):
+		var btn: Button = btns[i]
+		if not is_instance_valid(btn):
+			continue
+		var ab: Dictionary = AgentData.get_ability_slot(arch_id, i)
+		var ab_name: String = str(ab["name"]).left(16)
+		var cd: float = float(cooldowns[i]) if i < cooldowns.size() else 0.0
+		var max_cd: float = float(max_cooldowns[i]) if i < max_cooldowns.size() else 1.0
+		if stun_left > 0.0:
+			btn.text = "%s %s\nSTUNNED" % [keys[i], ab_name]
+			btn.modulate = Color(0.55, 0.65, 0.78)
+		elif cd > 0.05:
+			btn.text = "%s %s\nWAIT %.1fs" % [keys[i], ab_name, cd]
+			btn.modulate = Color(0.65, 0.68, 0.74)
+			var _unused := max_cd
+		else:
+			btn.text = "%s %s\nREADY" % [keys[i], ab_name]
+			btn.modulate = Color(1.0, 0.92, 0.45) if i == 3 else Color.WHITE
+
+	if is_instance_valid(_btn_throw):
+		if held_throwable >= 0:
+			var item: Dictionary = AgentData.get_throwable(held_throwable)
+			_btn_throw.text = "[F] THROW %s" % str(item["name"]).to_upper()
+			_btn_throw.modulate = Color(1.0, 0.92, 0.42)
+		else:
+			_btn_throw.text = "[F] GRAB GROUND WEAPON"
+			_btn_throw.modulate = Color(0.72, 0.78, 0.85)
+
+	if is_instance_valid(_stun_banner) and is_instance_valid(_stun_label):
+		_stun_banner.visible = stun_left > 0.0
+		if stun_left > 0.0:
+			_stun_label.text = "⚡ STUNNED! %.1fs" % stun_left
+
+
+func _on_bombs_changed(count: int, bomb_type: String) -> void:
+	if not is_instance_valid(_btn_bomb):
+		return
+	var label_type: String = "FRAG" if bomb_type.is_empty() else bomb_type.to_upper()
+	_btn_bomb.text = "[F] %s x%d" % [label_type, maxi(0, count)]
+	_btn_bomb.visible = (not NetworkManager.is_agent_clash_mode()) and NetworkManager.allow_explosives
+	_btn_bomb.modulate = Color.WHITE if count > 0 else Color(0.55, 0.58, 0.65)
+
+
+func _build_preset_overlay() -> void:
+	_preset_overlay = PanelContainer.new()
+	_preset_overlay.anchor_left = 0.5
+	_preset_overlay.anchor_right = 0.5
+	_preset_overlay.anchor_top = 0.5
+	_preset_overlay.anchor_bottom = 0.5
+	_preset_overlay.offset_left = -350
+	_preset_overlay.offset_right = 350
+	_preset_overlay.offset_top = -200
+	_preset_overlay.offset_bottom = 200
+	_preset_overlay.visible = false
+	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 20, 16))
+	add_child(_preset_overlay)
+
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 10)
+	_preset_overlay.add_child(pv)
+
+	var hdr := HBoxContainer.new()
+	pv.add_child(hdr)
+
+	_preset_timer_label = Label.new()
+	_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET  (10.0s)"
+	_preset_timer_label.add_theme_font_size_override("font_size", 20)
+	_preset_timer_label.modulate = Color(1.0, 0.86, 0.28)
+	_preset_timer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr.add_child(_preset_timer_label)
+
+	var keep_btn := Button.new()
+	keep_btn.text = "KEEP DEFAULT"
+	keep_btn.custom_minimum_size = Vector2(140, 38)
+	keep_btn.focus_mode = Control.FOCUS_NONE
+	UIStyle.style_layer_button(keep_btn, "sky", "close", 12, 6)
+	keep_btn.pressed.connect(func(): _confirm_preset(_chosen_preset_idx if _chosen_preset_idx >= 0 else 0))
+	hdr.add_child(keep_btn)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pv.add_child(grid)
+
+	_preset_cards.clear()
+	for i in range(WeaponData.GUN_PRESETS.size()):
+		var card := Button.new()
+		card.custom_minimum_size = Vector2(204, 136)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		card.focus_mode = Control.FOCUS_NONE
+		var accent: String = str(WeaponData.GUN_PRESETS[i].get("accent", "blue"))
+		UIStyle.style_layer_button(card, accent, "gun", 12, 10)
+		card.add_theme_font_size_override("font_size", 13)
+		card.pressed.connect(_confirm_preset.bind(i))
+		grid.add_child(card)
+		_preset_cards.append(card)
+	_refresh_preset_cards()
+
+
+func _refresh_preset_cards() -> void:
+	for i in range(mini(_preset_cards.size(), WeaponData.GUN_PRESETS.size())):
+		var eff: Dictionary = WeaponData.get_effective_preset(i)
+		var p_name: String = ProfileManager.WEAPON_NAMES[clampi(int(eff["primary"]), 0, ProfileManager.WEAPON_NAMES.size() - 1)]
+		var s_name: String = ProfileManager.WEAPON_NAMES[clampi(int(eff["secondary"]), 0, ProfileManager.WEAPON_NAMES.size() - 1)]
+		var bombs_n: int = int(eff.get("bombs", 0))
+		var bomb_txt: String = ("%dx %s Bombs" % [bombs_n, str(eff.get("bomb_type", "frag")).capitalize()]) if bombs_n > 0 else "No Bombs (Rule)"
+		_preset_cards[i].text = "%s\n1: %s\n2: %s\n%s" % [str(eff["name"]), p_name, s_name, bomb_txt]
+
+
+func _open_preset_selector(duration_s: float = 10.0) -> void:
+	if not is_instance_valid(_preset_overlay):
+		return
+	if NetworkManager.is_agent_clash_mode():
+		_preset_overlay.visible = false
+		return
+	_preset_time_left = duration_s
+	_refresh_preset_cards()
+	_preset_overlay.visible = true
+
+
+func _confirm_preset(preset_idx: int) -> void:
+	_chosen_preset_idx = clampi(preset_idx, 0, WeaponData.GUN_PRESETS.size() - 1)
+	_preset_selection_done = true
+	if is_instance_valid(_preset_overlay):
+		_preset_overlay.visible = false
+	if local_player != null and local_player.has_method("apply_gun_preset"):
+		local_player.apply_gun_preset(_chosen_preset_idx)

@@ -7,6 +7,8 @@ var shooter_team: int = 0
 var shooter_name: String = ""
 var weapon_name: String = "Rocket Launcher"
 var can_deal_damage: bool = false
+var stun_duration: float = 0.0
+var ring_color: Color = Color(1.0, 0.72, 0.25)
 
 var _elapsed: float = 0.0
 var _duration: float = 0.38
@@ -19,6 +21,8 @@ var _dealt_damage: bool = false
 
 
 func _ready() -> void:
+	if stun_duration > 0.0:
+		_duration = 0.60
 	var scale_factor: float = clampf(explosion_radius / 60.0, 0.7, 2.8)
 	_sprite.scale = Vector2(scale_factor, scale_factor)
 	_sprite.frame = 0
@@ -30,7 +34,7 @@ func _ready() -> void:
 			var dist: float = global_position.distance_to(node.global_position)
 			if dist < 650.0:
 				node.add_screen_shake(clampf(1.0 - dist / 650.0, 0.1, 1.0) * (2.6 if max_damage > 0 else 0.8))
-	if can_deal_damage and max_damage > 0 and not _dealt_damage:
+	if can_deal_damage and (max_damage > 0 or stun_duration > 0.0) and not _dealt_damage:
 		_dealt_damage = true
 		call_deferred("_apply_splash_damage")
 
@@ -57,8 +61,13 @@ func _exit_tree() -> void:
 
 func _draw() -> void:
 	if _ring_alpha > 0.02:
-		var ring_col := Color(1.0, 0.72, 0.25, _ring_alpha * 0.75)
-		draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, ring_col, 3.5)
+		var ring_col := Color(ring_color.r, ring_color.g, ring_color.b, _ring_alpha * 0.85)
+		if stun_duration > 0.0:
+			draw_circle(Vector2.ZERO, explosion_radius, Color(ring_color.r, ring_color.g, ring_color.b, _ring_alpha * 0.28))
+			draw_arc(Vector2.ZERO, explosion_radius, 0.0, TAU, 40, ring_col, 4.0)
+			draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, Color(1.0, 1.0, 1.0, _ring_alpha * 0.85), 2.5)
+		else:
+			draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, ring_col, 3.5)
 
 
 func _apply_splash_damage() -> void:
@@ -67,15 +76,25 @@ func _apply_splash_damage() -> void:
 			continue
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
-		if NetworkManager.match_mode == 1 and int(node.get("team_id")) == shooter_team and int(node.get("peer_id")) != shooter_peer_id:
+		if int(node.get("peer_id")) == shooter_peer_id:
+			continue
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == shooter_team:
 			continue
 		var dist: float = global_position.distance_to(node.global_position)
 		if dist <= explosion_radius:
 			var falloff: float = clampf(1.0 - (dist / explosion_radius) * 0.65, 0.25, 1.0)
-			var dmg: int = maxi(1, int(round(float(max_damage) * falloff)))
 			var dir: Vector2 = (node.global_position - global_position).normalized()
 			if dir.length_squared() < 0.01:
 				dir = Vector2.UP
-			var knockback: Vector2 = dir * (420.0 * falloff) + Vector2(0.0, -140.0 * falloff)
-			if node.has_method("apply_hit"):
+			if max_damage > 0 and node.has_method("apply_hit"):
+				var dmg: int = maxi(1, int(round(float(max_damage) * falloff)))
+				var knockback: Vector2 = dir * (420.0 * falloff) + Vector2(0.0, -140.0 * falloff)
 				node.apply_hit(dmg, shooter_peer_id, weapon_name, shooter_name, knockback)
+			if stun_duration > 0.0 and node.has_method("apply_stun"):
+				node.apply_stun(stun_duration, shooter_peer_id)
+	if max_damage > 0:
+		for wall in get_tree().get_nodes_in_group("barrier_walls"):
+			if is_instance_valid(wall) and wall.has_method("apply_wall_damage"):
+				var w_dist: float = global_position.distance_to(wall.global_position)
+				if w_dist <= explosion_radius:
+					wall.apply_wall_damage(max_damage)

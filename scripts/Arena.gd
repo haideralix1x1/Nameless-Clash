@@ -52,8 +52,9 @@ func _process(delta: float) -> void:
 				area.visible = true
 				area.monitoring = true
 		else:
-			var sprite: Sprite2D = c["sprite"] as Sprite2D
-			sprite.position.y = sin(t * 3.5 + float(c["phase"])) * 5.0
+			var visual_node: Node2D = c["sprite"] as Node2D
+			if is_instance_valid(visual_node):
+				visual_node.position.y = sin(t * 3.5 + float(c["phase"])) * 5.0
 
 
 func _prepare_tile_textures() -> void:
@@ -170,13 +171,27 @@ func _add_platform(rect: Rect2, tile_idx: int) -> void:
 
 
 func _build_pickup_crates() -> void:
-	var crate_specs: Array[Dictionary] = [
-		{"pos": Vector2(1120, 940), "type": "weapon", "val": 2},
-		{"pos": Vector2(1120, 710), "type": "health", "val": 45},
-		{"pos": Vector2(440, 410), "type": "weapon", "val": 3},
-		{"pos": Vector2(1800, 410), "type": "weapon", "val": 4},
-		{"pos": Vector2(1120, 280), "type": "health", "val": 50}
-	]
+	var crate_specs: Array[Dictionary] = []
+	if NetworkManager.is_agent_clash_mode():
+		crate_specs = [
+			{"pos": Vector2(1120, 1140), "type": "throwable", "val": 0},
+			{"pos": Vector2(280, 925), "type": "throwable", "val": 1},
+			{"pos": Vector2(1960, 925), "type": "throwable", "val": 2},
+			{"pos": Vector2(440, 410), "type": "throwable", "val": 3},
+			{"pos": Vector2(1800, 410), "type": "throwable", "val": 4},
+			{"pos": Vector2(880, 705), "type": "throwable", "val": 0},
+			{"pos": Vector2(1360, 705), "type": "throwable", "val": 1},
+			{"pos": Vector2(1120, 710), "type": "health", "val": 45},
+			{"pos": Vector2(1120, 280), "type": "health", "val": 50}
+		]
+	else:
+		crate_specs = [
+			{"pos": Vector2(1120, 940), "type": "weapon", "val": 2},
+			{"pos": Vector2(1120, 710), "type": "health", "val": 45},
+			{"pos": Vector2(440, 410), "type": "weapon", "val": 3},
+			{"pos": Vector2(1800, 410), "type": "weapon", "val": 4},
+			{"pos": Vector2(1120, 280), "type": "health", "val": 50}
+		]
 
 	for i in range(crate_specs.size()):
 		var spec: Dictionary = crate_specs[i]
@@ -187,17 +202,24 @@ func _build_pickup_crates() -> void:
 
 		var cs := CollisionShape2D.new()
 		var box := RectangleShape2D.new()
-		box.size = Vector2(30, 30)
+		box.size = Vector2(34, 34) if str(spec["type"]) == "throwable" else Vector2(30, 30)
 		cs.shape = box
 		area.add_child(cs)
 
-		var spr := Sprite2D.new()
-		spr.texture = TEX_CRATE
-		area.add_child(spr)
+		var visual: Node2D
+		if str(spec["type"]) == "throwable":
+			var icon := GroundWeaponIcon.new()
+			icon.item_id = int(spec["val"])
+			visual = icon
+		else:
+			var spr := Sprite2D.new()
+			spr.texture = TEX_CRATE
+			visual = spr
+		area.add_child(visual)
 
 		var entry: Dictionary = {
 			"area": area,
-			"sprite": spr,
+			"sprite": visual,
 			"type": spec["type"],
 			"val": spec["val"],
 			"active": true,
@@ -216,15 +238,35 @@ func _on_crate_body_entered(body: Node2D, crate_idx: int) -> void:
 	if body.is_in_group("players") and body.has_method("apply_pickup"):
 		if body.has_method("is_alive") and not body.is_alive():
 			return
+		var p_type: String = str(entry["type"])
+		if p_type == "throwable":
+			if not body.has_method("can_grab_throwable") or not body.can_grab_throwable():
+				return
+			entry["active"] = false
+			entry["timer"] = 6.0
+			var val: int = int(entry["val"])
+			body.apply_pickup("throwable", val)
+			var next_val: int = randi_range(0, AgentData.THROWABLE_ITEMS.size() - 1)
+			entry["val"] = next_val
+			var icon := entry["sprite"] as GroundWeaponIcon
+			if icon != null:
+				icon.item_id = next_val
+				icon.queue_redraw()
+			var area_t: Area2D = entry["area"] as Area2D
+			area_t.visible = false
+			area_t.set_deferred("monitoring", false)
+			return
+
 		entry["active"] = false
 		entry["timer"] = 9.0
 		var area: Area2D = entry["area"] as Area2D
 		area.visible = false
 		area.set_deferred("monitoring", false)
 		var val: int = int(entry["val"])
-		if str(entry["type"]) == "weapon":
-			val = randi_range(0, WeaponData.get_weapon_count() - 1)
-		body.apply_pickup(str(entry["type"]), val)
+		if p_type == "weapon":
+			var allowed_ws: Array[int] = WeaponData.get_allowed_weapon_ids()
+			val = allowed_ws[randi() % allowed_ws.size()]
+		body.apply_pickup(p_type, val)
 
 
 func _spawn_all_participants() -> void:
@@ -268,12 +310,17 @@ func _spawn_bot(bot_index: int) -> void:
 	_bot_counter = maxi(_bot_counter, bot_index)
 	var bot_id: int = -bot_index
 	var bot_team: int = bot_index % 2
-	var color_idx: int = bot_team if NetworkManager.match_mode == 1 else (NetworkManager.local_color_index + bot_index) % NetworkManager.TEAM_COLORS.size()
+	var color_idx: int = bot_team if NetworkManager.is_team_mode() else (NetworkManager.local_color_index + bot_index) % NetworkManager.TEAM_COLORS.size()
 	var spawn_pos: Vector2 = _spawn_points[(bot_index + 1) % _spawn_points.size()]
 
-	var arch_idx: int = bot_index % ProfileManager.ARCHETYPES.size()
+	var arch_idx: int = (bot_index * 3 + 1) % ProfileManager.ARCHETYPES.size()
 	var arch: Dictionary = ProfileManager.ARCHETYPES[arch_idx]
-	var bot_weapon: int = int(arch["weapon"]) if (bot_index % 2 == 0) else (bot_index % WeaponData.get_weapon_count())
+	var raw_bot_w: int = int(arch["weapon"]) if (bot_index % 2 == 0) else (bot_index % WeaponData.get_weapon_count())
+	var bot_weapon: int = WeaponData.sanitize_weapon_id(raw_bot_w)
+	var sec_weapon: int = 9 if WeaponData.is_weapon_allowed(9) else bot_weapon
+	var bot_name: String = "Bot-%d" % bot_index
+	if NetworkManager.is_agent_clash_mode():
+		bot_name = "%s (Bot)" % str(AgentData.get_agent(arch_idx)["agent_name"])
 	var bot_avatar: Dictionary = {
 		"archetype_id": arch_idx,
 		"skin_id": arch_idx,
@@ -288,7 +335,7 @@ func _spawn_bot(bot_index: int) -> void:
 		"helmet_color": arch["helmet"],
 		"gear_color": arch["gear"],
 		"primary_weapon_id": bot_weapon,
-		"secondary_weapon_id": 9,
+		"secondary_weapon_id": sec_weapon,
 		"weapon_skin_id": bot_index % ProfileManager.WEAPON_SKIN_NAMES.size(),
 		"m4a1_rail_mod": bot_index % ProfileManager.RAIL_MOD_NAMES.size()
 	}
@@ -297,7 +344,7 @@ func _spawn_bot(bot_index: int) -> void:
 	bot.name = "Bot_%d" % bot_index
 	bot.setup_player(
 		bot_id,
-		"Bot-%d" % bot_index,
+		bot_name,
 		color_idx,
 		true,
 		_spawn_points,
@@ -324,3 +371,29 @@ func spawn_extra_bot_rpc(bot_index: int) -> void:
 	NetworkManager.bot_count = maxi(NetworkManager.bot_count, bot_index)
 	_spawn_bot(bot_index)
 	NetworkManager.player_list_updated.emit()
+
+
+class GroundWeaponIcon extends Node2D:
+	var item_id: int = 0
+
+	func _draw() -> void:
+		var item: Dictionary = AgentData.get_throwable(item_id)
+		var col: Color = item["color"] as Color
+		var style: String = str(item["style"])
+		draw_circle(Vector2.ZERO, 16.0, Color(col.r, col.g, col.b, 0.22))
+		draw_arc(Vector2.ZERO, 16.0, 0.0, TAU, 24, Color(1.0, 0.88, 0.35, 0.85), 2.0)
+		match style:
+			"thrown_axe":
+				draw_line(Vector2(-10, 8), Vector2(8, -10), Color(0.50, 0.32, 0.16), 3.5)
+				draw_colored_polygon(PackedVector2Array([Vector2(0, -10), Vector2(11, -12), Vector2(12, -1), Vector2(3, -1)]), col)
+			"thrown_spear":
+				draw_line(Vector2(-12, 10), Vector2(8, -8), Color(0.65, 0.45, 0.22), 3.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(14, -14), Vector2(4, -9), Vector2(9, -4)]), col)
+			"thrown_hammer":
+				draw_line(Vector2(-10, 10), Vector2(6, -6), Color(0.50, 0.32, 0.16), 3.5)
+				draw_rect(Rect2(1.0, -13.0, 11.0, 11.0), col)
+			_:
+				draw_line(Vector2(-10, 10), Vector2(10, -10), col, 4.0)
+				draw_line(Vector2(-9, 3), Vector2(-3, 9), Color(1.0, 0.82, 0.26), 3.0)
+				if bool(item.get("explosive", false)):
+					draw_circle(Vector2(6, -6), 4.0, Color(1.0, 0.42, 0.12))

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bm6n0udrfggaw"
-path="res://.godot/imported/face_sheet.png-5a648f5bc01d74e0a3ee79e9ff35259c.ctex"
+uid="uid://bkfrafh8qv8fs"
+path="res://.godot/imported/Pictoicon_Target.Png-5c6f8132399f86b045036e73ed73aab2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/face_sheet.png"
-dest_files=["res://.godot/imported/face_sheet.png-5a648f5bc01d74e0a3ee79e9ff35259c.ctex"]
+source_file="res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Target.Png"
+dest_files=["res://.godot/imported/Pictoicon_Target.Png-5c6f8132399f86b045036e73ed73aab2.ctex"]
 
 [params]
 

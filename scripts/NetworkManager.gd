@@ -2,6 +2,7 @@ extends Node
 
 signal player_list_updated
 signal match_settings_updated
+signal game_rules_updated
 signal lan_servers_updated(servers: Array)
 signal connection_succeeded
 signal connection_failed(reason: String)
@@ -21,7 +22,9 @@ const MAP_NAMES: Array[String] = [
 
 const MODE_NAMES: Array[String] = [
 	"Free-For-All",
-	"Red vs. Blue"
+	"Red vs. Blue",
+	"Agent Clash (FFA)",
+	"Agent Clash (Teams)"
 ]
 
 const TEAM_COLORS: Array[Color] = [
@@ -53,6 +56,14 @@ var bot_difficulty: int = 1      # 0 = Easy, 1 = Mid, 2 = Hard
 var match_mode: int = 0         # 0 = Free-For-All, 1 = Red vs Blue
 var selected_map_id: int = 0    # 0 = Bunker Base, 1 = Factory Ruins, 2 = Desert Outpost
 
+# Custom Game Rules / Mutators
+var unlimited_jetpack: bool = false
+var gravity_scale: float = 1.0
+var only_pistols: bool = false
+var allow_snipers: bool = true
+var allow_shotguns: bool = true
+var allow_explosives: bool = true
+
 var players: Dictionary = {}
 var discovered_servers: Dictionary = {}
 
@@ -66,6 +77,7 @@ func _ready() -> void:
 	randomize()
 	_ensure_input_map()
 	local_player_name = ProfileManager.player_name
+	apply_rules_dict(SettingsManager.get_rules_dict())
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -100,7 +112,13 @@ func _ensure_input_map() -> void:
 		"reload": [KEY_R],
 		"switch_weapon": [KEY_Q],
 		"toggle_dual_wield": [KEY_E],
-		"open_lobby": [KEY_L]
+		"open_lobby": [KEY_L],
+		"ability_1": [KEY_Q, KEY_1],
+		"ability_2": [KEY_E, KEY_2],
+		"ability_3": [KEY_C, KEY_3],
+		"ability_ult": [KEY_X, KEY_4],
+		"throw_item": [KEY_F, KEY_G],
+		"loadout_menu": [KEY_B]
 	}
 	for action_name in key_bindings.keys():
 		if not InputMap.has_action(action_name):
@@ -125,6 +143,14 @@ func is_network_active() -> bool:
 
 func is_host_active() -> bool:
 	return is_network_active() and multiplayer.is_server()
+
+
+func is_agent_clash_mode() -> bool:
+	return match_mode == 2 or match_mode == 3
+
+
+func is_team_mode() -> bool:
+	return match_mode == 1 or match_mode == 3
 
 
 func get_team_color(color_index: int) -> Color:
@@ -156,7 +182,7 @@ func _build_local_player_dict(existing: Dictionary = {}) -> Dictionary:
 	local_player_name = ProfileManager.player_name
 	return {
 		"name": local_player_name,
-		"color_index": local_team if match_mode == 1 else local_color_index,
+		"color_index": local_team if is_team_mode() else local_color_index,
 		"team": local_team,
 		"kills": int(existing.get("kills", 0)),
 		"deaths": int(existing.get("deaths", 0)),
@@ -197,7 +223,7 @@ func set_local_team(team_idx: int) -> void:
 	else:
 		if players.has(1):
 			players[1]["team"] = local_team
-			players[1]["color_index"] = local_team if match_mode == 1 else local_color_index
+			players[1]["color_index"] = local_team if is_team_mode() else local_color_index
 		player_list_updated.emit()
 
 
@@ -210,13 +236,13 @@ func set_player_team_rpc(team_idx: int) -> void:
 		sender_id = 1
 	if players.has(sender_id):
 		players[sender_id]["team"] = clampi(team_idx, 0, 1)
-		if match_mode == 1:
+		if is_team_mode():
 			players[sender_id]["color_index"] = clampi(team_idx, 0, 1)
 		sync_all_players.rpc(players)
 
 
 func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = -1) -> void:
-	match_mode = clampi(new_mode, 0, 1)
+	match_mode = clampi(new_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
 	bot_count = clampi(new_bots, 0, 5)
 	if new_bot_diff >= 0:
@@ -229,11 +255,43 @@ func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, n
 
 @rpc("authority", "call_local", "reliable")
 func sync_match_settings_rpc(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = 1) -> void:
-	match_mode = clampi(new_mode, 0, 1)
+	match_mode = clampi(new_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
 	bot_count = clampi(new_bots, 0, 5)
 	bot_difficulty = clampi(new_bot_diff, 0, 2)
 	match_settings_updated.emit()
+
+
+func get_rules_dict() -> Dictionary:
+	return {
+		"unlimited_jetpack": unlimited_jetpack,
+		"gravity_scale": clampf(gravity_scale, 0.0, 1.0),
+		"only_pistols": only_pistols,
+		"allow_snipers": allow_snipers,
+		"allow_shotguns": allow_shotguns,
+		"allow_explosives": allow_explosives
+	}
+
+
+func apply_rules_dict(rules: Dictionary) -> void:
+	unlimited_jetpack = bool(rules.get("unlimited_jetpack", unlimited_jetpack))
+	gravity_scale = clampf(float(rules.get("gravity_scale", gravity_scale)), 0.0, 1.0)
+	only_pistols = bool(rules.get("only_pistols", only_pistols))
+	allow_snipers = bool(rules.get("allow_snipers", allow_snipers))
+	allow_shotguns = bool(rules.get("allow_shotguns", allow_shotguns))
+	allow_explosives = bool(rules.get("allow_explosives", allow_explosives))
+	game_rules_updated.emit()
+
+
+func host_update_game_rules(rules: Dictionary) -> void:
+	apply_rules_dict(rules)
+	if is_host_active():
+		sync_game_rules_rpc.rpc(get_rules_dict())
+
+
+@rpc("authority", "call_local", "reliable")
+func sync_game_rules_rpc(rules: Dictionary) -> void:
+	apply_rules_dict(rules)
 
 
 func host_game(room_name: String = "") -> Error:
@@ -382,6 +440,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	if multiplayer.is_server():
 		sync_all_players.rpc_id(peer_id, players)
 		sync_match_settings_rpc.rpc_id(peer_id, match_mode, selected_map_id, bot_count, bot_difficulty)
+		sync_game_rules_rpc.rpc_id(peer_id, get_rules_dict())
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
@@ -436,17 +495,19 @@ func sync_all_players(all_players: Dictionary) -> void:
 
 func host_start_match() -> void:
 	if is_host_active():
-		start_match_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty)
+		start_match_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty, get_rules_dict())
 	else:
 		go_to_arena()
 
 
 @rpc("authority", "call_local", "reliable")
-func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1) -> void:
+func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1, synced_rules: Dictionary = {}) -> void:
 	bot_count = synced_bot_count
-	match_mode = clampi(synced_mode, 0, 1)
+	match_mode = clampi(synced_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(synced_map_id, 0, MAP_NAMES.size() - 1)
 	bot_difficulty = clampi(synced_bot_diff, 0, 2)
+	if not synced_rules.is_empty():
+		apply_rules_dict(synced_rules)
 	match_started.emit()
 	go_to_arena()
 

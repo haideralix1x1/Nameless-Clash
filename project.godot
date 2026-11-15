@@ -29,6 +29,10 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+theme/custom_font="res://assets/Layer Lab/Fonts/LilitaOne-Regular.ttf"
+
 [input]
 
 move_left={
@@ -92,5 +96,5 @@ open_lobby={
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=1
+textures/canvas_textures/default_texture_filter=2
 rendering_device/driver.windows="d3d12"

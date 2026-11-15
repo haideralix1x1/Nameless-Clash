@@ -48,6 +48,14 @@ var fps_limit_mode: int = 1
 var particle_intensity: float = 1.0
 var screen_shake_intensity: float = 1.0
 
+# Match Game Rules / Mutators (synced with NetworkManager)
+var unlimited_jetpack: bool = false
+var gravity_scale: float = 1.0
+var only_pistols: bool = false
+var allow_snipers: bool = true
+var allow_shotguns: bool = true
+var allow_explosives: bool = true
+
 var _bgm_player: AudioStreamPlayer
 
 
@@ -157,6 +165,14 @@ func load_settings() -> void:
 	particle_intensity = clampf(float(cfg.get_value("graphics", "particle_intensity", 1.0)), 0.0, 1.5)
 	screen_shake_intensity = clampf(float(cfg.get_value("graphics", "screen_shake_intensity", 1.0)), 0.0, 1.5)
 
+	unlimited_jetpack = bool(cfg.get_value("game_rules", "unlimited_jetpack", false))
+	gravity_scale = clampf(float(cfg.get_value("game_rules", "gravity_scale", 1.0)), 0.0, 1.0)
+	only_pistols = bool(cfg.get_value("game_rules", "only_pistols", false))
+	allow_snipers = bool(cfg.get_value("game_rules", "allow_snipers", true))
+	allow_shotguns = bool(cfg.get_value("game_rules", "allow_shotguns", true))
+	allow_explosives = bool(cfg.get_value("game_rules", "allow_explosives", true))
+	sync_rules_to_network()
+
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -183,12 +199,37 @@ func save_settings() -> void:
 	cfg.set_value("graphics", "particle_intensity", particle_intensity)
 	cfg.set_value("graphics", "screen_shake_intensity", screen_shake_intensity)
 
+	cfg.set_value("game_rules", "unlimited_jetpack", unlimited_jetpack)
+	cfg.set_value("game_rules", "gravity_scale", clampf(gravity_scale, 0.0, 1.0))
+	cfg.set_value("game_rules", "only_pistols", only_pistols)
+	cfg.set_value("game_rules", "allow_snipers", allow_snipers)
+	cfg.set_value("game_rules", "allow_shotguns", allow_shotguns)
+	cfg.set_value("game_rules", "allow_explosives", allow_explosives)
+
 	cfg.save(SETTINGS_PATH)
+
+
+func get_rules_dict() -> Dictionary:
+	return {
+		"unlimited_jetpack": unlimited_jetpack,
+		"gravity_scale": clampf(gravity_scale, 0.0, 1.0),
+		"only_pistols": only_pistols,
+		"allow_snipers": allow_snipers,
+		"allow_shotguns": allow_shotguns,
+		"allow_explosives": allow_explosives
+	}
+
+
+func sync_rules_to_network() -> void:
+	var nm := get_node_or_null("/root/NetworkManager")
+	if nm != null and nm.has_method("host_update_game_rules"):
+		nm.host_update_game_rules(get_rules_dict())
 
 
 func apply_and_save() -> void:
 	_apply_audio_settings()
 	_apply_graphics_settings()
+	sync_rules_to_network()
 	save_settings()
 	settings_changed.emit()
 

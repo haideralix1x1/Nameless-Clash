@@ -1,7 +1,8 @@
 extends Control
 
+const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
-const SND_TEST_SFX: AudioStream = preload("res://assets/audio/shoot_rifle.wav")
+const SND_TEST_SFX: AudioStream = preload("res://assets/audio/shoot_ak47.wav")
 
 var _tabs: TabContainer
 var _listening_action: String = ""
@@ -22,23 +23,34 @@ func _ready() -> void:
 	_build_ui()
 
 
-func _make_style(bg: Color, border: Color, corner: int = 10) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(corner)
-	sb.content_margin_left = 14
-	sb.content_margin_right = 14
-	sb.content_margin_top = 12
-	sb.content_margin_bottom = 12
-	return sb
+func _variant_for_color(col: Color) -> String:
+	if col.r > 0.80 and col.g < 0.45 and col.b < 0.45:
+		return "red"
+	if col.r > 0.80 and col.g > 0.72 and col.b < 0.45:
+		return "yellow"
+	if col.r > 0.80 and col.g > 0.40:
+		return "orange"
+	if col.g > 0.75 and col.r < 0.52:
+		return "green"
+	if col.b > 0.80 and col.r > 0.58 and col.g < 0.65:
+		return "purple"
+	if col.b > 0.82 and col.g > 0.68:
+		return "sky"
+	return "blue"
 
 
-func _style_button(btn: Button, bg: Color, border: Color, corner: int = 10) -> void:
-	btn.add_theme_stylebox_override("normal", _make_style(bg, border, corner))
-	btn.add_theme_stylebox_override("hover", _make_style(bg.lightened(0.14), border.lightened(0.3), corner))
-	btn.add_theme_stylebox_override("pressed", _make_style(border.darkened(0.4), border.lightened(0.45), corner))
+func _make_style(bg: Color, border: Color, _corner: int = 10) -> StyleBox:
+	var variant: String = _variant_for_color(border)
+	if variant == "yellow" or variant == "red":
+		variant = "orange"
+	elif variant == "sky":
+		variant = "blue"
+	var tint := Color(maxf(bg.r + 0.14, 0.20), maxf(bg.g + 0.14, 0.22), maxf(bg.b + 0.14, 0.28), maxf(bg.a, 0.94))
+	return UIStyle.make_card_stylebox(variant, tint, 14, 12)
+
+
+func _style_button(btn: Button, _bg: Color, border: Color, _corner: int = 10) -> void:
+	UIStyle.style_layer_button(btn, _variant_for_color(border), "", 14, 8)
 
 
 func _build_ui() -> void:
@@ -76,6 +88,7 @@ func _build_ui() -> void:
 
 	var title := Label.new()
 	title.text = "GAME SETTINGS"
+	title.add_theme_font_override("font", UIStyle.FONT_MAIN)
 	title.add_theme_font_size_override("font_size", 26)
 	title.modulate = Color(1.0, 0.84, 0.28)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -94,6 +107,7 @@ func _build_ui() -> void:
 	_build_controls_tab()
 	_build_audio_tab()
 	_build_graphics_tab()
+	_build_game_rules_tab()
 	_build_touch_layout_overlay()
 
 
@@ -253,6 +267,53 @@ func _build_graphics_tab() -> void:
 
 	_add_slider_row(v, "Screen Shake Intensity:", 0.0, 1.5, 0.05, SettingsManager.screen_shake_intensity, "%d%%", 100.0, func(val: float):
 		SettingsManager.screen_shake_intensity = val
+		SettingsManager.apply_and_save()
+	)
+
+
+func _build_game_rules_tab() -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = "Game Rules"
+	_tabs.add_child(scroll)
+
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 14)
+	scroll.add_child(v)
+
+	var hint := Label.new()
+	hint.text = "MATCH RULES & MUTATORS (Applied in Solo and Hosted Matches):"
+	hint.add_theme_font_size_override("font_size", 16)
+	hint.modulate = Color(0.68, 0.92, 1.0)
+	v.add_child(hint)
+
+	_add_toggle_row(v, "Unlimited Jetpack Fuel:", SettingsManager.unlimited_jetpack, func(on: bool):
+		SettingsManager.unlimited_jetpack = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_slider_row(v, "World Gravity Scale (0 - 1):", 0.0, 1.0, 0.05, SettingsManager.gravity_scale, "%.2fx", 1.0, func(val: float):
+		SettingsManager.gravity_scale = val
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Only Pistols Mode:", SettingsManager.only_pistols, func(on: bool):
+		SettingsManager.only_pistols = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Allow Sniper Rifles:", SettingsManager.allow_snipers, func(on: bool):
+		SettingsManager.allow_snipers = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Allow Shotguns:", SettingsManager.allow_shotguns, func(on: bool):
+		SettingsManager.allow_shotguns = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Allow Explosives / RPG:", SettingsManager.allow_explosives, func(on: bool):
+		SettingsManager.allow_explosives = on
 		SettingsManager.apply_and_save()
 	)
 

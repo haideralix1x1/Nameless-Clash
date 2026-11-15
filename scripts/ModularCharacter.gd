@@ -70,11 +70,13 @@ func _get_or_create_sprite(node_name: String) -> Sprite2D:
 	if existing != null:
 		existing.hframes = SHEET_FRAMES
 		existing.centered = true
+		existing.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		return existing
 	var spr := Sprite2D.new()
 	spr.name = node_name
 	spr.hframes = SHEET_FRAMES
 	spr.centered = true
+	spr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(spr)
 	return spr
 
@@ -83,10 +85,12 @@ func _get_or_create_animated(node_name: String) -> AnimatedSprite2D:
 	var existing := get_node_or_null(node_name) as AnimatedSprite2D
 	if existing != null:
 		existing.centered = true
+		existing.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		return existing
 	var anim := AnimatedSprite2D.new()
 	anim.name = node_name
 	anim.centered = true
+	anim.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(anim)
 	return anim
 
@@ -214,6 +218,8 @@ func _apply_sprite_strip(spr: Sprite2D, path: String) -> void:
 	var tex := _load_texture(path)
 	if tex != null:
 		spr.texture = tex
+		var fh := maxi(tex.get_height(), 1)
+		spr.scale = Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
 	spr.hframes = SHEET_FRAMES
 
 
@@ -223,6 +229,10 @@ func _apply_animated_strip(anim_node: AnimatedSprite2D, path: String) -> void:
 	var sf := _get_or_build_sprite_frames(path)
 	if sf != null:
 		anim_node.sprite_frames = sf
+		var tex := _load_texture(path)
+		if tex != null:
+			var fh := maxi(tex.get_height(), 1)
+			anim_node.scale = Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
 
 
 func _load_texture(path: String) -> Texture2D:

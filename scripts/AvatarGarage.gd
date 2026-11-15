@@ -1,5 +1,6 @@
 extends Control
 
+const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
 const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 
@@ -24,6 +25,7 @@ var _preview: SoldierPreview
 var _name_input: LineEdit
 var _hero_name_label: Label
 var _hero_role_label: Label
+var _agent_summary_label: Label
 
 var _tab_buttons: Array[Button] = []
 var _tab_pages: Array[Control] = []
@@ -61,23 +63,40 @@ func _ready() -> void:
 	_refresh_ui()
 
 
-func _make_style(bg: Color, border: Color, corner: int = 12, margin_h: int = 14, margin_v: int = 10) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(corner)
-	sb.content_margin_left = margin_h
-	sb.content_margin_right = margin_h
-	sb.content_margin_top = margin_v
-	sb.content_margin_bottom = margin_v
-	return sb
+func _variant_for_color(col: Color) -> String:
+	if col.r > 0.80 and col.g < 0.45 and col.b < 0.45:
+		return "red"
+	if col.r > 0.80 and col.g > 0.72 and col.b < 0.45:
+		return "yellow"
+	if col.r > 0.80 and col.g > 0.40:
+		return "orange"
+	if col.g > 0.75 and col.r < 0.52:
+		return "green"
+	if col.b > 0.80 and col.r > 0.58 and col.g < 0.65:
+		return "purple"
+	if col.b > 0.82 and col.g > 0.68:
+		return "sky"
+	return "blue"
 
 
-func _style_button(btn: Button, base_bg: Color, accent: Color, corner: int = 10) -> void:
-	btn.add_theme_stylebox_override("normal", _make_style(base_bg, accent, corner, 12, 8))
-	btn.add_theme_stylebox_override("hover", _make_style(base_bg.lightened(0.14), accent.lightened(0.3), corner, 12, 8))
-	btn.add_theme_stylebox_override("pressed", _make_style(accent.darkened(0.35), accent.lightened(0.45), corner, 12, 8))
+func _make_style(bg: Color, border: Color, _corner: int = 12, margin_h: int = 14, margin_v: int = 10) -> StyleBox:
+	var variant: String = _variant_for_color(border)
+	if variant == "yellow" or variant == "red":
+		variant = "orange"
+	elif variant == "sky":
+		variant = "blue"
+	var tint := Color(maxf(bg.r + 0.14, 0.20), maxf(bg.g + 0.14, 0.22), maxf(bg.b + 0.14, 0.28), maxf(bg.a, 0.94))
+	return UIStyle.make_card_stylebox(variant, tint, margin_h, margin_v)
+
+
+func _style_button(btn: Button, base_bg: Color, accent: Color, _corner: int = 10) -> void:
+	if btn.text.is_empty():
+		var tex: Texture2D = UIStyle.BTN_TEXTURES["gray"] as Texture2D
+		btn.add_theme_stylebox_override("normal", UIStyle.make_button_stylebox(tex, base_bg, 10, 8))
+		btn.add_theme_stylebox_override("hover", UIStyle.make_button_stylebox(tex, base_bg.lightened(0.14), 10, 8))
+		btn.add_theme_stylebox_override("pressed", UIStyle.make_button_stylebox(tex, base_bg.darkened(0.22), 10, 8))
+		return
+	UIStyle.style_layer_button(btn, _variant_for_color(accent), "", 12, 8)
 
 
 func _build_ui() -> void:
@@ -271,10 +290,16 @@ func _build_heroes_tab(parent: VBoxContainer) -> Control:
 	scroll.add_child(v)
 
 	var hint := Label.new()
-	hint.text = "Tap any Soldier Hero to load their signature armor and weapon."
+	hint.text = "Tap any Agent Hero to load their signature look, gun, and Agent Clash powers."
 	hint.modulate = Color(0.72, 0.88, 1.0)
 	hint.add_theme_font_size_override("font_size", 15)
 	v.add_child(hint)
+
+	_agent_summary_label = Label.new()
+	_agent_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_agent_summary_label.add_theme_font_size_override("font_size", 14)
+	_agent_summary_label.modulate = Color(0.86, 0.72, 1.0)
+	v.add_child(_agent_summary_label)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -728,6 +753,15 @@ func _refresh_ui() -> void:
 	var arch_idx: int = clampi(ProfileManager.archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
 	_hero_name_label.text = str(ProfileManager.ARCHETYPES[arch_idx]["name"]).to_upper()
 	_hero_role_label.text = ProfileManager.ARCHETYPE_ROLES[arch_idx]
+	if is_instance_valid(_agent_summary_label):
+		var ag: Dictionary = AgentData.get_agent(arch_idx)
+		var bw: Dictionary = ag["base_weapon"]
+		var abils: Array = ag["abilities"]
+		var ult: Dictionary = ag["ultimate"]
+		_agent_summary_label.text = (
+			"⚡ AGENT CLASH KIT — Base: %s | [Q] %s | [E] %s | [C] %s | ★ ULT: %s"
+			% [str(bw["name"]), str(abils[0]["name"]), str(abils[1]["name"]), str(abils[2]["name"]), str(ult["name"])]
+		)
 	_refresh_pose_buttons()
 
 	# Hero preset grid highlight
