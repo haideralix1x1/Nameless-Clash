@@ -109,14 +109,14 @@ func _build_ui() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_bottom", 14)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
 	add_child(margin)
 
 	var root_v := VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 12)
+	root_v.add_theme_constant_override("separation", 8)
 	margin.add_child(root_v)
 
 	# Mobile Top Navigation Bar
@@ -181,28 +181,30 @@ func _build_ui() -> void:
 
 func _build_hero_stage(parent: HBoxContainer) -> void:
 	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(280, 0)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.size_flags_stretch_ratio = 0.62
 	panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.95), Color(0.98, 0.58, 0.16, 0.92), 14, 16, 14))
 	parent.add_child(panel)
 
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
 
 	_hero_name_label = Label.new()
 	_hero_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_name_label.add_theme_font_size_override("font_size", 24)
+	_hero_name_label.add_theme_font_size_override("font_size", 22)
 	_hero_name_label.modulate = Color(1.0, 0.85, 0.30)
 	v.add_child(_hero_name_label)
 
 	_hero_role_label = Label.new()
 	_hero_role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_role_label.add_theme_font_size_override("font_size", 15)
+	_hero_role_label.add_theme_font_size_override("font_size", 14)
 	_hero_role_label.modulate = Color(0.68, 0.88, 1.0)
 	v.add_child(_hero_role_label)
 
 	var stage := PanelContainer.new()
+	stage.custom_minimum_size = Vector2(0, 165)
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.05, 0.09, 0.96), Color(0.22, 0.36, 0.56, 0.7), 12, 4, 4))
 	v.add_child(stage)

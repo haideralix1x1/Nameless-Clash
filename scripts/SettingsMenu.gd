@@ -12,6 +12,7 @@ var _rebind_prompt_label: Label
 var _layout_overlay: Control
 var _drag_handles: Dictionary = {}
 var _dragging_key: String = ""
+var _drag_center_offset: Vector2 = Vector2.ZERO
 var _test_sfx_player: AudioStreamPlayer
 
 
@@ -63,14 +64,14 @@ func _build_ui() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 18)
-	margin.add_theme_constant_override("margin_bottom", 18)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
 	add_child(margin)
 
 	var root_v := VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 14)
+	root_v.add_theme_constant_override("separation", 10)
 	margin.add_child(root_v)
 
 	# Header
@@ -218,7 +219,7 @@ func _build_graphics_tab() -> void:
 	v.add_child(res_row)
 	var res_lbl := Label.new()
 	res_lbl.text = "Window Resolution:"
-	res_lbl.custom_minimum_size = Vector2(280, 0)
+	res_lbl.custom_minimum_size = Vector2(210, 0)
 	res_row.add_child(res_lbl)
 
 	var res_opt := OptionButton.new()
@@ -246,7 +247,7 @@ func _build_graphics_tab() -> void:
 	v.add_child(fps_row)
 	var fps_lbl := Label.new()
 	fps_lbl.text = "Frame Rate Limiter:"
-	fps_lbl.custom_minimum_size = Vector2(280, 0)
+	fps_lbl.custom_minimum_size = Vector2(210, 0)
 	fps_row.add_child(fps_lbl)
 
 	var fps_opt := OptionButton.new()
@@ -335,7 +336,7 @@ func _add_slider_row(
 
 	var lbl := Label.new()
 	lbl.text = title_txt
-	lbl.custom_minimum_size = Vector2(280, 0)
+	lbl.custom_minimum_size = Vector2(210, 0)
 	row.add_child(lbl)
 
 	var slider := HSlider.new()
@@ -363,7 +364,7 @@ func _add_toggle_row(parent: VBoxContainer, title_txt: String, initial: bool, on
 
 	var lbl := Label.new()
 	lbl.text = title_txt
-	lbl.custom_minimum_size = Vector2(280, 0)
+	lbl.custom_minimum_size = Vector2(210, 0)
 	row.add_child(lbl)
 
 	var chk := CheckButton.new()
@@ -401,11 +402,11 @@ func _input(event: InputEvent) -> void:
 
 	if _layout_overlay.visible and not _dragging_key.is_empty():
 		if event is InputEventMouseMotion:
-			_move_handle(_dragging_key, (event as InputEventMouseMotion).position)
+			_move_handle(_dragging_key, (event as InputEventMouseMotion).position - _drag_center_offset)
 		elif event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
 			_dragging_key = ""
 		elif event is InputEventScreenDrag:
-			_move_handle(_dragging_key, (event as InputEventScreenDrag).position)
+			_move_handle(_dragging_key, (event as InputEventScreenDrag).position - _drag_center_offset)
 		elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
 			_dragging_key = ""
 
@@ -420,23 +421,23 @@ func _build_touch_layout_overlay() -> void:
 	var top_bar := HBoxContainer.new()
 	top_bar.anchor_left = 0.5
 	top_bar.anchor_right = 0.5
-	top_bar.offset_left = -350
-	top_bar.offset_right = 350
-	top_bar.offset_top = 18
-	top_bar.offset_bottom = 70
-	top_bar.add_theme_constant_override("separation", 12)
+	top_bar.offset_left = -310
+	top_bar.offset_right = 310
+	top_bar.offset_top = 12
+	top_bar.offset_bottom = 60
+	top_bar.add_theme_constant_override("separation", 10)
 	_layout_overlay.add_child(top_bar)
 
 	var info := Label.new()
-	info.text = "Drag sticks and buttons where you want them:"
-	info.add_theme_font_size_override("font_size", 16)
+	info.text = "Drag sticks & buttons where you want them:"
+	info.add_theme_font_size_override("font_size", 15)
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(info)
 
 	var reset_btn := Button.new()
 	reset_btn.text = "RESET"
-	reset_btn.custom_minimum_size = Vector2(120, 48)
-	reset_btn.add_theme_font_size_override("font_size", 16)
+	reset_btn.custom_minimum_size = Vector2(110, 44)
+	reset_btn.add_theme_font_size_override("font_size", 15)
 	_style_button(reset_btn, Color(0.24, 0.14, 0.14), Color(0.95, 0.42, 0.35), 10)
 	reset_btn.pressed.connect(func():
 		SettingsManager.reset_touch_layout()
@@ -446,18 +447,24 @@ func _build_touch_layout_overlay() -> void:
 
 	var done_btn := Button.new()
 	done_btn.text = "SAVE LAYOUT"
-	done_btn.custom_minimum_size = Vector2(150, 48)
-	done_btn.add_theme_font_size_override("font_size", 16)
+	done_btn.custom_minimum_size = Vector2(142, 44)
+	done_btn.add_theme_font_size_override("font_size", 15)
 	_style_button(done_btn, Color(0.09, 0.32, 0.16), Color(0.28, 0.92, 0.45), 10)
-	done_btn.pressed.connect(func(): _layout_overlay.visible = false)
+	done_btn.pressed.connect(func():
+		_dragging_key = ""
+		_layout_overlay.visible = false
+	)
 	top_bar.add_child(done_btn)
 
 	var handle_specs: Array[Dictionary] = [
-		{"key": "left_stick", "label": "MOVE", "size": Vector2(148, 148), "col": Color(0.25, 0.68, 1.0)},
-		{"key": "right_stick", "label": "AIM & FIRE", "size": Vector2(148, 148), "col": Color(1.0, 0.48, 0.22)},
-		{"key": "btn_reload", "label": "RELOAD", "size": Vector2(108, 48), "col": Color(0.68, 0.80, 0.98)},
-		{"key": "btn_switch", "label": "SWAP GUN", "size": Vector2(108, 48), "col": Color(0.95, 0.76, 0.28)},
-		{"key": "btn_dual", "label": "DUAL", "size": Vector2(108, 48), "col": Color(0.28, 0.92, 1.0)}
+		{"key": "left_stick", "label": "MOVE\nSTICK", "size": Vector2(160, 160), "col": Color(0.25, 0.68, 1.0)},
+		{"key": "right_stick", "label": "AIM &\nFIRE", "size": Vector2(160, 160), "col": Color(1.0, 0.48, 0.22)},
+		{"key": "btn_reload", "label": "RELOAD", "size": Vector2(116, 48), "col": Color(0.68, 0.80, 0.98)},
+		{"key": "btn_switch", "label": "SWAP GUN", "size": Vector2(116, 48), "col": Color(0.95, 0.76, 0.28)},
+		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(116, 48), "col": Color(1.0, 0.56, 0.16)},
+		{"key": "btn_dual", "label": "DUAL", "size": Vector2(116, 48), "col": Color(0.28, 0.92, 1.0)},
+		{"key": "ability_bar", "label": "ABILITY BAR\n(Q / E / C / X)", "size": Vector2(360, 76), "col": Color(0.78, 0.48, 1.0)},
+		{"key": "btn_presets", "label": "LOADOUT [B]", "size": Vector2(154, 38), "col": Color(1.0, 0.80, 0.24)}
 	]
 
 	for spec in handle_specs:
@@ -467,29 +474,57 @@ func _build_touch_layout_overlay() -> void:
 		btn.text = str(spec["label"])
 		btn.custom_minimum_size = spec["size"]
 		btn.size = spec["size"]
-		btn.add_theme_font_size_override("font_size", 16)
+		btn.add_theme_font_size_override("font_size", 14)
 		_style_button(btn, col.darkened(0.55), col, 24)
-		btn.button_down.connect(func(): _dragging_key = key)
-		btn.button_up.connect(func(): _dragging_key = "")
+		btn.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton:
+				var mb := ev as InputEventMouseButton
+				if mb.button_index == MOUSE_BUTTON_LEFT:
+					if mb.pressed:
+						_dragging_key = key
+						_drag_center_offset = mb.position - btn.size * 0.5
+					else:
+						_dragging_key = ""
+			elif ev is InputEventScreenTouch:
+				var st := ev as InputEventScreenTouch
+				if st.pressed:
+					_dragging_key = key
+					_drag_center_offset = st.position - btn.size * 0.5
+				else:
+					_dragging_key = ""
+		)
 		_layout_overlay.add_child(btn)
 		_drag_handles[key] = btn
 
 
 func _open_layout_editor() -> void:
+	_dragging_key = ""
 	_layout_overlay.visible = true
 	_position_layout_handles()
+
+
+func _clamp_handle_pos(center_px: Vector2, ctrl_size: Vector2, vp_size: Vector2) -> Vector2:
+	return Vector2(
+		clampf(center_px.x - ctrl_size.x * 0.5, 10.0, maxf(10.0, vp_size.x - ctrl_size.x - 10.0)),
+		clampf(center_px.y - ctrl_size.y * 0.5, 10.0, maxf(10.0, vp_size.y - ctrl_size.y - 10.0))
+	)
 
 
 func _position_layout_handles() -> void:
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
 	for key in _drag_handles.keys():
 		var ctrl: Control = _drag_handles[key] as Control
-		ctrl.position = SettingsManager.get_touch_element_px(key, vp_size) - ctrl.size * 0.5
+		ctrl.position = _clamp_handle_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)
 
 
-func _move_handle(key: String, screen_pos: Vector2) -> void:
+func _move_handle(key: String, center_screen_pos: Vector2) -> void:
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
-	var norm := Vector2(screen_pos.x / maxf(1.0, vp_size.x), screen_pos.y / maxf(1.0, vp_size.y))
-	SettingsManager.set_touch_element_pos(key, norm)
 	var ctrl: Control = _drag_handles[key] as Control
-	ctrl.position = SettingsManager.get_touch_element_px(key, vp_size) - ctrl.size * 0.5
+	var half_sz: Vector2 = ctrl.size * 0.5
+	var clamped_center := Vector2(
+		clampf(center_screen_pos.x, half_sz.x + 10.0, maxf(half_sz.x + 10.0, vp_size.x - half_sz.x - 10.0)),
+		clampf(center_screen_pos.y, half_sz.y + 10.0, maxf(half_sz.y + 10.0, vp_size.y - half_sz.y - 10.0))
+	)
+	var norm := Vector2(clamped_center.x / maxf(1.0, vp_size.x), clamped_center.y / maxf(1.0, vp_size.y))
+	SettingsManager.set_touch_element_pos(key, norm)
+	ctrl.position = _clamp_handle_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)

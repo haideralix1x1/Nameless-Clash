@@ -86,28 +86,28 @@ func _build_ui() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 32)
-	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_bottom", 22)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
 	add_child(margin)
 
 	_hub_container = VBoxContainer.new()
-	_hub_container.add_theme_constant_override("separation", 18)
+	_hub_container.add_theme_constant_override("separation", 8)
 	margin.add_child(_hub_container)
 
 	# Clean Mobile Arcade Header
 	var header_panel := PanelContainer.new()
-	header_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.94), Color(0.98, 0.56, 0.14, 0.95), 14))
+	header_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.94), Color(0.98, 0.56, 0.14, 0.95), 8))
 	_hub_container.add_child(header_panel)
 
 	var h_row := HBoxContainer.new()
-	h_row.add_theme_constant_override("separation", 16)
+	h_row.add_theme_constant_override("separation", 12)
 	header_panel.add_child(h_row)
 
 	var icon_rect := TextureRect.new()
 	icon_rect.texture = TEX_ICON
-	icon_rect.custom_minimum_size = Vector2(72, 72)
+	icon_rect.custom_minimum_size = Vector2(50, 50)
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	h_row.add_child(icon_rect)
 
@@ -119,20 +119,20 @@ func _build_ui() -> void:
 	var title_lbl := Label.new()
 	title_lbl.text = "NAMELESS CLASH"
 	title_lbl.add_theme_font_override("font", UIStyle.FONT_MAIN)
-	title_lbl.add_theme_font_size_override("font_size", 36)
+	title_lbl.add_theme_font_size_override("font_size", 26)
 	title_lbl.modulate = Color(0.90, 0.78, 0.46)
 	title_v.add_child(title_lbl)
 
 	var sub_lbl := Label.new()
 	sub_lbl.text = "2D MULTIPLAYER ARENA SHOOTER"
-	sub_lbl.add_theme_font_size_override("font_size", 15)
+	sub_lbl.add_theme_font_size_override("font_size", 13)
 	sub_lbl.modulate = Color(0.66, 0.74, 0.82)
 	title_v.add_child(sub_lbl)
 
 	# Main Split: Left (Your Soldier Showcase) + Right (Big Touch Battle Modes)
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 22)
+	split.add_theme_constant_override("separation", 16)
 	_hub_container.add_child(split)
 
 	# Left Card: Your Soldier Showcase
@@ -143,26 +143,27 @@ func _build_ui() -> void:
 	split.add_child(preview_panel)
 
 	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 10)
+	pv.add_theme_constant_override("separation", 6)
 	preview_panel.add_child(pv)
 
 	var p_hdr := Label.new()
 	p_hdr.text = "YOUR SOLDIER"
 	p_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	p_hdr.add_theme_font_size_override("font_size", 16)
+	p_hdr.add_theme_font_size_override("font_size", 14)
 	p_hdr.modulate = Color(0.70, 0.78, 0.86)
 	pv.add_child(p_hdr)
 
 	_callsign_label = Label.new()
 	_callsign_label.text = ProfileManager.player_name.to_upper()
 	_callsign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_callsign_label.add_theme_font_size_override("font_size", 26)
+	_callsign_label.add_theme_font_size_override("font_size", 22)
 	_callsign_label.modulate = Color(0.90, 0.78, 0.46)
 	pv.add_child(_callsign_label)
 
 	var stage := PanelContainer.new()
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	stage.custom_minimum_size = Vector2(300, 220)
+	stage.custom_minimum_size = Vector2(210, 148)
+	stage.clip_contents = true
 	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.05, 0.09, 0.94), Color(0.24, 0.38, 0.58, 0.7), 12))
 	pv.add_child(stage)
 
@@ -174,13 +175,13 @@ func _build_ui() -> void:
 	anchor_wrap.add_child(anchor)
 
 	_preview = SoldierPreview.new()
-	_preview.scale = Vector2(4.2, 4.2)
+	_preview.scale = Vector2(3.2, 3.2)
 	anchor.add_child(_preview)
 
 	_loadout_label = Label.new()
 	_loadout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loadout_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_loadout_label.add_theme_font_size_override("font_size", 16)
+	_loadout_label.add_theme_font_size_override("font_size", 14)
 	_loadout_label.modulate = Color(0.76, 0.82, 0.88)
 	var arch_name: String = ProfileManager.ARCHETYPES[ProfileManager.archetype_id]["name"]
 	var pri_weapon: WeaponData = WeaponData.get_weapon(ProfileManager.primary_weapon_id, ProfileManager.weapon_skin_id, ProfileManager.m4a1_rail_mod)
@@ -188,7 +189,7 @@ func _build_ui() -> void:
 	_loadout_label.text = "%s\n%s  +  %s" % [arch_name, pri_weapon.display_name, sec_weapon.display_name]
 	pv.add_child(_loadout_label)
 
-	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.86, 0.62, 0.24), 58.0, 18, Color(0.18, 0.14, 0.10, 0.96))
+	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.86, 0.62, 0.24), 46.0, 16, Color(0.18, 0.14, 0.10, 0.96))
 	edit_avatar_btn.pressed.connect(func(): _transition_to(NetworkManager.go_to_avatar_garage))
 	pv.add_child(edit_avatar_btn)
 
@@ -200,17 +201,17 @@ func _build_ui() -> void:
 	split.add_child(nav_panel)
 
 	var nav_v := VBoxContainer.new()
-	nav_v.add_theme_constant_override("separation", 14)
+	nav_v.add_theme_constant_override("separation", 8)
 	nav_v.alignment = BoxContainer.ALIGNMENT_CENTER
 	nav_panel.add_child(nav_v)
 
 	var nav_hdr := Label.new()
 	nav_hdr.text = "BATTLE MODES"
-	nav_hdr.add_theme_font_size_override("font_size", 17)
+	nav_hdr.add_theme_font_size_override("font_size", 15)
 	nav_hdr.modulate = Color(0.70, 0.78, 0.86)
 	nav_v.add_child(nav_hdr)
 
-	var btn_solo := _make_arcade_button("▶  PLAY SOLO (GUNFIGHT)", Color(0.30, 0.92, 0.48), 66.0, 20, Color(0.09, 0.28, 0.16, 0.98))
+	var btn_solo := _make_arcade_button("▶  PLAY SOLO (GUNFIGHT)", Color(0.30, 0.92, 0.48), 46.0, 17, Color(0.09, 0.28, 0.16, 0.98))
 	btn_solo.pressed.connect(func():
 		NetworkManager.disconnect_network()
 		if NetworkManager.is_agent_clash_mode():
@@ -219,7 +220,7 @@ func _build_ui() -> void:
 	)
 	nav_v.add_child(btn_solo)
 
-	var btn_agent := _make_arcade_button("⚡ AGENT CLASH (ABILITIES MODE)", Color(0.78, 0.42, 1.0), 62.0, 19, Color(0.20, 0.10, 0.34, 0.98))
+	var btn_agent := _make_arcade_button("⚡ AGENT CLASH (ABILITIES MODE)", Color(0.78, 0.42, 1.0), 46.0, 17, Color(0.20, 0.10, 0.34, 0.98))
 	btn_agent.pressed.connect(_open_agent_select)
 	nav_v.add_child(btn_agent)
 
@@ -229,7 +230,7 @@ func _build_ui() -> void:
 
 	var diff_lbl := Label.new()
 	diff_lbl.text = "BOT LEVEL:"
-	diff_lbl.add_theme_font_size_override("font_size", 14)
+	diff_lbl.add_theme_font_size_override("font_size", 13)
 	diff_lbl.modulate = Color(0.75, 0.88, 1.0)
 	diff_row.add_child(diff_lbl)
 
@@ -238,37 +239,37 @@ func _build_ui() -> void:
 	for i in range(diff_labels.size()):
 		var db := Button.new()
 		db.text = diff_labels[i]
-		db.custom_minimum_size = Vector2(0, 42)
+		db.custom_minimum_size = Vector2(0, 34)
 		db.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		db.add_theme_font_size_override("font_size", 15)
+		db.add_theme_font_size_override("font_size", 14)
 		db.pressed.connect(_select_bot_difficulty.bind(i))
 		diff_row.add_child(db)
 		_diff_buttons.append(db)
 	_refresh_diff_buttons()
 
-	var btn_join_lan := _make_arcade_button("WIFI MULTIPLAYER LOBBY", Color(0.26, 0.74, 1.0), 66.0, 20, Color(0.10, 0.20, 0.34, 0.96))
+	var btn_join_lan := _make_arcade_button("WIFI MULTIPLAYER LOBBY", Color(0.26, 0.74, 1.0), 46.0, 17, Color(0.10, 0.20, 0.34, 0.96))
 	btn_join_lan.pressed.connect(func(): _transition_to(NetworkManager.go_to_lobby))
 	nav_v.add_child(btn_join_lan)
 
-	var btn_quick_host := _make_arcade_button("QUICK HOST WIFI ROOM", Color(0.98, 0.58, 0.16), 60.0, 18, Color(0.26, 0.15, 0.06, 0.96))
+	var btn_quick_host := _make_arcade_button("QUICK HOST WIFI ROOM", Color(0.98, 0.58, 0.16), 44.0, 16, Color(0.26, 0.15, 0.06, 0.96))
 	btn_quick_host.pressed.connect(_on_quick_host_pressed)
 	nav_v.add_child(btn_quick_host)
 
 	var bottom_row := HBoxContainer.new()
-	bottom_row.add_theme_constant_override("separation", 10)
+	bottom_row.add_theme_constant_override("separation", 8)
 	nav_v.add_child(bottom_row)
 
-	var btn_settings := _make_arcade_button("SETTINGS", Color(0.75, 0.84, 0.96), 54.0, 17)
+	var btn_settings := _make_arcade_button("SETTINGS", Color(0.75, 0.84, 0.96), 42.0, 15)
 	btn_settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_settings.pressed.connect(func(): _transition_to(NetworkManager.go_to_settings))
 	bottom_row.add_child(btn_settings)
 
-	var btn_credits := _make_arcade_button("CREDITS", Color(0.95, 0.78, 0.25), 54.0, 17)
+	var btn_credits := _make_arcade_button("CREDITS", Color(0.95, 0.78, 0.25), 42.0, 15)
 	btn_credits.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_credits.pressed.connect(_open_credits)
 	bottom_row.add_child(btn_credits)
 
-	var btn_quit := _make_arcade_button("QUIT", Color(0.92, 0.30, 0.30), 54.0, 17)
+	var btn_quit := _make_arcade_button("QUIT", Color(0.92, 0.30, 0.30), 42.0, 15)
 	btn_quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_quit.pressed.connect(func(): get_tree().quit())
 	bottom_row.add_child(btn_quit)
@@ -388,10 +389,10 @@ func _build_agent_select_overlay() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 36)
-	margin.add_theme_constant_override("margin_right", 36)
-	margin.add_theme_constant_override("margin_top", 26)
-	margin.add_theme_constant_override("margin_bottom", 26)
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
 	_agent_select_overlay.add_child(margin)
 
 	var panel := PanelContainer.new()
@@ -399,49 +400,51 @@ func _build_agent_select_overlay() -> void:
 	margin.add_child(panel)
 
 	var root_v := VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 12)
+	root_v.add_theme_constant_override("separation", 8)
 	panel.add_child(root_v)
 
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 12)
+	top_row.add_theme_constant_override("separation", 10)
 	root_v.add_child(top_row)
 
 	var hdr := Label.new()
 	hdr.text = "⚡ AGENT CLASH — SELECT YOUR HERO & ABILITY KIT"
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hdr.add_theme_font_size_override("font_size", 24)
+	hdr.add_theme_font_size_override("font_size", 20)
 	hdr.modulate = Color(0.86, 0.65, 1.0)
 	top_row.add_child(hdr)
 
-	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 44.0, 16, Color(0.24, 0.10, 0.12))
-	close_btn.custom_minimum_size = Vector2(110, 44)
+	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 40.0, 15, Color(0.24, 0.10, 0.12))
+	close_btn.custom_minimum_size = Vector2(104, 40)
 	close_btn.pressed.connect(_close_agent_select)
 	top_row.add_child(close_btn)
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 16)
+	split.add_theme_constant_override("separation", 12)
 	root_v.add_child(split)
 
 	# Left Kit Preview Column
 	var left_card := PanelContainer.new()
+	left_card.custom_minimum_size = Vector2(310, 0)
 	left_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_card.size_flags_stretch_ratio = 0.85
 	left_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.96), Color(0.32, 0.62, 0.98, 0.8), 12))
 	split.add_child(left_card)
 
 	var lv := VBoxContainer.new()
-	lv.add_theme_constant_override("separation", 8)
+	lv.add_theme_constant_override("separation", 6)
 	left_card.add_child(lv)
 
 	_agent_kit_title = Label.new()
 	_agent_kit_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_agent_kit_title.add_theme_font_size_override("font_size", 22)
+	_agent_kit_title.add_theme_font_size_override("font_size", 19)
 	_agent_kit_title.modulate = Color(1.0, 0.86, 0.34)
 	lv.add_child(_agent_kit_title)
 
 	var stage := PanelContainer.new()
-	stage.custom_minimum_size = Vector2(0, 150)
+	stage.custom_minimum_size = Vector2(0, 108)
+	stage.clip_contents = true
 	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
 	lv.add_child(stage)
 
@@ -452,21 +455,21 @@ func _build_agent_select_overlay() -> void:
 	anchor_wrap.add_child(anchor)
 
 	_agent_preview = SoldierPreview.new()
-	_agent_preview.scale = Vector2(3.6, 3.6)
+	_agent_preview.scale = Vector2(2.2, 2.2)
 	anchor.add_child(_agent_preview)
 
 	_agent_kit_body = Label.new()
-	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_agent_kit_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_agent_kit_body.add_theme_font_size_override("font_size", 14)
+	_agent_kit_body.add_theme_font_size_override("font_size", 13)
 	_agent_kit_body.modulate = Color(0.84, 0.94, 1.0)
 	lv.add_child(_agent_kit_body)
 
 	var act_row := HBoxContainer.new()
-	act_row.add_theme_constant_override("separation", 10)
+	act_row.add_theme_constant_override("separation", 8)
 	lv.add_child(act_row)
 
-	var play_solo_btn := _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 52.0, 17, Color(0.09, 0.30, 0.16))
+	var play_solo_btn := _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 46.0, 15, Color(0.09, 0.30, 0.16))
 	play_solo_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play_solo_btn.pressed.connect(func():
 		NetworkManager.disconnect_network()
@@ -476,8 +479,8 @@ func _build_agent_select_overlay() -> void:
 	)
 	act_row.add_child(play_solo_btn)
 
-	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 52.0, 16, Color(0.10, 0.22, 0.36))
-	lobby_btn.custom_minimum_size = Vector2(145, 52)
+	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 46.0, 15, Color(0.10, 0.22, 0.36))
+	lobby_btn.custom_minimum_size = Vector2(130, 46)
 	lobby_btn.pressed.connect(func():
 		NetworkManager.match_mode = 2
 		_close_agent_select()
@@ -493,7 +496,7 @@ func _build_agent_select_overlay() -> void:
 	split.add_child(scroll)
 
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
@@ -503,7 +506,8 @@ func _build_agent_select_overlay() -> void:
 	for i in range(AgentData.AGENTS.size()):
 		var ag: Dictionary = AgentData.AGENTS[i]
 		var cb := Button.new()
-		cb.custom_minimum_size = Vector2(0, 62)
+		cb.custom_minimum_size = Vector2(0, 60)
+		cb.clip_text = true
 		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cb.add_theme_font_size_override("font_size", 14)
 		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]

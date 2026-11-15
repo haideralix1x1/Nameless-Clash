@@ -34,6 +34,7 @@ var invert_y_axis: bool = false
 var auto_aim_assist: bool = true
 
 var touch_layout: Dictionary = {}
+var touch_layout_version: int = 3
 
 # Audio
 var master_volume: float = 0.85
@@ -76,12 +77,16 @@ func _exit_tree() -> void:
 
 func _reset_default_touch_layout(emit_save: bool = true) -> void:
 	touch_layout = {
-		"left_stick": Vector2(0.10, 0.82),
-		"right_stick": Vector2(0.90, 0.82),
-		"btn_reload": Vector2(0.76, 0.86),
-		"btn_switch": Vector2(0.76, 0.74),
-		"btn_dual": Vector2(0.24, 0.86)
+		"left_stick": Vector2(0.11, 0.77),
+		"right_stick": Vector2(0.89, 0.77),
+		"btn_reload": Vector2(0.75, 0.85),
+		"btn_switch": Vector2(0.75, 0.69),
+		"btn_bomb": Vector2(0.75, 0.53),
+		"btn_dual": Vector2(0.24, 0.85),
+		"ability_bar": Vector2(0.50, 0.84),
+		"btn_presets": Vector2(0.50, 0.06)
 	}
+	touch_layout_version = 3
 	if emit_save:
 		save_settings()
 		touch_layout_changed.emit()
@@ -92,7 +97,7 @@ func reset_touch_layout() -> void:
 
 
 func set_touch_element_pos(key: String, norm_pos: Vector2) -> void:
-	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.05, 0.95), clampf(norm_pos.y, 0.12, 0.94))
+	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.04, 0.96), clampf(norm_pos.y, 0.05, 0.95))
 	save_settings()
 	touch_layout_changed.emit()
 
@@ -143,10 +148,13 @@ func load_settings() -> void:
 	invert_y_axis = bool(cfg.get_value("controls", "invert_y_axis", false))
 	auto_aim_assist = bool(cfg.get_value("controls", "auto_aim_assist", true))
 
-	for k in touch_layout.keys():
-		var saved_v: Variant = cfg.get_value("touch_layout", k, touch_layout[k])
-		if saved_v is Vector2:
-			touch_layout[k] = saved_v
+	var saved_layout_ver: int = int(cfg.get_value("touch", "layout_version", 1))
+	var migrate_touch: bool = saved_layout_ver < 3
+	if not migrate_touch:
+		for k in touch_layout.keys():
+			var saved_v: Variant = cfg.get_value("touch_layout", k, touch_layout[k])
+			if saved_v is Vector2:
+				touch_layout[k] = saved_v
 
 	for item in REBINDABLE_ACTIONS:
 		var act: String = str(item["action"])
@@ -172,6 +180,8 @@ func load_settings() -> void:
 	allow_shotguns = bool(cfg.get_value("game_rules", "allow_shotguns", true))
 	allow_explosives = bool(cfg.get_value("game_rules", "allow_explosives", true))
 	sync_rules_to_network()
+	if migrate_touch:
+		save_settings()
 
 
 func save_settings() -> void:
@@ -181,6 +191,7 @@ func save_settings() -> void:
 	cfg.set_value("controls", "invert_y_axis", invert_y_axis)
 	cfg.set_value("controls", "auto_aim_assist", auto_aim_assist)
 
+	cfg.set_value("touch", "layout_version", touch_layout_version)
 	for k in touch_layout.keys():
 		cfg.set_value("touch_layout", k, touch_layout[k])
 
@@ -256,6 +267,10 @@ func _apply_graphics_settings() -> void:
 	Engine.max_fps = FPS_VALUES[clampi(fps_limit_mode, 0, FPS_VALUES.size() - 1)]
 
 	if DisplayServer.get_name() == "headless":
+		return
+
+	if OS.has_feature("mobile") or OS.get_name() == "Android":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		return
 
 	if fullscreen:

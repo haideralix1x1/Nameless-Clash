@@ -95,14 +95,14 @@ func _build_ui() -> void:
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 24)
-	margin.add_theme_constant_override("margin_right", 24)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_left", 18)
+	margin.add_theme_constant_override("margin_right", 18)
+	margin.add_theme_constant_override("margin_top", 10)
+	margin.add_theme_constant_override("margin_bottom", 10)
 	add_child(margin)
 
 	var root_v := VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 12)
+	root_v.add_theme_constant_override("separation", 8)
 	margin.add_child(root_v)
 
 	# Header
@@ -161,6 +161,7 @@ func _build_ui() -> void:
 
 	# Left Column: Match Setup & Connect
 	var left_panel := PanelContainer.new()
+	left_panel.custom_minimum_size = Vector2(310, 0)
 	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_panel.add_theme_stylebox_override("panel", _make_style(Color(0.07, 0.1, 0.16, 0.94), Color(0.26, 0.58, 0.9, 0.88)))
 	cols.add_child(left_panel)
@@ -451,7 +452,7 @@ func _build_ui() -> void:
 func _step_bot_count(delta_step: int) -> void:
 	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
 		return
-	_local_bot_count = clampi(_local_bot_count + delta_step, 0, 5)
+	_local_bot_count = clampi(_local_bot_count + delta_step, 0, NetworkManager.MAX_BOTS)
 	_on_match_config_changed(0)
 
 
@@ -471,7 +472,7 @@ func _on_match_config_changed(_idx: int) -> void:
 
 func _refresh_bot_label() -> void:
 	if is_instance_valid(_bot_count_label):
-		_bot_count_label.text = "%d Bots" % _local_bot_count
+		_bot_count_label.text = "%d / %d Bots" % [_local_bot_count, NetworkManager.MAX_BOTS]
 
 
 func _on_toggle_team_pressed() -> void:

@@ -4,8 +4,8 @@ signal add_bot_requested
 
 const UIStyle = preload("res://scripts/UIStyle.gd")
 const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
-const STICK_RADIUS: float = 76.0
-const KNOB_RADIUS: float = 28.0
+const STICK_RADIUS: float = 84.0
+const KNOB_RADIUS: float = 32.0
 
 var local_player: Node = null
 
@@ -61,6 +61,11 @@ var _btn_ult: Button
 var _btn_throw: Button
 var _stun_banner: PanelContainer
 var _stun_label: Label
+
+var _layout_overlay: Control
+var _layout_handles: Dictionary = {}
+var _dragging_key: String = ""
+var _drag_center_offset: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -172,26 +177,52 @@ func _sync_mode_hud_visibility() -> void:
 		_stun_banner.visible = false
 
 
+func _clamp_control_pos(center_px: Vector2, ctrl_size: Vector2, vp_size: Vector2) -> Vector2:
+	return Vector2(
+		clampf(center_px.x - ctrl_size.x * 0.5, 10.0, maxf(10.0, vp_size.x - ctrl_size.x - 10.0)),
+		clampf(center_px.y - ctrl_size.y * 0.5, 10.0, maxf(10.0, vp_size.y - ctrl_size.y - 10.0))
+	)
+
+
 func _update_stick_and_button_positions() -> void:
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
 	_left_center = SettingsManager.get_touch_element_px("left_stick", vp_size)
+	_left_center.x = clampf(_left_center.x, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.x - STICK_RADIUS - 14.0))
+	_left_center.y = clampf(_left_center.y, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.y - STICK_RADIUS - 14.0))
 	_right_center = SettingsManager.get_touch_element_px("right_stick", vp_size)
+	_right_center.x = clampf(_right_center.x, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.x - STICK_RADIUS - 14.0))
+	_right_center.y = clampf(_right_center.y, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.y - STICK_RADIUS - 14.0))
 	if is_instance_valid(_btn_reload):
-		_btn_reload.position = SettingsManager.get_touch_element_px("btn_reload", vp_size) - _btn_reload.size * 0.5
+		_btn_reload.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_reload", vp_size), _btn_reload.size, vp_size)
 	if is_instance_valid(_btn_switch):
-		_btn_switch.position = SettingsManager.get_touch_element_px("btn_switch", vp_size) - _btn_switch.size * 0.5
+		_btn_switch.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_switch", vp_size), _btn_switch.size, vp_size)
 	if is_instance_valid(_btn_dual):
-		_btn_dual.position = SettingsManager.get_touch_element_px("btn_dual", vp_size) - _btn_dual.size * 0.5
+		_btn_dual.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_dual", vp_size), _btn_dual.size, vp_size)
 	if is_instance_valid(_btn_bomb):
-		var sw_pos := SettingsManager.get_touch_element_px("btn_switch", vp_size)
-		_btn_bomb.position = Vector2(clampf(sw_pos.x - 122.0, 220.0, vp_size.x - 240.0), sw_pos.y - _btn_bomb.size.y * 0.5)
+		_btn_bomb.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_bomb", vp_size), _btn_bomb.size, vp_size)
 	if is_instance_valid(_btn_presets):
-		_btn_presets.position = Vector2((vp_size.x - _btn_presets.size.x) * 0.5, vp_size.y - _btn_presets.size.y - 14.0)
+		_btn_presets.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_presets", vp_size), _btn_presets.size, vp_size)
+	if is_instance_valid(_agent_action_panel):
+		_agent_action_panel.position = _clamp_control_pos(SettingsManager.get_touch_element_px("ability_bar", vp_size), _agent_action_panel.size, vp_size)
 	if is_instance_valid(_stick_canvas):
 		_stick_canvas.queue_redraw()
+	if is_instance_valid(_layout_overlay) and _layout_overlay.visible:
+		_position_hud_layout_handles()
 
 
 func _input(event: InputEvent) -> void:
+	if is_instance_valid(_layout_overlay) and _layout_overlay.visible:
+		if not _dragging_key.is_empty():
+			if event is InputEventMouseMotion:
+				_move_hud_layout_handle(_dragging_key, (event as InputEventMouseMotion).position - _drag_center_offset)
+			elif event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
+				_dragging_key = ""
+			elif event is InputEventScreenDrag:
+				_move_hud_layout_handle(_dragging_key, (event as InputEventScreenDrag).position - _drag_center_offset)
+			elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+				_dragging_key = ""
+		return
+
 	if event is InputEventScreenTouch:
 		var te := event as InputEventScreenTouch
 		if te.pressed:
@@ -252,6 +283,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _is_over_control(screen_pos: Vector2) -> bool:
+	if is_instance_valid(_layout_overlay) and _layout_overlay.visible:
+		return true
 	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
 		if _preset_overlay.get_global_rect().has_point(screen_pos):
 			return true
@@ -279,6 +312,13 @@ func _update_right_stick(pos: Vector2) -> void:
 
 func _push_input_to_player() -> void:
 	if local_player == null or not is_instance_valid(local_player):
+		return
+	if is_instance_valid(_layout_overlay) and _layout_overlay.visible:
+		local_player.virtual_move = Vector2.ZERO
+		local_player.virtual_jetpack = false
+		local_player.virtual_aim = Vector2.ZERO
+		local_player.virtual_fire = false
+		local_player.pointer_over_ui = true
 		return
 	var left_norm: Vector2 = _left_knob_offset / STICK_RADIUS
 	var right_norm: Vector2 = _right_knob_offset / STICK_RADIUS
@@ -397,13 +437,16 @@ func _build_ui() -> void:
 
 	# Top-Left Status Card
 	var left_panel := PanelContainer.new()
-	left_panel.position = Vector2(14, 14)
-	left_panel.custom_minimum_size = Vector2(300, 0)
+	left_panel.offset_left = 12
+	left_panel.offset_top = 12
+	left_panel.offset_right = 276
+	left_panel.offset_bottom = 148
+	left_panel.custom_minimum_size = Vector2(264, 0)
 	left_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.14, 0.84), Color(0.24, 0.56, 0.85, 0.85)))
 	add_child(left_panel)
 
 	var lv := VBoxContainer.new()
-	lv.add_theme_constant_override("separation", 6)
+	lv.add_theme_constant_override("separation", 5)
 	left_panel.add_child(lv)
 
 	var hp_row := HBoxContainer.new()
@@ -473,10 +516,10 @@ func _build_ui() -> void:
 	# Customizable Touch Action Buttons (positioned via SettingsManager.touch_layout)
 	_btn_reload = Button.new()
 	_btn_reload.text = "RELOAD"
-	_btn_reload.custom_minimum_size = Vector2(108, 48)
-	_btn_reload.size = Vector2(108, 48)
+	_btn_reload.custom_minimum_size = Vector2(116, 48)
+	_btn_reload.size = Vector2(116, 48)
 	_btn_reload.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_reload, Color(0.10, 0.16, 0.26, 0.92), Color(0.55, 0.78, 1.0, 0.9))
+	_style_action_button(_btn_reload, Color(0.10, 0.16, 0.26, 0.92), Color(0.55, 0.78, 1.0, 0.9), 14)
 	_btn_reload.pressed.connect(func():
 		if local_player != null:
 			local_player.start_reload()
@@ -485,10 +528,10 @@ func _build_ui() -> void:
 
 	_btn_switch = Button.new()
 	_btn_switch.text = "SWAP GUN"
-	_btn_switch.custom_minimum_size = Vector2(108, 48)
-	_btn_switch.size = Vector2(108, 48)
+	_btn_switch.custom_minimum_size = Vector2(116, 48)
+	_btn_switch.size = Vector2(116, 48)
 	_btn_switch.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_switch, Color(0.22, 0.16, 0.08, 0.92), Color(1.0, 0.72, 0.24, 0.9))
+	_style_action_button(_btn_switch, Color(0.22, 0.16, 0.08, 0.92), Color(1.0, 0.72, 0.24, 0.9), 14)
 	_btn_switch.pressed.connect(func():
 		if local_player != null:
 			local_player.cycle_weapon()
@@ -497,10 +540,10 @@ func _build_ui() -> void:
 
 	_btn_dual = Button.new()
 	_btn_dual.text = "DUAL"
-	_btn_dual.custom_minimum_size = Vector2(108, 48)
-	_btn_dual.size = Vector2(108, 48)
+	_btn_dual.custom_minimum_size = Vector2(116, 48)
+	_btn_dual.size = Vector2(116, 48)
 	_btn_dual.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_dual, Color(0.08, 0.22, 0.26, 0.92), Color(0.25, 0.92, 1.0, 0.9))
+	_style_action_button(_btn_dual, Color(0.08, 0.22, 0.26, 0.92), Color(0.25, 0.92, 1.0, 0.9), 14)
 	_btn_dual.pressed.connect(func():
 		if local_player != null:
 			local_player.toggle_dual_wield()
@@ -509,10 +552,10 @@ func _build_ui() -> void:
 
 	_btn_bomb = Button.new()
 	_btn_bomb.text = "[F] FRAG x3"
-	_btn_bomb.custom_minimum_size = Vector2(126, 48)
-	_btn_bomb.size = Vector2(126, 48)
+	_btn_bomb.custom_minimum_size = Vector2(116, 48)
+	_btn_bomb.size = Vector2(116, 48)
 	_btn_bomb.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_bomb, Color(0.28, 0.14, 0.06, 0.94), Color(1.0, 0.56, 0.16, 0.95), 14)
+	_style_action_button(_btn_bomb, Color(0.28, 0.14, 0.06, 0.94), Color(1.0, 0.56, 0.16, 0.95), 13)
 	_btn_bomb.pressed.connect(func():
 		if local_player != null and local_player.has_method("throw_bomb"):
 			local_player.throw_bomb()
@@ -521,23 +564,17 @@ func _build_ui() -> void:
 
 	_btn_presets = Button.new()
 	_btn_presets.text = "PRESETS [B]"
-	_btn_presets.custom_minimum_size = Vector2(150, 42)
-	_btn_presets.size = Vector2(150, 42)
+	_btn_presets.custom_minimum_size = Vector2(154, 38)
+	_btn_presets.size = Vector2(154, 38)
 	_btn_presets.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_presets, Color(0.22, 0.18, 0.06, 0.94), Color(1.0, 0.80, 0.24, 0.95), 14)
+	_style_action_button(_btn_presets, Color(0.22, 0.18, 0.06, 0.94), Color(1.0, 0.80, 0.24, 0.95), 13)
 	_btn_presets.pressed.connect(func(): _open_preset_selector(10.0))
 	add_child(_btn_presets)
 
-	# Agent Clash Mode Bottom-Center Ability & Throwable Controls
+	# Agent Clash Mode Draggable Ability & Throwable Controls (compact 2x2 grid)
 	_agent_action_panel = VBoxContainer.new()
-	_agent_action_panel.anchor_left = 0.5
-	_agent_action_panel.anchor_right = 0.5
-	_agent_action_panel.anchor_top = 1.0
-	_agent_action_panel.anchor_bottom = 1.0
-	_agent_action_panel.offset_left = -356
-	_agent_action_panel.offset_right = 356
-	_agent_action_panel.offset_top = -126
-	_agent_action_panel.offset_bottom = -12
+	_agent_action_panel.custom_minimum_size = Vector2(500, 114)
+	_agent_action_panel.size = Vector2(500, 114)
 	_agent_action_panel.add_theme_constant_override("separation", 6)
 	_agent_action_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_agent_action_panel)
@@ -549,18 +586,20 @@ func _build_ui() -> void:
 
 	_btn_throw = Button.new()
 	_btn_throw.text = "[F] PICKUP THROWABLE"
-	_btn_throw.custom_minimum_size = Vector2(230, 38)
+	_btn_throw.custom_minimum_size = Vector2(220, 30)
 	_btn_throw.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_throw, Color(0.16, 0.22, 0.14, 0.92), Color(0.95, 0.80, 0.28, 0.95), 14)
+	_style_action_button(_btn_throw, Color(0.16, 0.22, 0.14, 0.92), Color(0.95, 0.80, 0.28, 0.95), 12)
 	_btn_throw.pressed.connect(func():
 		if local_player != null:
 			local_player.throw_held_item()
 	)
 	top_agent_row.add_child(_btn_throw)
 
-	var ab_row := HBoxContainer.new()
-	ab_row.add_theme_constant_override("separation", 8)
-	ab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var ab_row := GridContainer.new()
+	ab_row.columns = 2
+	ab_row.add_theme_constant_override("h_separation", 8)
+	ab_row.add_theme_constant_override("v_separation", 6)
+	ab_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ab_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_agent_action_panel.add_child(ab_row)
 
@@ -598,56 +637,79 @@ func _build_ui() -> void:
 	var right_panel := PanelContainer.new()
 	right_panel.anchor_left = 1.0
 	right_panel.anchor_right = 1.0
-	right_panel.offset_left = -330
-	right_panel.offset_right = -14
-	right_panel.offset_top = 14
-	right_panel.offset_bottom = 260
+	right_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	right_panel.offset_left = -310
+	right_panel.offset_right = -12
+	right_panel.offset_top = 12
+	right_panel.offset_bottom = 172
+	right_panel.custom_minimum_size = Vector2(298, 0)
 	right_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.14, 0.84), Color(0.95, 0.55, 0.15, 0.85)))
 	add_child(right_panel)
 
 	var rv := VBoxContainer.new()
-	rv.add_theme_constant_override("separation", 5)
+	rv.add_theme_constant_override("separation", 4)
 	right_panel.add_child(rv)
 
 	_net_status_label = Label.new()
 	_net_status_label.text = "NAMELESS CLASH"
+	_net_status_label.add_theme_font_size_override("font_size", 13)
+	_net_status_label.clip_text = true
+	_net_status_label.custom_minimum_size = Vector2(272, 0)
 	_net_status_label.modulate = Color(1.0, 0.78, 0.25)
 	rv.add_child(_net_status_label)
 
 	_map_mode_label = Label.new()
 	_map_mode_label.text = "Bunker Base • Solo"
+	_map_mode_label.add_theme_font_size_override("font_size", 12)
+	_map_mode_label.clip_text = true
+	_map_mode_label.custom_minimum_size = Vector2(272, 0)
 	_map_mode_label.modulate = Color(0.82, 0.92, 0.72)
 	rv.add_child(_map_mode_label)
 
 	_scoreboard_label = Label.new()
 	_scoreboard_label.text = "Loading..."
+	_scoreboard_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_scoreboard_label.custom_minimum_size = Vector2(272, 0)
+	_scoreboard_label.add_theme_font_size_override("font_size", 12)
 	rv.add_child(_scoreboard_label)
 
 	_killfeed_label = Label.new()
 	_killfeed_label.text = ""
+	_killfeed_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_killfeed_label.custom_minimum_size = Vector2(272, 0)
+	_killfeed_label.add_theme_font_size_override("font_size", 12)
 	_killfeed_label.modulate = Color(1.0, 0.72, 0.55)
 	rv.add_child(_killfeed_label)
 
 	var nav_row := HBoxContainer.new()
-	nav_row.add_theme_constant_override("separation", 8)
+	nav_row.add_theme_constant_override("separation", 6)
 	rv.add_child(nav_row)
 
 	_add_bot_btn = Button.new()
 	_add_bot_btn.text = "+ BOT"
-	_add_bot_btn.custom_minimum_size = Vector2(90, 38)
+	_add_bot_btn.custom_minimum_size = Vector2(88, 36)
 	_add_bot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_add_bot_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_add_bot_btn, Color(0.10, 0.26, 0.16, 0.94), Color(0.32, 0.92, 0.48), 14)
+	_style_action_button(_add_bot_btn, Color(0.10, 0.26, 0.16, 0.94), Color(0.32, 0.92, 0.48), 12)
 	_add_bot_btn.visible = not NetworkManager.is_network_active() or NetworkManager.is_host_active()
 	_add_bot_btn.pressed.connect(func(): add_bot_requested.emit())
 	nav_row.add_child(_add_bot_btn)
 
+	var layout_btn := Button.new()
+	layout_btn.text = "LAYOUT"
+	layout_btn.custom_minimum_size = Vector2(78, 36)
+	layout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(layout_btn, Color(0.24, 0.18, 0.06, 0.94), Color(1.0, 0.78, 0.24), 12)
+	layout_btn.pressed.connect(_open_hud_layout_editor)
+	nav_row.add_child(layout_btn)
+
 	var menu_btn := Button.new()
 	menu_btn.text = "MENU"
-	menu_btn.custom_minimum_size = Vector2(90, 38)
+	menu_btn.custom_minimum_size = Vector2(72, 36)
 	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(menu_btn, Color(0.24, 0.12, 0.14, 0.94), Color(0.95, 0.42, 0.36), 14)
+	_style_action_button(menu_btn, Color(0.24, 0.12, 0.14, 0.94), Color(0.95, 0.42, 0.36), 12)
 	menu_btn.pressed.connect(func(): NetworkManager.go_to_main_menu())
 	nav_row.add_child(menu_btn)
 
@@ -671,6 +733,7 @@ func _build_ui() -> void:
 	_respawn_label.text = "KIA - RESPAWNING IN 3.0s"
 	_respawn_panel.add_child(_respawn_label)
 	_build_preset_overlay()
+	_build_hud_layout_overlay()
 
 
 func _on_health_changed(current: int, maximum: int) -> void:
@@ -785,11 +848,17 @@ func _refresh_scoreboard() -> void:
 		rows.append("%s%s  |  K:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("deaths", 0))])
 	_scoreboard_label.text = "\n".join(rows)
 
+	if is_instance_valid(_add_bot_btn):
+		var at_cap: bool = NetworkManager.bot_count >= NetworkManager.MAX_BOTS
+		_add_bot_btn.disabled = at_cap
+		_add_bot_btn.text = ("MAX %d BOTS" % NetworkManager.MAX_BOTS) if at_cap else ("+ BOT (%d/%d)" % [NetworkManager.bot_count, NetworkManager.MAX_BOTS])
+
 
 func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -> Button:
 	var btn := Button.new()
 	btn.text = title
-	btn.custom_minimum_size = Vector2(166, 56)
+	btn.custom_minimum_size = Vector2(234, 36)
+	btn.clip_text = true
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.focus_mode = Control.FOCUS_NONE
 	_style_action_button(btn, bg, border, 12)
@@ -808,25 +877,25 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 	if not NetworkManager.is_agent_clash_mode():
 		return
 	var arch_id: int = int(local_player.get("archetype_id")) if local_player != null else ProfileManager.archetype_id
-	var keys: Array[String] = ["[Q]", "[E]", "[C]", "[X] ULT"]
+	var keys: Array[String] = ["[Q]", "[E]", "[C]", "[X]"]
 	var btns: Array[Button] = [_btn_ability_1, _btn_ability_2, _btn_ability_3, _btn_ult]
 	for i in range(4):
 		var btn: Button = btns[i]
 		if not is_instance_valid(btn):
 			continue
 		var ab: Dictionary = AgentData.get_ability_slot(arch_id, i)
-		var ab_name: String = str(ab["name"]).left(20)
+		var ab_name: String = str(ab["name"]).left(16)
 		var cd: float = float(cooldowns[i]) if i < cooldowns.size() else 0.0
 		var max_cd: float = float(max_cooldowns[i]) if i < max_cooldowns.size() else 1.0
 		if stun_left > 0.0:
-			btn.text = "%s %s\nSTUNNED" % [keys[i], ab_name]
+			btn.text = "%s %s • STUN" % [keys[i], ab_name]
 			btn.modulate = Color(0.55, 0.65, 0.78)
 		elif cd > 0.05:
-			btn.text = "%s %s\nWAIT %.1fs" % [keys[i], ab_name, cd]
+			btn.text = "%s %s • %.1fs" % [keys[i], ab_name, cd]
 			btn.modulate = Color(0.65, 0.68, 0.74)
 			var _unused := max_cd
 		else:
-			btn.text = "%s %s\nREADY" % [keys[i], ab_name]
+			btn.text = "%s %s • READY" % [keys[i], ab_name]
 			btn.modulate = Color(0.92, 0.82, 0.48) if i == 3 else Color(0.92, 0.94, 0.96)
 
 	if is_instance_valid(_btn_throw):
@@ -865,16 +934,16 @@ func _build_preset_overlay() -> void:
 	_preset_overlay.anchor_right = 0.5
 	_preset_overlay.anchor_top = 0.5
 	_preset_overlay.anchor_bottom = 0.5
-	_preset_overlay.offset_left = -350
-	_preset_overlay.offset_right = 350
-	_preset_overlay.offset_top = -200
-	_preset_overlay.offset_bottom = 200
+	_preset_overlay.offset_left = -310
+	_preset_overlay.offset_right = 310
+	_preset_overlay.offset_top = -185
+	_preset_overlay.offset_bottom = 185
 	_preset_overlay.visible = false
-	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 20, 16))
+	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 16, 14))
 	add_child(_preset_overlay)
 
 	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 10)
+	pv.add_theme_constant_override("separation", 8)
 	_preset_overlay.add_child(pv)
 
 	var hdr := HBoxContainer.new()
@@ -882,14 +951,14 @@ func _build_preset_overlay() -> void:
 
 	_preset_timer_label = Label.new()
 	_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET  (10.0s)"
-	_preset_timer_label.add_theme_font_size_override("font_size", 20)
+	_preset_timer_label.add_theme_font_size_override("font_size", 18)
 	_preset_timer_label.modulate = Color(1.0, 0.86, 0.28)
 	_preset_timer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.add_child(_preset_timer_label)
 
 	var keep_btn := Button.new()
 	keep_btn.text = "KEEP DEFAULT"
-	keep_btn.custom_minimum_size = Vector2(140, 38)
+	keep_btn.custom_minimum_size = Vector2(130, 36)
 	keep_btn.focus_mode = Control.FOCUS_NONE
 	UIStyle.style_layer_button(keep_btn, "sky", "close", 12, 6)
 	keep_btn.pressed.connect(func(): _confirm_preset(_chosen_preset_idx if _chosen_preset_idx >= 0 else 0))
@@ -897,21 +966,21 @@ func _build_preset_overlay() -> void:
 
 	var grid := GridContainer.new()
 	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pv.add_child(grid)
 
 	_preset_cards.clear()
 	for i in range(WeaponData.GUN_PRESETS.size()):
 		var card := Button.new()
-		card.custom_minimum_size = Vector2(204, 136)
+		card.custom_minimum_size = Vector2(180, 108)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		card.focus_mode = Control.FOCUS_NONE
 		var accent: String = str(WeaponData.GUN_PRESETS[i].get("accent", "blue"))
-		UIStyle.style_layer_button(card, accent, "gun", 12, 10)
-		card.add_theme_font_size_override("font_size", 13)
+		UIStyle.style_layer_button(card, accent, "gun", 10, 8)
+		card.add_theme_font_size_override("font_size", 12)
 		card.pressed.connect(_confirm_preset.bind(i))
 		grid.add_child(card)
 		_preset_cards.append(card)
@@ -946,3 +1015,126 @@ func _confirm_preset(preset_idx: int) -> void:
 		_preset_overlay.visible = false
 	if local_player != null and local_player.has_method("apply_gun_preset"):
 		local_player.apply_gun_preset(_chosen_preset_idx)
+
+
+func _build_hud_layout_overlay() -> void:
+	_layout_overlay = ColorRect.new()
+	_layout_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_layout_overlay.color = Color(0.02, 0.04, 0.07, 0.72)
+	_layout_overlay.visible = false
+	add_child(_layout_overlay)
+
+	var top_bar := PanelContainer.new()
+	top_bar.anchor_left = 0.5
+	top_bar.anchor_right = 0.5
+	top_bar.offset_left = -330
+	top_bar.offset_right = 330
+	top_bar.offset_top = 12
+	top_bar.offset_bottom = 66
+	top_bar.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.14, 0.96), Color(1.0, 0.78, 0.24)))
+	_layout_overlay.add_child(top_bar)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	top_bar.add_child(row)
+
+	var info := Label.new()
+	info.text = "DRAG ANY CONTROL TO MOVE IT"
+	info.add_theme_font_size_override("font_size", 15)
+	info.modulate = Color(1.0, 0.90, 0.45)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(info)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "RESET"
+	reset_btn.custom_minimum_size = Vector2(106, 38)
+	reset_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(reset_btn, Color(0.24, 0.14, 0.14), Color(0.95, 0.42, 0.35), 14)
+	reset_btn.pressed.connect(func():
+		SettingsManager.reset_touch_layout()
+		_position_hud_layout_handles()
+	)
+	row.add_child(reset_btn)
+
+	var done_btn := Button.new()
+	done_btn.text = "DONE"
+	done_btn.custom_minimum_size = Vector2(116, 38)
+	done_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(done_btn, Color(0.09, 0.32, 0.16), Color(0.28, 0.92, 0.45), 14)
+	done_btn.pressed.connect(func():
+		_dragging_key = ""
+		_layout_overlay.visible = false
+	)
+	row.add_child(done_btn)
+
+	var handle_specs: Array[Dictionary] = [
+		{"key": "left_stick", "label": "DRAG\nMOVE STICK", "size": Vector2(168, 168), "col": Color(0.25, 0.68, 1.0)},
+		{"key": "right_stick", "label": "DRAG\nAIM & FIRE", "size": Vector2(168, 168), "col": Color(1.0, 0.48, 0.22)},
+		{"key": "btn_reload", "label": "RELOAD", "size": Vector2(116, 48), "col": Color(0.68, 0.80, 0.98)},
+		{"key": "btn_switch", "label": "SWAP GUN", "size": Vector2(116, 48), "col": Color(0.95, 0.76, 0.28)},
+		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(116, 48), "col": Color(1.0, 0.56, 0.16)},
+		{"key": "btn_dual", "label": "DUAL", "size": Vector2(116, 48), "col": Color(0.28, 0.92, 1.0)},
+		{"key": "ability_bar", "label": "DRAG ABILITY BAR (Q / E / C / X)", "size": Vector2(500, 114), "col": Color(0.78, 0.48, 1.0)},
+		{"key": "btn_presets", "label": "PRESETS [B]", "size": Vector2(154, 38), "col": Color(1.0, 0.80, 0.24)}
+	]
+
+	_layout_handles.clear()
+	for spec in handle_specs:
+		var key: String = str(spec["key"])
+		var col: Color = spec["col"] as Color
+		var btn := Button.new()
+		btn.text = str(spec["label"])
+		btn.custom_minimum_size = spec["size"]
+		btn.size = spec["size"]
+		btn.focus_mode = Control.FOCUS_NONE
+		_style_action_button(btn, col.darkened(0.55), col, 13)
+		btn.modulate = Color(1.0, 1.0, 1.0, 0.86)
+		btn.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton:
+				var mb := ev as InputEventMouseButton
+				if mb.button_index == MOUSE_BUTTON_LEFT:
+					if mb.pressed:
+						_dragging_key = key
+						_drag_center_offset = mb.position - btn.size * 0.5
+					else:
+						_dragging_key = ""
+			elif ev is InputEventScreenTouch:
+				var st := ev as InputEventScreenTouch
+				if st.pressed:
+					_dragging_key = key
+					_drag_center_offset = st.position - btn.size * 0.5
+				else:
+					_dragging_key = ""
+		)
+		_layout_overlay.add_child(btn)
+		_layout_handles[key] = btn
+
+
+func _open_hud_layout_editor() -> void:
+	if not is_instance_valid(_layout_overlay):
+		return
+	_dragging_key = ""
+	_layout_overlay.visible = true
+	_position_hud_layout_handles()
+
+
+func _position_hud_layout_handles() -> void:
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	for key in _layout_handles.keys():
+		var ctrl: Control = _layout_handles[key] as Control
+		if is_instance_valid(ctrl):
+			ctrl.position = _clamp_control_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)
+
+
+func _move_hud_layout_handle(key: String, center_screen_pos: Vector2) -> void:
+	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var ctrl: Control = _layout_handles.get(key) as Control
+	var half_sz: Vector2 = ctrl.size * 0.5 if is_instance_valid(ctrl) else Vector2(58.0, 24.0)
+	var clamped_center := Vector2(
+		clampf(center_screen_pos.x, half_sz.x + 10.0, maxf(half_sz.x + 10.0, vp_size.x - half_sz.x - 10.0)),
+		clampf(center_screen_pos.y, half_sz.y + 10.0, maxf(half_sz.y + 10.0, vp_size.y - half_sz.y - 10.0))
+	)
+	var norm := Vector2(clamped_center.x / maxf(1.0, vp_size.x), clamped_center.y / maxf(1.0, vp_size.y))
+	SettingsManager.set_touch_element_pos(key, norm)
+	if is_instance_valid(ctrl):
+		ctrl.position = _clamp_control_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)

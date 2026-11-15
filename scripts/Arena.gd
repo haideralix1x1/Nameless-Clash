@@ -302,6 +302,7 @@ func _spawn_all_participants() -> void:
 				cam.limit_bottom = int(ARENA_HEIGHT)
 			_hud.bind_local_player(player)
 
+	NetworkManager.bot_count = clampi(NetworkManager.bot_count, 0, NetworkManager.MAX_BOTS)
 	for b in range(NetworkManager.bot_count):
 		_spawn_bot(b + 1)
 
@@ -358,17 +359,21 @@ func _spawn_bot(bot_index: int) -> void:
 func _on_add_bot_requested() -> void:
 	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
 		return
+	if _bot_counter >= NetworkManager.MAX_BOTS or NetworkManager.bot_count >= NetworkManager.MAX_BOTS:
+		return
 	if NetworkManager.is_network_active():
 		spawn_extra_bot_rpc.rpc(_bot_counter + 1)
 	else:
-		NetworkManager.bot_count += 1
+		NetworkManager.bot_count = mini(NetworkManager.bot_count + 1, NetworkManager.MAX_BOTS)
 		_spawn_bot(_bot_counter + 1)
 		NetworkManager.player_list_updated.emit()
 
 
 @rpc("authority", "call_local", "reliable")
 func spawn_extra_bot_rpc(bot_index: int) -> void:
-	NetworkManager.bot_count = maxi(NetworkManager.bot_count, bot_index)
+	if bot_index > NetworkManager.MAX_BOTS:
+		return
+	NetworkManager.bot_count = clampi(maxi(NetworkManager.bot_count, bot_index), 0, NetworkManager.MAX_BOTS)
 	_spawn_bot(bot_index)
 	NetworkManager.player_list_updated.emit()
 

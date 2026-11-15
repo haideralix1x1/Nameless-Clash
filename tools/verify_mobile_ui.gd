@@ -68,6 +68,7 @@ func _run_checks() -> void:
 
 	var saved_rules: Dictionary = nm.get_rules_dict()
 	var saved_mode: int = int(nm.match_mode)
+	var saved_bots: int = int(nm.bot_count)
 
 	# 1. File size audit (< 5 KB = 5120 bytes)
 	var pngs: Array[String] = []
@@ -356,8 +357,20 @@ func _run_checks() -> void:
 		if sp.ends_with("SettingsMenu.tscn"):
 			var tc: TabContainer = _find_first_tab_container(inst)
 			_assert(tc != null and _find_descendant_by_name(tc, "Game Rules") != null, "SettingsMenu missing Game Rules tab")
+		elif sp.ends_with("MainMenu.tscn"):
+			var hub := inst.get("_hub_container") as Control
+			var vp_sz: Vector2 = inst.get_viewport().get_visible_rect().size
+			_assert(hub != null and hub.get_global_rect().end.y <= vp_sz.y + 1.0, "MainMenu hub overflows viewport height: %s vs %s" % [hub.get_global_rect().end if hub else Vector2.ZERO, vp_sz])
 		inst.queue_free()
 		await process_frame
+
+	# Check 10-bot limit & 8 touch layout keys
+	_assert(int(nm.get("MAX_BOTS")) == 10, "NetworkManager.MAX_BOTS must be 10")
+	nm.host_update_match_settings(0, 0, 25)
+	_assert(int(nm.bot_count) == 10, "Expected bot_count clamped to 10, got %d" % int(nm.bot_count))
+	var touch_keys: Array[String] = ["left_stick", "right_stick", "btn_reload", "btn_switch", "btn_bomb", "btn_dual", "ability_bar", "btn_presets"]
+	for tk in touch_keys:
+		_assert(sm.touch_layout.has(tk), "SettingsManager.touch_layout missing key: " + tk)
 
 	# Verify HUD.gd directly
 	var hud_script := load("res://scripts/HUD.gd") as GDScript
@@ -368,6 +381,27 @@ func _run_checks() -> void:
 		var hud: CanvasLayer = hud_script.new() as CanvasLayer
 		root.add_child(hud)
 		await process_frame
+		hud.call("_update_stick_and_button_positions")
+		var vp: Vector2 = hud.get_viewport().get_visible_rect().size
+		var hud_btns: Array[Button] = [
+			hud.get("_btn_reload") as Button,
+			hud.get("_btn_switch") as Button,
+			hud.get("_btn_dual") as Button,
+			hud.get("_btn_bomb") as Button,
+			hud.get("_btn_presets") as Button
+		]
+		var rects: Array[Rect2] = []
+		for hb in hud_btns:
+			_assert(hb != null, "HUD action button missing")
+			if hb != null:
+				var r := hb.get_rect()
+				_assert(r.position.x >= 0.0 and r.position.y >= 0.0 and r.end.x <= vp.x and r.end.y <= vp.y, "HUD button out of viewport %s: %s (vp=%s)" % [hb.text, r, vp])
+				for prev_r in rects:
+					_assert(not r.intersects(prev_r), "HUD buttons overlap: %s vs %s" % [r, prev_r])
+				rects.append(r)
+		var layout_ov := hud.get("_layout_overlay") as Control
+		var layout_handles: Dictionary = hud.get("_layout_handles")
+		_assert(layout_ov != null and layout_handles.size() == 8, "HUD layout overlay must have 8 draggable handles, got %d" % layout_handles.size())
 		hud.call("_on_fuel_changed", 50.0, 100.0)
 		var fuel_lbl: Label = hud.get("_fuel_label") as Label
 		_assert(fuel_lbl != null and "∞" in fuel_lbl.text, "HUD jetpack infinity label missing: %s" % (fuel_lbl.text if fuel_lbl else "null"))
@@ -391,6 +425,7 @@ func _run_checks() -> void:
 
 	# Restore rules cleanly
 	nm.match_mode = saved_mode
+	nm.bot_count = saved_bots
 	nm.apply_rules_dict(saved_rules)
 
 	await process_frame

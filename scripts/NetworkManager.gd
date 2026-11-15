@@ -13,6 +13,7 @@ signal killfeed_event(killer_name: String, victim_name: String, weapon_name: Str
 const GAME_PORT: int = 44334
 const DISCOVERY_PORT: int = 44335
 const MAX_CLIENTS: int = 6
+const MAX_BOTS: int = 10
 
 const MAP_NAMES: Array[String] = [
 	"Bunker Base",
@@ -244,7 +245,7 @@ func set_player_team_rpc(team_idx: int) -> void:
 func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = -1) -> void:
 	match_mode = clampi(new_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
-	bot_count = clampi(new_bots, 0, 5)
+	bot_count = clampi(new_bots, 0, MAX_BOTS)
 	if new_bot_diff >= 0:
 		bot_difficulty = clampi(new_bot_diff, 0, 2)
 	if is_host_active():
@@ -257,7 +258,7 @@ func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, n
 func sync_match_settings_rpc(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = 1) -> void:
 	match_mode = clampi(new_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
-	bot_count = clampi(new_bots, 0, 5)
+	bot_count = clampi(new_bots, 0, MAX_BOTS)
 	bot_difficulty = clampi(new_bot_diff, 0, 2)
 	match_settings_updated.emit()
 
