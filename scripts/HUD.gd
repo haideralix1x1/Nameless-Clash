@@ -830,12 +830,18 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 			btn.modulate = Color(1.0, 0.92, 0.45) if i == 3 else Color.WHITE
 
 	if is_instance_valid(_btn_throw):
-		if held_throwable >= 0:
+		if local_player != null and int(local_player.get("grabbed_player_id")) != 0:
+			_btn_throw.text = "[F] THROW GRABBED PLAYER!"
+			_btn_throw.modulate = Color(1.0, 0.58, 0.22)
+		elif held_throwable >= 0:
 			var item: Dictionary = AgentData.get_throwable(held_throwable)
 			_btn_throw.text = "[F] THROW %s" % str(item["name"]).to_upper()
 			_btn_throw.modulate = Color(1.0, 0.92, 0.42)
+		elif local_player != null and local_player.has_method("find_grabbable_player") and local_player.find_grabbable_player() != null:
+			_btn_throw.text = "[F] GRAB ENEMY PLAYER!"
+			_btn_throw.modulate = Color(0.42, 0.96, 1.0)
 		else:
-			_btn_throw.text = "[F] GRAB GROUND WEAPON"
+			_btn_throw.text = "[F] GRAB ITEM / PLAYER"
 			_btn_throw.modulate = Color(0.72, 0.78, 0.85)
 
 	if is_instance_valid(_stun_banner) and is_instance_valid(_stun_label):

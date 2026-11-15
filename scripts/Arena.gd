@@ -179,8 +179,8 @@ func _build_pickup_crates() -> void:
 			{"pos": Vector2(1960, 925), "type": "throwable", "val": 2},
 			{"pos": Vector2(440, 410), "type": "throwable", "val": 3},
 			{"pos": Vector2(1800, 410), "type": "throwable", "val": 4},
-			{"pos": Vector2(880, 705), "type": "throwable", "val": 0},
-			{"pos": Vector2(1360, 705), "type": "throwable", "val": 1},
+			{"pos": Vector2(880, 705), "type": "throwable", "val": 5},
+			{"pos": Vector2(1360, 705), "type": "throwable", "val": 6},
 			{"pos": Vector2(1120, 710), "type": "health", "val": 45},
 			{"pos": Vector2(1120, 280), "type": "health", "val": 50}
 		]
@@ -392,6 +392,19 @@ class GroundWeaponIcon extends Node2D:
 			"thrown_hammer":
 				draw_line(Vector2(-10, 10), Vector2(6, -6), Color(0.50, 0.32, 0.16), 3.5)
 				draw_rect(Rect2(1.0, -13.0, 11.0, 11.0), col)
+			"thrown_shoe":
+				draw_colored_polygon(PackedVector2Array([
+					Vector2(-10, -8), Vector2(0, -8), Vector2(2, 0), Vector2(11, 2), Vector2(11, 9), Vector2(-10, 9)
+				]), col)
+				draw_rect(Rect2(-10.0, 6.0, 21.0, 3.5), Color(0.18, 0.16, 0.14))
+				draw_line(Vector2(-2, -4), Vector2(3, -1), Color.WHITE, 2.0)
+			"thrown_stone":
+				draw_colored_polygon(PackedVector2Array([
+					Vector2(-11, -3), Vector2(-4, -11), Vector2(7, -9), Vector2(12, 1), Vector2(6, 10), Vector2(-7, 9)
+				]), col)
+				draw_polyline(PackedVector2Array([
+					Vector2(-6, -5), Vector2(2, -7), Vector2(7, 0)
+				]), col.lightened(0.32), 2.0)
 			_:
 				draw_line(Vector2(-10, 10), Vector2(10, -10), col, 4.0)
 				draw_line(Vector2(-9, 3), Vector2(-3, 9), Color(1.0, 0.82, 0.26), 3.0)

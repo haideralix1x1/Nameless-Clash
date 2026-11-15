@@ -46,6 +46,24 @@ const THROWABLE_ITEMS: Array[Dictionary] = [
 		"style": "thrown_sword",
 		"explosive": true,
 		"color": Color(1.0, 0.48, 0.18)
+	},
+	{
+		"name": "Heavy Combat Shoe",
+		"damage": 38,
+		"speed": 900.0,
+		"stun": 0.65,
+		"style": "thrown_shoe",
+		"explosive": false,
+		"color": Color(0.76, 0.40, 0.18)
+	},
+	{
+		"name": "Jagged Boulder Stone",
+		"damage": 42,
+		"speed": 840.0,
+		"stun": 0.85,
+		"style": "thrown_stone",
+		"explosive": false,
+		"color": Color(0.64, 0.68, 0.74)
 	}
 ]
 

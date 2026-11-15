@@ -92,6 +92,11 @@ func _run_checks() -> void:
 	# 2. AgentData: 24 unique kits, Ignis all fire, stun bombs
 	var agents: Array = AgentDataScript.AGENTS
 	_assert(agents.size() == 24, "Expected 24 Agents in AgentData, got %d" % agents.size())
+	_assert(AgentDataScript.THROWABLE_ITEMS.size() == 7, "Expected 7 THROWABLE_ITEMS, got %d" % AgentDataScript.THROWABLE_ITEMS.size())
+	var shoe_item: Dictionary = AgentDataScript.get_throwable(5)
+	var stone_item: Dictionary = AgentDataScript.get_throwable(6)
+	_assert(str(shoe_item.get("name", "")) == "Heavy Combat Shoe" and str(shoe_item.get("style", "")) == "thrown_shoe", "Throwable 5 should be Heavy Combat Shoe")
+	_assert(str(stone_item.get("name", "")) == "Jagged Boulder Stone" and str(stone_item.get("style", "")) == "thrown_stone", "Throwable 6 should be Jagged Boulder Stone")
 	var ignis: Dictionary = AgentDataScript.get_agent(21)
 	_assert(str(ignis.get("agent_name", "")) == "Ignis", "Expected agent 21 to be Ignis")
 	var ignis_abils: Array = ignis.get("abilities", [])
@@ -132,8 +137,79 @@ func _run_checks() -> void:
 		_assert(float(p_node.get("stun_timer")) >= 1.9, "Enemy stun failed! stun_timer=%s" % str(p_node.get("stun_timer")))
 		p_node.queue_free()
 		await process_frame
-	nm.match_mode = saved_mode
 	print("CHECK 3 STUN SELF-IMMUNITY & ENEMY STUN: ok")
+
+	# 3B. 3-Player Grab & Throw Collision (shoe/stone + grabbing negative-ID bot and throwing onto 3rd player)
+	if player_scene != null:
+		nm.match_mode = 2
+		nm.apply_rules_dict({"gravity_scale": 0.0})
+		var p1: Node = player_scene.instantiate()
+		var p2: Node = player_scene.instantiate()
+		var p3: Node = player_scene.instantiate()
+		p1.set("peer_id", 1)
+		p1.set("is_local_human", true)
+		p1.set("team_id", 0)
+		p1.set("position", Vector2(400, 500))
+		p1.set("spawn_invuln_timer", 0.0)
+		p2.set("peer_id", -1)
+		p2.set("is_bot", true)
+		p2.set("team_id", 1)
+		p2.set("position", Vector2(450, 500))
+		p2.set("spawn_invuln_timer", 0.0)
+		p2.set("_bot_think_timer", 5.0)
+		p2.set("_bot_allow_fire", false)
+		p2.set("_bot_want_jetpack", false)
+		p2.set("_bot_strafe_dir", 0.0)
+		p3.set("peer_id", -2)
+		p3.set("is_bot", true)
+		p3.set("team_id", 1)
+		p3.set("position", Vector2(540, 500))
+		p3.set("spawn_invuln_timer", 0.0)
+		p3.set("_bot_think_timer", 5.0)
+		p3.set("_bot_allow_fire", false)
+		p3.set("_bot_want_jetpack", false)
+		p3.set("_bot_strafe_dir", 0.0)
+		root.add_child(p1)
+		root.add_child(p2)
+		root.add_child(p3)
+		await process_frame
+		p1.global_position = Vector2(400, 500)
+		p2.global_position = Vector2(450, 500)
+		p3.global_position = Vector2(540, 500)
+		p1.set("health", 100)
+		p2.set("health", 100)
+		p3.set("health", 100)
+		p1.set("spawn_invuln_timer", 0.0)
+		p2.set("spawn_invuln_timer", 0.0)
+		p3.set("spawn_invuln_timer", 0.0)
+		p2.set("_bot_think_timer", 5.0)
+		p2.set("_bot_allow_fire", false)
+		p3.set("_bot_think_timer", 5.0)
+		p3.set("_bot_allow_fire", false)
+		p1.throw_held_item()
+		_assert(int(p1.get("grabbed_player_id")) == -1, "p1 failed to grab p2 (-1), got %s" % str(p1.get("grabbed_player_id")))
+		_assert(int(p2.get("carried_by_peer_id")) == 1, "p2 carried_by_peer_id expected 1, got %s" % str(p2.get("carried_by_peer_id")))
+		p3.global_position = Vector2(540, 500)
+		p3.set("velocity", Vector2.ZERO)
+		p1.set("aim_angle", 0.0)
+		p1.throw_held_item()
+		_assert(int(p1.get("grabbed_player_id")) == 0, "p1 failed to release p2 on throw")
+		_assert(int(p2.get("carried_by_peer_id")) == 0, "p2 carried_by_peer_id should reset on throw")
+		for _step in range(20):
+			await physics_frame
+			if float(p2.get("thrown_flight_timer")) <= 0.0:
+				break
+		_assert(int(p2.get("health")) == 64, "Thrown player p2 expected hp=64 (100-36), got %s/%s" % [str(p2.get("health")), str(p2.get("max_health"))])
+		_assert(int(p3.get("health")) == 56, "Hit player p3 expected hp=56 (100-44), got %s/%s" % [str(p3.get("health")), str(p3.get("max_health"))])
+		_assert(int(p1.get("health")) == 100, "Thrower p1 should stay unharmed (hp=100), got %s/%s" % [str(p1.get("health")), str(p1.get("max_health"))])
+		p1.queue_free()
+		p2.queue_free()
+		p3.queue_free()
+		await process_frame
+		await process_frame
+		nm.apply_rules_dict(saved_rules)
+	nm.match_mode = saved_mode
+	print("CHECK 3B GRAB & THROW PLAYER (3-PLAYER COLLISION): ok")
 
 	# 4. WeaponData.GUN_PRESETS & Game Rules filtering
 	_assert(WeaponDataScript.GUN_PRESETS.size() == 6, "Expected 6 GUN_PRESETS")

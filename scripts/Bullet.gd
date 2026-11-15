@@ -269,6 +269,21 @@ func _draw() -> void:
 			draw_line(Vector2(-11.0, 0.0), Vector2(7.0, 0.0), Color(0.45, 0.28, 0.14), 3.5)
 			draw_rect(Rect2(3.0, -10.0, 10.0, 20.0), bullet_color)
 			draw_rect(Rect2(3.0, -10.0, 10.0, 20.0), Color(0.12, 0.14, 0.20), false, 2.0)
+		"thrown_shoe":
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-11.0, -9.0), Vector2(-1.0, -9.0), Vector2(2.0, -1.0),
+				Vector2(12.0, 1.0), Vector2(12.0, 8.0), Vector2(-11.0, 8.0)
+			]), bullet_color)
+			draw_rect(Rect2(-11.0, 5.5, 23.0, 3.5), Color(0.16, 0.14, 0.12))
+			draw_line(Vector2(-2.0, -4.0), Vector2(3.0, -1.0), Color.WHITE, 2.0)
+		"thrown_stone":
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-12.0, -4.0), Vector2(-5.0, -12.0), Vector2(7.0, -10.0),
+				Vector2(13.0, 1.0), Vector2(6.0, 11.0), Vector2(-8.0, 10.0)
+			]), bullet_color)
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-6.0, -6.0), Vector2(4.0, -7.0), Vector2(6.0, 1.0), Vector2(-3.0, 2.0)
+			]), bullet_color.lightened(0.28))
 		"frag_bomb":
 			draw_circle(Vector2.ZERO, 9.5, Color(0.16, 0.22, 0.18))
 			draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, bullet_color, 2.5)

@@ -97,10 +97,25 @@ var _bot_allow_fire: bool = true
 var _bot_aim_error: float = 0.0
 var _spawn_points: Array[Vector2] = []
 
+const GRAB_PLAYER_RANGE: float = 92.0
+const THROW_PLAYER_SPEED: float = 980.0
+const THROWN_SELF_DAMAGE: int = 36
+const THROWN_TARGET_DAMAGE: int = 44
+const THROWN_WALL_DAMAGE: int = 22
+
 # Agent Clash Mode state
 var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var ability_max_cooldowns: Array[float] = [6.0, 8.0, 8.5, 22.0]
 var held_throwable_id: int = -1
+var grabbed_player_id: int = 0
+var carried_by_peer_id: int = 0
+var _grab_hold_timer: float = 0.0
+var _grab_cooldown: float = 0.0
+var thrown_by_peer_id: int = 0
+var thrown_by_name: String = ""
+var thrown_by_team: int = -1
+var thrown_flight_timer: float = 0.0
+var _thrown_flight_elapsed: float = 0.0
 var stun_timer: float = 0.0
 var speed_boost_timer: float = 0.0
 var speed_boost_mult: float = 1.0
@@ -323,6 +338,8 @@ func _process_alive(delta: float) -> void:
 				ability_cooldowns[i] = maxf(0.0, ability_cooldowns[i] - delta)
 		if stun_timer > 0.0:
 			stun_timer = maxf(0.0, stun_timer - delta)
+		if _grab_cooldown > 0.0:
+			_grab_cooldown = maxf(0.0, _grab_cooldown - delta)
 		if speed_boost_timer > 0.0:
 			speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
 			if speed_boost_timer <= 0.0:
@@ -331,6 +348,47 @@ func _process_alive(delta: float) -> void:
 		if is_local_human and _agent_hud_sync_accum >= 0.08:
 			_agent_hud_sync_accum = 0.0
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+		if carried_by_peer_id != 0:
+			var carrier := _find_player_by_peer_id(carried_by_peer_id)
+			if carrier == null or bool(carrier.get("is_dead")) or int(carrier.get("grabbed_player_id")) != peer_id:
+				carried_by_peer_id = 0
+				if _collision_shape != null:
+					_collision_shape.disabled = false
+			else:
+				if _collision_shape != null:
+					_collision_shape.disabled = true
+				global_position = carrier.global_position + Vector2(0.0, -48.0)
+				velocity = Vector2.ZERO
+				is_jetpacking = false
+				return
+
+		if grabbed_player_id != 0:
+			var victim := _find_player_by_peer_id(grabbed_player_id)
+			if victim == null or bool(victim.get("is_dead")):
+				grabbed_player_id = 0
+				_grab_hold_timer = 0.0
+			else:
+				victim.global_position = global_position + Vector2(0.0, -48.0)
+				_grab_hold_timer -= delta
+				if _grab_hold_timer <= 0.0:
+					throw_grabbed_player(aim_angle)
+
+		if thrown_flight_timer > 0.0:
+			thrown_flight_timer = maxf(0.0, thrown_flight_timer - delta)
+			_thrown_flight_elapsed += delta
+			if _collision_shape != null:
+				_collision_shape.disabled = false
+			if _is_controlled_locally() and _check_thrown_player_impact():
+				return
+			var grav_fly: float = GRAVITY * clampf(NetworkManager.gravity_scale, 0.0, 1.0) * 0.35
+			velocity.y = minf(velocity.y + grav_fly * delta, 760.0)
+			move_and_slide()
+			if _is_controlled_locally():
+				_check_thrown_player_impact()
+			if thrown_flight_timer <= 0.0:
+				thrown_by_peer_id = 0
+			return
 
 	if not NetworkManager.is_agent_clash_mode() and is_reloading:
 		_reload_timer -= delta
@@ -769,7 +827,7 @@ func _apply_weapon_visuals() -> void:
 
 
 func can_grab_throwable() -> bool:
-	return NetworkManager.is_agent_clash_mode() and held_throwable_id == -1 and not is_dead
+	return NetworkManager.is_agent_clash_mode() and held_throwable_id == -1 and grabbed_player_id == 0 and carried_by_peer_id == 0 and not is_dead
 
 
 func apply_pickup(pickup_type: String, value: int) -> void:
@@ -837,6 +895,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	stun_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	_release_grab_state()
 	_respawn_timer = RESPAWN_TIME
 	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name)
 
@@ -882,6 +941,7 @@ func _respawn_self() -> void:
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
 	held_throwable_id = -1
+	_release_grab_state()
 	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
 	current_ammo = _weapon.mag_size
@@ -983,7 +1043,13 @@ func _apply_team_visuals() -> void:
 
 func _update_overhead_ui() -> void:
 	_overhead_ui.visible = not is_dead
-	if NetworkManager.is_agent_clash_mode() and stun_timer > 0.0:
+	if NetworkManager.is_agent_clash_mode() and carried_by_peer_id != 0:
+		_name_label.text = "✋ GRABBED!"
+		_name_label.modulate = Color(1.0, 0.65, 0.22)
+	elif NetworkManager.is_agent_clash_mode() and thrown_flight_timer > 0.0:
+		_name_label.text = "☄ THROWN!"
+		_name_label.modulate = Color(1.0, 0.42, 0.22)
+	elif NetworkManager.is_agent_clash_mode() and stun_timer > 0.0:
 		_name_label.text = "⚡ STUNNED %.1fs" % stun_timer
 		_name_label.modulate = Color(0.45, 0.95, 1.0)
 	else:
@@ -1121,7 +1187,11 @@ func _compute_bot_input(delta: float) -> Dictionary:
 			if space_state.intersect_ray(ray).is_empty():
 				if agent_mode:
 					aim_angle = desired_angle
-					if held_throwable_id >= 0 and dist < 520.0 and stun_timer <= 0.0:
+					if grabbed_player_id != 0 and stun_timer <= 0.0:
+						throw_held_item()
+					elif held_throwable_id >= 0 and dist < 520.0 and stun_timer <= 0.0:
+						throw_held_item()
+					elif held_throwable_id == -1 and grabbed_player_id == 0 and dist < 82.0 and stun_timer <= 0.0 and randf() < 0.08:
 						throw_held_item()
 					var cast_chance: float = 0.04 if diff == 0 else (0.10 if diff == 1 else 0.20)
 					if stun_timer <= 0.0 and randf() < cast_chance:
@@ -1148,10 +1218,10 @@ func _compute_bot_input(delta: float) -> Dictionary:
 
 # --- AGENT CLASH MODE ABILITIES, STUN, THROWABLES & BARRIERS ---
 
-func apply_stun(duration: float, attacker_id: int = -1) -> void:
+func apply_stun(duration: float, attacker_id: int = 0) -> void:
 	if not NetworkManager.is_agent_clash_mode() or is_dead or duration <= 0.0:
 		return
-	if attacker_id >= 0 and attacker_id == peer_id:
+	if attacker_id != 0 and attacker_id == peer_id:
 		return
 	if NetworkManager.is_network_active():
 		sync_stun_rpc.rpc(duration, attacker_id)
@@ -1160,13 +1230,14 @@ func apply_stun(duration: float, attacker_id: int = -1) -> void:
 
 
 @rpc("any_peer", "call_local", "reliable")
-func sync_stun_rpc(duration: float, attacker_id: int = -1) -> void:
+func sync_stun_rpc(duration: float, attacker_id: int = 0) -> void:
 	_apply_stun_local(duration, attacker_id)
 
 
-func _apply_stun_local(duration: float, attacker_id: int = -1) -> void:
-	if is_dead or (attacker_id >= 0 and attacker_id == peer_id):
+func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
+	if is_dead or (attacker_id != 0 and attacker_id == peer_id):
 		return
+	_release_grab_state()
 	stun_timer = maxf(stun_timer, duration)
 	is_jetpacking = false
 	if is_local_human:
@@ -1480,19 +1551,192 @@ func _apply_radial_aoe(origin: Vector2, radius: float, dmg: int, stun_dur: float
 	return hit_count
 
 
-func throw_held_item() -> void:
+func _find_player_by_peer_id(pid: int) -> Node2D:
+	if pid == 0 or not is_inside_tree():
+		return null
+	for node in get_tree().get_nodes_in_group("players"):
+		if is_instance_valid(node) and int(node.get("peer_id")) == pid:
+			return node as Node2D
+	return null
+
+
+func find_grabbable_player() -> Node2D:
 	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0:
-		return
-	if held_throwable_id < 0:
-		return
-	var item_id: int = held_throwable_id
-	held_throwable_id = -1
-	if is_local_human:
-		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		return null
+	if grabbed_player_id != 0 or carried_by_peer_id != 0 or _grab_cooldown > 0.0 or not is_inside_tree():
+		return null
+	var best: Node2D = null
+	var best_dist: float = GRAB_PLAYER_RANGE
+	for node in get_tree().get_nodes_in_group("players"):
+		if node == self or not is_instance_valid(node):
+			continue
+		if bool(node.get("is_dead")) or float(node.get("spawn_invuln_timer")) > 0.0:
+			continue
+		if int(node.get("carried_by_peer_id")) != 0 or int(node.get("grabbed_player_id")) != 0:
+			continue
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		var d: float = global_position.distance_to(node.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = node as Node2D
+	return best
+
+
+func _release_grab_state() -> void:
+	if grabbed_player_id != 0:
+		var v := _find_player_by_peer_id(grabbed_player_id)
+		if v != null:
+			v.set("carried_by_peer_id", 0)
+			var vcs := v.get("_collision_shape") as CollisionShape2D
+			if vcs != null:
+				vcs.disabled = false
+		grabbed_player_id = 0
+	if carried_by_peer_id != 0:
+		var c := _find_player_by_peer_id(carried_by_peer_id)
+		if c != null and int(c.get("grabbed_player_id")) == peer_id:
+			c.set("grabbed_player_id", 0)
+		carried_by_peer_id = 0
+	_grab_hold_timer = 0.0
+	thrown_by_peer_id = 0
+	thrown_flight_timer = 0.0
+	_thrown_flight_elapsed = 0.0
+	if _collision_shape != null:
+		_collision_shape.disabled = false
+
+
+func grab_player(target: Node2D) -> bool:
+	if target == null:
+		return false
+	var target_pid: int = int(target.get("peer_id"))
+	if target_pid == 0:
+		return false
 	if NetworkManager.is_network_active():
-		throw_item_rpc.rpc(item_id, _muzzle_primary.global_position, aim_angle)
+		sync_grab_player_rpc.rpc(target_pid)
 	else:
-		_throw_item_local(item_id, _muzzle_primary.global_position, aim_angle)
+		_grab_player_local(target_pid)
+	return grabbed_player_id == target_pid
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_grab_player_rpc(target_pid: int) -> void:
+	_grab_player_local(target_pid)
+
+
+func _grab_player_local(target_pid: int) -> void:
+	var target := _find_player_by_peer_id(target_pid)
+	if target == null:
+		return
+	grabbed_player_id = target_pid
+	_grab_hold_timer = 3.5
+	target.set("carried_by_peer_id", peer_id)
+	target.set("stun_timer", 0.0)
+	target.set("velocity", Vector2.ZERO)
+	var tcs := target.get("_collision_shape") as CollisionShape2D
+	if tcs != null:
+		tcs.disabled = true
+	target.global_position = global_position + Vector2(0.0, -48.0)
+	_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 0.9)
+
+
+func throw_grabbed_player(angle: float) -> void:
+	if grabbed_player_id == 0:
+		return
+	var victim_pid: int = grabbed_player_id
+	if NetworkManager.is_network_active():
+		sync_throw_player_rpc.rpc(victim_pid, global_position, angle)
+	else:
+		_throw_player_local(victim_pid, global_position, angle)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_throw_player_rpc(victim_pid: int, origin: Vector2, angle: float) -> void:
+	_throw_player_local(victim_pid, origin, angle)
+
+
+func _throw_player_local(victim_pid: int, origin: Vector2, angle: float) -> void:
+	grabbed_player_id = 0
+	_grab_hold_timer = 0.0
+	_grab_cooldown = 1.2
+	var victim := _find_player_by_peer_id(victim_pid)
+	if victim == null:
+		return
+	victim.set("carried_by_peer_id", 0)
+	var vcs := victim.get("_collision_shape") as CollisionShape2D
+	if vcs != null:
+		vcs.disabled = false
+	victim.global_position = origin + Vector2.from_angle(angle) * 30.0 + Vector2(0.0, -10.0)
+	victim.set("velocity", Vector2.from_angle(angle) * THROW_PLAYER_SPEED)
+	victim.set("thrown_by_peer_id", peer_id)
+	victim.set("thrown_by_name", player_name)
+	victim.set("thrown_by_team", team_id)
+	victim.set("thrown_flight_timer", 0.70)
+	victim.set("_thrown_flight_elapsed", 0.0)
+	victim.set("stun_timer", maxf(float(victim.get("stun_timer")), 0.75))
+	_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.7)
+	if victim.has_method("_is_controlled_locally") and victim._is_controlled_locally():
+		victim._check_thrown_player_impact()
+
+
+func _check_thrown_player_impact() -> bool:
+	if not is_inside_tree():
+		return false
+	for node in get_tree().get_nodes_in_group("players"):
+		if node == self or not is_instance_valid(node) or bool(node.get("is_dead")):
+			continue
+		if int(node.get("peer_id")) == thrown_by_peer_id:
+			continue
+		if NetworkManager.is_team_mode() and int(node.get("team_id")) == thrown_by_team:
+			continue
+		if global_position.distance_to(node.global_position) <= 56.0:
+			var t_id: int = thrown_by_peer_id
+			var t_name: String = thrown_by_name
+			var hit_dir: Vector2 = velocity.normalized() if velocity.length() > 1.0 else Vector2.RIGHT
+			thrown_flight_timer = 0.0
+			thrown_by_peer_id = 0
+			_thrown_flight_elapsed = 0.0
+			apply_hit(THROWN_SELF_DAMAGE, t_id, "Thrown Player Impact", t_name, -hit_dir * 260.0)
+			apply_stun(1.1, t_id)
+			node.apply_hit(THROWN_TARGET_DAMAGE, t_id, "Thrown Player (%s)" % player_name, t_name, hit_dir * 420.0)
+			if node.has_method("apply_stun"):
+				node.apply_stun(1.2, t_id)
+			_spawn_vfx_burst((global_position + node.global_position) * 0.5, 58.0, Color(1.0, 0.65, 0.20))
+			return true
+	if _thrown_flight_elapsed >= 0.06 and (is_on_wall() or is_on_floor() or is_on_ceiling()):
+		var t_id: int = thrown_by_peer_id
+		var t_name: String = thrown_by_name
+		thrown_flight_timer = 0.0
+		thrown_by_peer_id = 0
+		_thrown_flight_elapsed = 0.0
+		apply_hit(THROWN_WALL_DAMAGE, t_id, "Thrown Wall Slam", t_name, Vector2.ZERO)
+		_spawn_vfx_burst(global_position, 42.0, Color(0.95, 0.55, 0.20))
+		return true
+	return false
+
+
+func throw_held_item() -> void:
+	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0 or carried_by_peer_id != 0:
+		return
+	if grabbed_player_id != 0:
+		throw_grabbed_player(aim_angle)
+		if is_local_human:
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		return
+	if held_throwable_id >= 0:
+		var item_id: int = held_throwable_id
+		held_throwable_id = -1
+		if is_local_human:
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		if NetworkManager.is_network_active():
+			throw_item_rpc.rpc(item_id, _muzzle_primary.global_position, aim_angle)
+		else:
+			_throw_item_local(item_id, _muzzle_primary.global_position, aim_angle)
+		return
+	var target := find_grabbable_player()
+	if target != null:
+		grab_player(target)
+		if is_local_human:
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 
 
 @rpc("any_peer", "call_local", "reliable")
