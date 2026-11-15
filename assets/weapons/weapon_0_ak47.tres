@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 0
+code_name = "ak47"
+display_name = "AK-47"
+category = "Assault Rifle"
+description = "High 7.62mm base damage with predictable vertical recoil kick."
+damage = 24
+fire_interval = 0.135
+mag_size = 30
+reload_time = 1.55
+single_shell_reload = false
+recoil_impulse = 60.0
+vertical_recoil_bias = 0.042
+bullet_speed = 1300.0
+spread_deg = 3.0
+pellet_count = 1
+damage_falloff_start = 9999.0
+min_damage_ratio = 1.0
+move_speed_multiplier = 0.98
+scope_zoom = 1.05
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 1.2
+bullet_color = Color(1, 0.78, 0.22, 1)
+sound_path = "res://assets/audio/shoot_ak47.wav"
+sprite_frame = 0

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 6
+code_name = "remington870"
+display_name = "Remington 870"
+category = "Shotgun"
+description = "Pump-action powerhouse with shell-by-shell manual reload loop."
+damage = 16
+fire_interval = 0.85
+mag_size = 6
+reload_time = 0.36
+single_shell_reload = true
+recoil_impulse = 195.0
+vertical_recoil_bias = 0.06
+bullet_speed = 1020.0
+spread_deg = 10.5
+pellet_count = 8
+damage_falloff_start = 280.0
+min_damage_ratio = 0.38
+move_speed_multiplier = 0.97
+scope_zoom = 1.05
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 1.45
+bullet_color = Color(1, 0.52, 0.16, 1)
+sound_path = "res://assets/audio/shoot_shotgun.wav"
+sprite_frame = 6

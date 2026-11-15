@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 2
+code_name = "scarh"
+display_name = "SCAR-H"
+category = "Assault Rifle"
+description = "Heavy-hitting 7.62 NATO battle rifle with devastating per-shot damage."
+damage = 34
+fire_interval = 0.18
+mag_size = 20
+reload_time = 1.65
+single_shell_reload = false
+recoil_impulse = 78.0
+vertical_recoil_bias = 0.036
+bullet_speed = 1450.0
+spread_deg = 1.8
+pellet_count = 1
+damage_falloff_start = 9999.0
+min_damage_ratio = 1.0
+move_speed_multiplier = 0.95
+scope_zoom = 1.02
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 1.15
+bullet_color = Color(1, 0.72, 0.2, 1)
+sound_path = "res://assets/audio/shoot_scar.wav"
+sprite_frame = 2

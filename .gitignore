@@ -1,0 +1,9 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Python & OS generated files
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

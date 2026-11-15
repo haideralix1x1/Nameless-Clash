@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 3
+code_name = "mp5"
+display_name = "MP5"
+category = "Submachine Gun"
+description = "High-mobility 9mm SMG with rapid fire and close-range precision."
+damage = 14
+fire_interval = 0.068
+mag_size = 32
+reload_time = 1.15
+single_shell_reload = false
+recoil_impulse = 22.0
+vertical_recoil_bias = 0.01
+bullet_speed = 1120.0
+spread_deg = 2.6
+pellet_count = 1
+damage_falloff_start = 320.0
+min_damage_ratio = 0.45
+move_speed_multiplier = 1.12
+scope_zoom = 1.08
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = true
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 0.75
+bullet_color = Color(1, 0.85, 0.45, 1)
+sound_path = "res://assets/audio/shoot_smg.wav"
+sprite_frame = 3

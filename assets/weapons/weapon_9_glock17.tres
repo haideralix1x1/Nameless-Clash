@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 9
+code_name = "glock17"
+display_name = "Glock 17"
+category = "Sidearm"
+description = "Reliable 9mm backup pistol with unlimited reserve and quick draw."
+damage = 18
+fire_interval = 0.16
+mag_size = 17
+reload_time = 0.85
+single_shell_reload = false
+recoil_impulse = 26.0
+vertical_recoil_bias = 0.015
+bullet_speed = 1180.0
+spread_deg = 2.2
+pellet_count = 1
+damage_falloff_start = 500.0
+min_damage_ratio = 0.7
+move_speed_multiplier = 1.14
+scope_zoom = 1.08
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = true
+supports_dual_wield = true
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 0.65
+bullet_color = Color(1, 0.8, 0.3, 1)
+sound_path = "res://assets/audio/shoot_m4a1.wav"
+sprite_frame = 9

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 10
+code_name = "rpg7"
+display_name = "RPG-7"
+category = "Heavy Ordnance"
+description = "Rocket launcher firing slow warheads with massive splash and backblast."
+damage = 110
+fire_interval = 1.4
+mag_size = 1
+reload_time = 2.2
+single_shell_reload = false
+recoil_impulse = 265.0
+vertical_recoil_bias = 0.03
+bullet_speed = 640.0
+spread_deg = 0.9
+pellet_count = 1
+damage_falloff_start = 9999.0
+min_damage_ratio = 1.0
+move_speed_multiplier = 0.86
+scope_zoom = 1.05
+has_backblast = true
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = false
+is_explosive = true
+explosion_radius = 155.0
+muzzle_flash_scale = 1.8
+bullet_color = Color(1, 0.35, 0.12, 1)
+sound_path = "res://assets/audio/shoot_rpg.wav"
+sprite_frame = 10

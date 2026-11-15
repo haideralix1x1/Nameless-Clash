@@ -1,0 +1,193 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/PlayerController.gd" id="1_player_script"]
+[ext_resource type="Script" path="res://scripts/ModularCharacter.gd" id="2_modular_script"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/accessories_0.png" id="5_acc_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/head_0.png" id="6_head_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/hands_0.png" id="7_hands_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/weapons_sheet.png" id="8_weapons_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/muzzle_flash.png" id="9_flash_tex"]
+[ext_resource type="AudioStream" path="res://assets/audio/jetpack.wav" id="10_jet_snd"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_player"]
+radius = 14.0
+height = 48.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_player"]
+properties/0/path = NodePath(".:global_position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:velocity")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:aim_angle")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:facing_right")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:is_jetpacking")
+properties/4/spawn = true
+properties/4/replication_mode = 2
+properties/5/path = NodePath(".:is_crouching")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:health")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:jetpack_fuel")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:current_weapon_id")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+properties/9/path = NodePath(".:is_dual_wielding")
+properties/9/spawn = true
+properties/9/replication_mode = 2
+properties/10/path = NodePath(".:is_dead")
+properties/10/spawn = true
+properties/10/replication_mode = 2
+properties/11/path = NodePath(".:anim_frame")
+properties/11/spawn = true
+properties/11/replication_mode = 2
+properties/12/path = NodePath(".:weapon_skin_id")
+properties/12/spawn = true
+properties/12/replication_mode = 2
+properties/13/path = NodePath(".:m4a1_rail_mod")
+properties/13/spawn = true
+properties/13/replication_mode = 2
+
+[node name="Player" type="CharacterBody2D" groups=["players"]]
+z_index = 5
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player_script")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 3)
+shape = SubResource("CapsuleShape2D_player")
+
+[node name="JetpackParticles" type="CPUParticles2D" parent="."]
+position = Vector2(-6, 12)
+emitting = false
+amount = 24
+lifetime = 0.25
+direction = Vector2(0, 1)
+spread = 28.0
+gravity = Vector2(0, 180)
+initial_velocity_min = 90.0
+initial_velocity_max = 180.0
+scale_amount_min = 3.0
+scale_amount_max = 6.0
+color = Color(1, 0.62, 0.14, 0.9)
+
+[node name="ModularRig" type="Node2D" parent="."]
+scale = Vector2(0.72, 0.72)
+script = ExtResource("2_modular_script")
+
+[node name="Sprite2D_Back" type="Sprite2D" parent="ModularRig"]
+texture = ExtResource("5_acc_tex")
+hframes = 8
+
+[node name="AnimatedSprite2D_Legs" type="AnimatedSprite2D" parent="ModularRig"]
+
+[node name="AnimatedSprite2D_Torso" type="AnimatedSprite2D" parent="ModularRig"]
+
+[node name="AnimatedSprite2D_Head" type="AnimatedSprite2D" parent="ModularRig"]
+
+[node name="Sprite2D_Gear" type="Sprite2D" parent="ModularRig"]
+texture = ExtResource("6_head_tex")
+hframes = 8
+
+[node name="Sprite2D_Hands" type="Sprite2D" parent="ModularRig"]
+texture = ExtResource("7_hands_tex")
+hframes = 8
+
+[node name="WeaponPivot" type="Node2D" parent="."]
+position = Vector2(0, 6)
+
+[node name="SecondaryWeapon" type="Sprite2D" parent="WeaponPivot"]
+visible = false
+z_index = -1
+position = Vector2(12, 8)
+scale = Vector2(0.85, 0.85)
+texture = ExtResource("8_weapons_tex")
+hframes = 11
+vframes = 3
+
+[node name="PrimaryWeapon" type="Sprite2D" parent="WeaponPivot"]
+position = Vector2(18, 0)
+scale = Vector2(0.9, 0.9)
+texture = ExtResource("8_weapons_tex")
+hframes = 11
+vframes = 3
+
+[node name="MuzzlePrimary" type="Marker2D" parent="WeaponPivot"]
+position = Vector2(44, -2)
+
+[node name="MuzzleSecondary" type="Marker2D" parent="WeaponPivot"]
+position = Vector2(36, 7)
+
+[node name="MuzzleFlash" type="Sprite2D" parent="WeaponPivot"]
+visible = false
+position = Vector2(52, -2)
+scale = Vector2(0.8, 0.8)
+texture = ExtResource("9_flash_tex")
+
+[node name="RPGBackblast" type="CPUParticles2D" parent="WeaponPivot"]
+position = Vector2(-18, 0)
+emitting = false
+amount = 22
+lifetime = 0.35
+one_shot = true
+explosiveness = 0.92
+direction = Vector2(-1, 0)
+spread = 32.0
+gravity = Vector2(0, -40)
+initial_velocity_min = 120.0
+initial_velocity_max = 260.0
+scale_amount_min = 5.0
+scale_amount_max = 11.0
+color = Color(0.82, 0.78, 0.72, 0.75)
+
+[node name="OverheadUI" type="Node2D" parent="."]
+position = Vector2(0, -44)
+
+[node name="NameLabel" type="Label" parent="OverheadUI"]
+offset_left = -56.0
+offset_top = -22.0
+offset_right = 56.0
+offset_bottom = -2.0
+text = "Trooper"
+horizontal_alignment = 1
+
+[node name="HealthBarBg" type="ColorRect" parent="OverheadUI"]
+offset_left = -22.0
+offset_right = 22.0
+offset_bottom = 5.0
+color = Color(0.08, 0.1, 0.14, 0.85)
+
+[node name="HealthBarFill" type="ColorRect" parent="OverheadUI/HealthBarBg"]
+layout_mode = 0
+offset_right = 44.0
+offset_bottom = 5.0
+color = Color(0.25, 0.9, 0.42, 1)
+
+[node name="AudioSfx" type="AudioStreamPlayer2D" parent="."]
+max_distance = 1600.0
+bus = &"SFX"
+
+[node name="JetpackAudio" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource("10_jet_snd")
+volume_db = -10.0
+max_distance = 1200.0
+bus = &"SFX"
+
+[node name="Camera2D" type="Camera2D" parent="."]
+enabled = false
+zoom = Vector2(1.05, 1.05)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_player")

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 4
+code_name = "vector"
+display_name = "Kriss Vector"
+category = "Submachine Gun"
+description = "Ultra-fast cyclical RPM with downward recoil mitigation and 25-rd mag."
+damage = 12
+fire_interval = 0.048
+mag_size = 25
+reload_time = 1.05
+single_shell_reload = false
+recoil_impulse = 16.0
+vertical_recoil_bias = -0.012
+bullet_speed = 1160.0
+spread_deg = 3.4
+pellet_count = 1
+damage_falloff_start = 300.0
+min_damage_ratio = 0.42
+move_speed_multiplier = 1.1
+scope_zoom = 1.08
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = true
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 0.7
+bullet_color = Color(0.95, 0.9, 0.5, 1)
+sound_path = "res://assets/audio/shoot_vector.wav"
+sprite_frame = 4

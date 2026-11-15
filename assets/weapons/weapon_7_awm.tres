@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 7
+code_name = "awm"
+display_name = "AWM"
+category = "Sniper Rifle"
+description = "Bolt-action .338 magnum with scope zoom and one-shot knockdown power."
+damage = 100
+fire_interval = 1.45
+mag_size = 5
+reload_time = 2.2
+single_shell_reload = false
+recoil_impulse = 210.0
+vertical_recoil_bias = 0.09
+bullet_speed = 2400.0
+spread_deg = 0.15
+pellet_count = 1
+damage_falloff_start = 9999.0
+min_damage_ratio = 1.0
+move_speed_multiplier = 0.88
+scope_zoom = 0.72
+has_backblast = false
+has_accessory_rail = false
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = true
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 1.4
+bullet_color = Color(0.4, 0.95, 1, 1)
+sound_path = "res://assets/audio/shoot_sniper.wav"
+sprite_frame = 7

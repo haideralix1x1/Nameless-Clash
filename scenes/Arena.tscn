@@ -1,0 +1,16 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/Arena.gd" id="1_arena_script"]
+[ext_resource type="Script" path="res://scripts/HUD.gd" id="2_hud_script"]
+
+[node name="Arena" type="Node2D"]
+script = ExtResource("1_arena_script")
+
+[node name="WorldGeometry" type="Node2D" parent="."]
+
+[node name="Pickups" type="Node2D" parent="."]
+
+[node name="Players" type="Node2D" parent="."]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("2_hud_script")

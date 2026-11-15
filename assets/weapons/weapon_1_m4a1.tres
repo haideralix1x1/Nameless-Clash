@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Weapon.gd" id="1_wd"]
+
+[resource]
+script = ExtResource("1_wd")
+id = 1
+code_name = "m4a1"
+display_name = "M4A1"
+category = "Assault Rifle"
+description = "Balanced rapid-fire carbine with accessory rail (Suppressor / Scope)."
+damage = 18
+fire_interval = 0.095
+mag_size = 30
+reload_time = 1.35
+single_shell_reload = false
+recoil_impulse = 36.0
+vertical_recoil_bias = 0.015
+bullet_speed = 1350.0
+spread_deg = 2.0
+pellet_count = 1
+damage_falloff_start = 9999.0
+min_damage_ratio = 1.0
+move_speed_multiplier = 1.02
+scope_zoom = 1.05
+has_backblast = false
+has_accessory_rail = true
+unlimited_reserve = false
+supports_dual_wield = false
+is_laser = false
+is_explosive = false
+explosion_radius = 0.0
+muzzle_flash_scale = 0.9
+bullet_color = Color(1, 0.88, 0.35, 1)
+sound_path = "res://assets/audio/shoot_m4a1.wav"
+sprite_frame = 1
