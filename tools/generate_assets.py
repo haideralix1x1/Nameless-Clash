@@ -326,9 +326,33 @@ def _draw_archetype_skin(arch: int, f: int) -> Canvas:
     beard_gray = (138, 134, 130, 255)
     beard_sh = (106, 102, 98, 255)
 
-    if arch == 8:
-        skin_hi = (232, 238, 245, 255)
-        skin_sh = (182, 192, 206, 255)
+    # Custom skin base palettes for stylized presets
+    if arch == 10:
+        skin_hi, skin_mid, skin_sh = (212, 152, 112, 255), (192, 132, 94, 255), (156, 102, 72, 255)
+    elif arch == 12:
+        skin_hi, skin_mid, skin_sh = (132, 186, 86, 255), (112, 162, 72, 255), (84, 124, 54, 255)
+        ear_inner = (72, 108, 46, 255)
+    elif arch == 13:
+        skin_hi, skin_mid, skin_sh = (242, 240, 232, 255), (222, 218, 206, 255), (185, 180, 168, 255)
+    elif arch == 14:
+        skin_hi, skin_mid, skin_sh = (246, 250, 255, 255), (228, 238, 248, 255), (188, 208, 228, 255)
+    elif arch == 15:
+        skin_hi, skin_mid, skin_sh = (226, 216, 182, 255), (206, 194, 160, 255), (166, 154, 122, 255)
+    elif arch == 16:
+        skin_hi, skin_mid, skin_sh = (196, 206, 218, 255), (168, 178, 192, 255), (126, 136, 150, 255)
+    elif arch == 17:
+        skin_hi, skin_mid, skin_sh = (72, 146, 116, 255), (56, 124, 96, 255), (38, 92, 72, 255)
+    elif arch == 18:
+        skin_hi, skin_mid, skin_sh = (46, 48, 54, 255), (38, 40, 46, 255), (26, 28, 34, 255)
+    elif arch == 20:
+        skin_hi, skin_mid, skin_sh = (158, 98, 146, 255), (138, 82, 126, 255), (104, 58, 96, 255)
+        ear_inner = (90, 46, 82, 255)
+    elif arch == 21:
+        skin_hi, skin_mid, skin_sh = (82, 62, 50, 255), (68, 50, 40, 255), (46, 34, 28, 255)
+    elif arch == 22:
+        skin_hi, skin_mid, skin_sh = (246, 166, 218, 255), (228, 132, 198, 255), (192, 92, 162, 255)
+    elif arch == 23:
+        skin_hi, skin_mid, skin_sh = (224, 168, 118, 255), (204, 148, 100, 255), (170, 118, 76, 255)
 
     if p["dead"]:
         c.fill_round_rect(54, 52, 34, 30, 11, skin_mid, INK, 2.5)
@@ -337,32 +361,29 @@ def _draw_archetype_skin(arch: int, f: int) -> Canvas:
         return c
 
     hx, hy, ty = p["hx"], p["hy"], p["ty"]
-    # Neck shadow
-    c.fill_round_rect(hx - 6.0, ty - 5.0, 12.0, 10.0, 3.0, skin_sh, INK, 2.2)
+    if arch != 14:
+        c.fill_round_rect(hx - 6.0, ty - 5.0, 12.0, 10.0, 3.0, skin_sh, INK, 2.2)
 
-    # Oversized Chibi Head Box (matches bold reference proportions)
     hw, hh = 42.0, 34.0
-    if arch in (2, 9):
+    if arch in (20, 21, 22):
         hw, hh = 44.0, 35.0
-    x0, y0 = hx - 20.0, hy - 17.0
+    x0, y0 = hx - hw * 0.5 + 1.0, hy - 17.0
     c.fill_round_rect(x0, y0, hw, hh, 13.0, skin_hi, INK, 2.7)
-    # Soft cartoon cel-shading under hat brim & left jaw
     c.fill_round_rect(x0 + 2.0, y0 + 2.0, hw - 4.0, 9.0, 6.0, skin_sh)
     c.fill_round_rect(x0 + 2.0, y0 + 14.0, 8.0, hh - 16.0, 4.0, skin_sh)
 
-    # Sideburn hair tufts peeking behind ear
-    tuft_col = hair_brown if arch in (1, 6) else (beard_gray if arch == 7 else hair_dark)
-    c.fill_round_rect(x0 - 1.0, hy - 7.0, 8.0, 10.0, 3.0, tuft_col, INK, 1.8)
+    # Ears for humanoid / creature characters (skip Ghost, Mummy, Robot, Cyborg, Cat, Golems)
+    if arch not in (14, 15, 16, 17, 18, 21, 22):
+        tuft_col = hair_brown if arch in (1, 3, 7) else ((25, 128, 102, 255) if arch == 19 else (beard_gray if arch == 9 else hair_dark))
+        if arch not in (12, 13, 20, 23):
+            c.fill_round_rect(x0 - 1.0, hy - 7.0, 8.0, 10.0, 3.0, tuft_col, INK, 1.8)
+        c.fill_circle(x0 + 1.5, hy + 2.5, 6.0, skin_mid, INK, 2.4)
+        c.fill_circle(x0 + 2.0, hy + 2.8, 2.9, ear_inner)
 
-    # Distinct Chibi Left Ear with pink inner swirl
-    c.fill_circle(x0 + 1.5, hy + 2.5, 6.2, skin_mid, INK, 2.4)
-    c.fill_circle(x0 + 2.0, hy + 2.8, 3.0, ear_inner)
-
-    # Facial Expression Variants
     ex_l, ex_r, ey = hx + 1.0, hx + 13.5, hy + 1.0
 
     if arch == 1:
-        # Ref #2 Explorer: swept brown front fringe + cheerful smile
+        # Explorer: swept brown fringe + happy grin
         c.fill_polygon(
             [(hx - 16, hy - 12), (hx + 18, hy - 12), (hx + 20, hy - 5),
              (hx + 11, hy - 7), (hx + 4, hy - 3), (hx - 4, hy - 7), (hx - 12, hy - 4)],
@@ -370,57 +391,180 @@ def _draw_archetype_skin(arch: int, f: int) -> Canvas:
         )
         c.fill_ellipse(ex_l, ey + 0.5, 3.1, 5.6, INK)
         c.fill_ellipse(ex_r, ey + 0.5, 3.1, 5.6, INK)
-        # Bright D smile
         c.fill_round_rect(hx + 3.5, hy + 8.5, 9.5, 5.5, 2.6, (255, 255, 255, 255), INK, 1.6)
     elif arch == 2:
-        # Ref #3 Bearded Outlaw: sculpted gray beard + gritty scowl
+        # Outlaw: sculpted gray beard + gritty scowl
         c.fill_polygon(
             [(hx - 15, hy + 4), (hx + 22, hy + 4), (hx + 20, hy + 17),
              (hx + 8, hy + 19), (hx - 8, hy + 17), (hx - 15, hy + 12)],
             beard_gray, INK, 2.3
         )
         c.fill_ellipse(hx + 7.5, hy + 13.5, 11.0, 4.5, beard_sh)
-        # Angry inward thick eyebrows + large oval eyes
         c.fill_capsule(ex_l - 4.0, ey - 8.5, ex_l + 3.5, ey - 6.0, 2.2, INK)
         c.fill_capsule(ex_r - 3.5, ey - 6.0, ex_r + 4.0, ey - 8.5, 2.2, INK)
         c.fill_ellipse(ex_l, ey - 0.5, 3.3, 5.4, INK)
         c.fill_ellipse(ex_r, ey - 0.5, 3.3, 5.4, INK)
-        # Gritty clenched teeth line
         c.fill_round_rect(hx + 3.5, hy + 9.0, 8.5, 3.2, 1.2, (248, 248, 248, 255), INK, 1.4)
     elif arch == 3:
-        # Tactical Goggles / Eyewear
-        c.fill_ellipse(ex_l, ey, 3.0, 5.4, INK)
-        c.fill_ellipse(ex_r, ey, 3.0, 5.4, INK)
-        c.fill_round_rect(hx - 6.0, ey - 6.5, 12.0, 10.5, 3.5, (72, 185, 235, 220), INK, 2.4)
-        c.fill_round_rect(hx + 8.0, ey - 6.5, 12.0, 10.5, 3.5, (72, 185, 235, 220), INK, 2.4)
-        c.fill_round_rect(hx - 1.5, hy + 9.5, 12.0, 4.5, 2.0, beard_sh, INK, 1.5)
-    elif arch == 4 or arch == 5:
-        # Balaclava / Riot Gritty Eyebrows + Intense Eyes
-        c.fill_round_rect(hx - 14.0, hy - 10.0, 35.0, 27.0, 9.0, (46, 52, 62, 255), INK, 2.2)
-        c.fill_round_rect(hx - 2.0, hy - 4.5, 22.0, 10.0, 4.0, skin_hi, INK, 1.8)
-        c.fill_ellipse(ex_l, ey - 0.5, 2.9, 4.6, INK)
-        c.fill_ellipse(ex_r, ey - 0.5, 2.9, 4.6, INK)
-        if arch == 5:
-            c.fill_round_rect(hx + 2.0, hy + 5.5, 16.0, 10.0, 4.0, (92, 98, 108, 255), INK, 2.0)
-            c.fill_circle(hx + 12.0, hy + 10.5, 3.8, (64, 68, 76, 255), INK, 1.6)
-    elif arch == 8:
-        # Half-Chrome Cyborg Face + Glowing Cyan Eye
-        c.fill_round_rect(hx + 2.0, y0 + 2.0, 20.0, hh - 4.0, 7.0, (160, 174, 192, 255), INK, 2.0)
-        c.fill_ellipse(ex_l, ey, 3.1, 5.6, INK)
-        c.fill_round_rect(ex_r - 5.0, ey - 5.0, 12.0, 8.0, 3.0, (25, 32, 42, 255), INK, 1.8)
-        c.fill_circle(ex_r + 1.0, ey - 1.0, 3.0, (35, 240, 255, 255))
-        c.fill_capsule(hx + 3.0, hy + 10.0, hx + 11.0, hy + 10.0, 1.3, INK)
+        # Camo Commando: dark brown fringe + open happy grin
+        c.fill_polygon(
+            [(hx - 16, hy - 12), (hx + 18, hy - 12), (hx + 19, hy - 5),
+             (hx + 8, hy - 6), (hx - 1, hy - 3), (hx - 12, hy - 6)],
+            (58, 42, 30, 255), INK, 2.0
+        )
+        c.fill_ellipse(ex_l, ey + 0.5, 3.1, 5.6, INK)
+        c.fill_ellipse(ex_r, ey + 0.5, 3.1, 5.6, INK)
+        c.fill_ellipse(hx + 8.0, hy + 11.0, 4.5, 3.2, (195, 58, 52, 255), INK, 1.6)
+    elif arch == 4:
+        # Spec-Ops Goggles: nerd glasses / sleek visor eyes + confident smirk
+        c.fill_round_rect(hx - 4.0, ey - 5.0, 10.5, 8.5, 2.5, (230, 242, 252, 255), INK, 2.0)
+        c.fill_round_rect(hx + 9.0, ey - 5.0, 10.5, 8.5, 2.5, (230, 242, 252, 255), INK, 2.0)
+        c.fill_circle(hx + 1.5, ey - 0.5, 2.3, INK)
+        c.fill_circle(hx + 14.5, ey - 0.5, 2.3, INK)
+        c.fill_capsule(hx + 4.0, hy + 10.5, hx + 11.0, hy + 10.0, 1.3, INK)
+    elif arch == 7:
+        # Viking Berserker: huge braided ginger/orange beard + mustache
+        beard_ginger = (182, 106, 48, 255)
+        beard_g_sh = (138, 76, 32, 255)
+        c.fill_ellipse(hx + 4.0, hy + 10.0, 20.0, 10.0, beard_ginger, INK, 2.3)
+        c.fill_polygon(
+            [(hx - 12, hy + 10), (hx - 4, hy + 26), (hx + 4, hy + 15),
+             (hx + 12, hy + 26), (hx + 20, hy + 10)],
+            beard_g_sh, INK, 2.2
+        )
+        c.fill_capsule(ex_l - 4.0, ey - 8.5, ex_l + 3.5, ey - 6.0, 2.3, INK)
+        c.fill_capsule(ex_r - 3.5, ey - 6.0, ex_r + 4.0, ey - 8.5, 2.3, INK)
+        c.fill_ellipse(ex_l, ey - 0.5, 3.2, 5.2, INK)
+        c.fill_ellipse(ex_r, ey - 0.5, 3.2, 5.2, INK)
+    elif arch == 9:
+        # Royal King: snowy white beard & mustache + friendly regal eyes
+        c.fill_polygon(
+            [(hx - 15, hy + 4), (hx + 21, hy + 4), (hx + 18, hy + 17),
+             (hx + 7, hy + 19), (hx - 6, hy + 17), (hx - 14, hy + 12)],
+            (242, 245, 250, 255), INK, 2.2
+        )
+        c.fill_ellipse(ex_l, ey - 0.5, 3.1, 5.5, INK)
+        c.fill_ellipse(ex_r, ey - 0.5, 3.1, 5.5, INK)
+        c.fill_round_rect(hx + 3.0, hy + 9.0, 8.5, 3.5, 1.5, (255, 255, 255, 255), INK, 1.4)
+    elif arch == 10:
+        # Pirate: black eye-patch over left eye + white sharp pirate grin
+        c.fill_capsule(hx - 12.0, ey - 8.0, hx + 20.0, ey + 2.0, 1.6, INK)
+        c.fill_ellipse(ex_l, ey, 4.5, 5.4, (28, 28, 32, 255), INK, 1.8)
+        c.fill_ellipse(ex_r, ey, 3.2, 5.6, INK)
+        c.fill_round_rect(hx + 2.0, hy + 8.5, 11.0, 4.5, 2.0, (250, 248, 245, 255), INK, 1.5)
+    elif arch == 11:
+        # Shadow Ninja: full indigo mask with single eye window
+        c.fill_round_rect(x0 + 1.0, y0 + 1.0, hw - 2.0, hh - 2.0, 12.0, (54, 42, 82, 255), INK, 2.3)
+        c.fill_round_rect(hx - 4.0, hy - 5.5, 23.0, 11.0, 4.5, skin_hi, INK, 1.9)
+        c.fill_capsule(ex_l - 3.5, ey - 5.0, ex_l + 3.0, ey - 3.0, 1.8, INK)
+        c.fill_capsule(ex_r - 3.0, ey - 3.0, ex_r + 3.5, ey - 5.0, 1.8, INK)
+        c.fill_ellipse(ex_l, ey, 2.8, 4.2, INK)
+        c.fill_ellipse(ex_r, ey, 2.8, 4.2, INK)
+    elif arch == 12:
+        # Brain Zombie: large bloodshot yellow eyes + jagged open zombie jaw
+        c.fill_circle(ex_l, ey - 1.0, 5.4, (242, 212, 58, 255), INK, 2.2)
+        c.fill_circle(ex_r, ey - 1.0, 5.4, (242, 212, 58, 255), INK, 2.2)
+        c.fill_circle(ex_l + 0.8, ey - 1.0, 2.0, (182, 32, 32, 255))
+        c.fill_circle(ex_r + 0.8, ey - 1.0, 2.0, (182, 32, 32, 255))
+        c.fill_round_rect(hx - 2.0, hy + 6.5, 16.0, 9.0, 3.5, (116, 36, 48, 255), INK, 2.0)
+        c.fill_triangle((hx + 0.0, hy + 6.5), (hx + 3.5, hy + 10.5), (hx + 6.5, hy + 6.5), (242, 240, 224, 255))
+        c.fill_triangle((hx + 8.0, hy + 6.5), (hx + 11.0, hy + 10.5), (hx + 13.5, hy + 6.5), (242, 240, 224, 255))
+    elif arch == 13:
+        # Skull Skeleton: dark hollow sockets + nose slit + skeleton teeth
+        c.fill_circle(ex_l, ey - 1.0, 5.2, INK)
+        c.fill_circle(ex_r, ey - 1.0, 5.2, INK)
+        c.fill_circle(ex_l + 0.5, ey - 1.5, 1.5, (238, 240, 245, 255))
+        c.fill_circle(ex_r + 0.5, ey - 1.5, 1.5, (238, 240, 245, 255))
+        c.fill_triangle((hx + 6.5, hy + 3.5), (hx + 9.0, hy + 7.5), (hx + 4.5, hy + 7.5), INK)
+        c.fill_round_rect(hx - 1.0, hy + 9.0, 17.0, 6.0, 2.0, (242, 240, 232, 255), INK, 1.8)
+        for tx in (hx + 3.0, hx + 7.5, hx + 12.0):
+            c.fill_capsule(tx, hy + 9.0, tx, hy + 15.0, 0.8, INK)
+    elif arch == 14:
+        # Spooky Ghost: huge hollow oval eyes + happy spooky dark mouth
+        c.fill_ellipse(ex_l, ey - 2.0, 3.8, 6.2, INK)
+        c.fill_ellipse(ex_r, ey - 2.0, 3.8, 6.2, INK)
+        c.fill_polygon(
+            [(hx - 1.0, hy + 6.0), (hx + 16.0, hy + 6.0), (hx + 13.0, hy + 13.5),
+             (hx + 7.5, hy + 11.0), (hx + 2.0, hy + 13.5)],
+            INK, INK, 1.0
+        )
+    elif arch == 15:
+        # Ancient Mummy: crisscross wrap strips + glowing amber eyes
+        for dy in (-10.0, -3.0, 5.0, 11.0):
+            c.fill_capsule(x0 + 3.0, hy + dy, x0 + hw - 3.0, hy + dy + 2.5, 1.1, (142, 132, 102, 255))
+        c.fill_round_rect(hx - 5.0, ey - 4.5, 25.0, 8.5, 3.5, (32, 26, 22, 255), INK, 1.5)
+        c.fill_circle(ex_l, ey - 0.5, 3.2, (255, 212, 62, 255))
+        c.fill_circle(ex_r, ey - 0.5, 3.2, (255, 212, 62, 255))
+    elif arch == 16:
+        # Cyber Robot: visor recess + glowing yellow round optic eyes + grill
+        c.fill_round_rect(hx - 6.0, ey - 6.5, 27.0, 12.0, 4.0, (46, 52, 62, 255), INK, 2.0)
+        c.fill_circle(ex_l + 0.5, ey - 0.5, 4.0, (255, 226, 72, 255), INK, 1.5)
+        c.fill_circle(ex_r + 0.5, ey - 0.5, 4.0, (255, 226, 72, 255), INK, 1.5)
+        c.fill_round_rect(hx - 1.0, hy + 8.5, 16.0, 5.0, 2.0, (66, 72, 82, 255), INK, 1.6)
+    elif arch == 17:
+        # Bio-Hazard Cyborg: emerald gas-mask lenses + central respirator filter
+        c.fill_circle(ex_l, ey - 1.5, 4.6, (255, 232, 92, 255), INK, 2.1)
+        c.fill_circle(ex_r, ey - 1.5, 4.6, (255, 232, 92, 255), INK, 2.1)
+        c.fill_circle(hx + 7.5, hy + 9.5, 5.5, (42, 66, 58, 255), INK, 2.2)
+    elif arch == 18:
+        # Shadow Cat: cream muzzle + round gold cat eyes + pink nose + whiskers
+        c.fill_ellipse(hx + 7.5, hy + 8.5, 10.5, 6.5, (242, 236, 226, 255), INK, 1.8)
+        c.fill_circle(ex_l, ey - 1.5, 4.4, (248, 198, 52, 255), INK, 1.8)
+        c.fill_circle(ex_r, ey - 1.5, 4.4, (248, 198, 52, 255), INK, 1.8)
+        c.fill_circle(ex_l + 0.4, ey - 1.5, 1.7, INK)
+        c.fill_circle(ex_r + 0.4, ey - 1.5, 1.7, INK)
+        c.fill_triangle((hx + 5.0, hy + 5.5), (hx + 10.0, hy + 5.5), (hx + 7.5, hy + 8.8), (244, 124, 148, 255))
+        for wy in (hy + 6.0, hy + 9.5):
+            c.fill_capsule(hx - 13.0, wy, hx - 4.0, wy - 0.8, 0.9, (242, 240, 235, 255))
+            c.fill_capsule(hx + 18.0, wy - 0.8, hx + 25.0, wy, 0.9, (242, 240, 235, 255))
+    elif arch == 19:
+        # Dragon Hero: confident anime amber eyes + smirk
+        c.fill_ellipse(ex_l, ey, 3.4, 5.8, (238, 138, 42, 255), INK, 1.7)
+        c.fill_ellipse(ex_r, ey, 3.4, 5.8, (238, 138, 42, 255), INK, 1.7)
+        c.fill_circle(ex_l + 0.4, ey - 0.5, 1.6, INK)
+        c.fill_circle(ex_r + 0.4, ey - 0.5, 1.6, INK)
+        c.fill_capsule(hx + 4.0, hy + 10.0, hx + 11.5, hy + 9.0, 1.3, INK)
+    elif arch == 20:
+        # Fierce Orc: thick scowl + fierce yellow eyes + twin white fangs
+        c.fill_capsule(ex_l - 4.0, ey - 8.5, ex_l + 4.0, ey - 5.0, 2.4, INK)
+        c.fill_capsule(ex_r - 4.0, ey - 5.0, ex_r + 4.0, ey - 8.5, 2.4, INK)
+        c.fill_circle(ex_l, ey - 0.5, 4.2, (252, 206, 52, 255), INK, 1.8)
+        c.fill_circle(ex_r, ey - 0.5, 4.2, (252, 206, 52, 255), INK, 1.8)
+        c.fill_circle(ex_l + 0.5, ey - 0.5, 1.5, INK)
+        c.fill_circle(ex_r + 0.5, ey - 0.5, 1.5, INK)
+        c.fill_capsule(hx + 1.0, hy + 10.0, hx + 14.0, hy + 10.0, 1.6, INK)
+        c.fill_triangle((hx + 0.5, hy + 10.5), (hx + 3.0, hy + 4.5), (hx + 5.0, hy + 10.5), (250, 248, 242, 255), INK, 1.3)
+        c.fill_triangle((hx + 10.0, hy + 10.5), (hx + 12.0, hy + 4.5), (hx + 14.5, hy + 10.5), (250, 248, 242, 255), INK, 1.3)
+    elif arch == 21:
+        # Magma Golem: glowing molten magma cracks & blazing orange slit eyes
+        c.fill_capsule(x0 + 5.0, y0 + 5.0, x0 + 18.0, y0 + 13.0, 1.3, (255, 146, 36, 255))
+        c.fill_capsule(x0 + 26.0, hy + 4.0, x0 + 38.0, hy + 12.0, 1.3, (255, 146, 36, 255))
+        c.fill_ellipse(ex_l, ey, 4.2, 2.4, (255, 178, 48, 255), INK, 1.4)
+        c.fill_ellipse(ex_r, ey, 4.2, 2.4, (255, 178, 48, 255), INK, 1.4)
+        c.fill_capsule(hx + 1.0, hy + 10.0, hx + 14.0, hy + 10.0, 1.5, (255, 138, 32, 255))
+    elif arch == 22:
+        # Crystal Golem: geometric facets & bright glowing yellow eyes
+        c.fill_polygon([(x0 + 6, y0 + 4), (hx, y0 + 10), (x0 + 14, hy + 4)], (255, 198, 236, 255))
+        c.fill_ellipse(ex_l, ey, 4.2, 2.5, (255, 224, 108, 255), INK, 1.4)
+        c.fill_ellipse(ex_r, ey, 4.2, 2.5, (255, 224, 108, 255), INK, 1.4)
+        c.fill_capsule(hx + 2.0, hy + 10.5, hx + 12.0, hy + 10.5, 1.4, (162, 68, 132, 255))
+    elif arch == 23:
+        # Tribal Monk: thick dark eyebrows + intense eyes + martial goatee
+        c.fill_capsule(ex_l - 4.0, ey - 8.5, ex_l + 3.5, ey - 6.0, 2.3, INK)
+        c.fill_capsule(ex_r - 3.5, ey - 6.0, ex_r + 4.0, ey - 8.5, 2.3, INK)
+        c.fill_ellipse(ex_l, ey - 0.5, 3.2, 5.4, INK)
+        c.fill_ellipse(ex_r, ey - 0.5, 3.2, 5.4, INK)
+        c.fill_polygon([(hx + 2, hy + 10), (hx + 13, hy + 10), (hx + 8, hy + 18)], (36, 28, 24, 255), INK, 1.6)
+        c.fill_capsule(hx + 4.0, hy + 10.0, hx + 11.0, hy + 10.0, 1.3, INK)
     else:
-        # Neutral / Veteran / Gritty Soldier (Ref #1 style)
+        # Neutral / Veteran Soldier (arch 0, 5, 6, 8)
         c.fill_capsule(ex_l - 3.5, ey - 7.5, ex_l + 3.5, ey - 7.2, 2.1, INK)
         c.fill_capsule(ex_r - 3.5, ey - 7.2, ex_r + 3.5, ey - 7.5, 2.1, INK)
         c.fill_ellipse(ex_l, ey, 3.2, 6.0, INK)
         c.fill_ellipse(ex_r, ey, 3.2, 6.0, INK)
-        if arch == 7:
-            c.fill_capsule(hx - 2.0, hy - 1.0, hx + 3.0, hy + 8.0, 1.2, (195, 76, 76, 240))
-            c.fill_round_rect(hx - 8.0, hy + 6.5, 26.0, 9.0, 4.0, beard_gray, INK, 1.8)
-        elif arch in (6, 9):
-            c.fill_round_rect(hx + 2.0, hy + 9.0, 10.0, 3.2, 1.5, (235, 235, 235, 255), INK, 1.5)
+        if arch in (5, 6):
+            # Scowl & stubble line
+            c.fill_capsule(hx + 3.0, hy + 10.5, hx + 11.0, hy + 9.5, 1.5, INK)
         else:
             c.fill_capsule(hx + 4.0, hy + 10.5, hx + 10.0, hy + 10.5, 1.4, INK)
     return c
@@ -432,14 +576,28 @@ def _draw_archetype_legs(arch: int, f: int) -> Canvas:
     pant_palette = [
         ((102, 110, 66, 255), (78, 84, 50, 255), (42, 28, 18, 255)),     # 0 Soldier Olive
         ((124, 104, 80, 255), (96, 80, 62, 255), (40, 26, 18, 255)),     # 1 Explorer Khaki
-        ((38, 88, 106, 255), (26, 66, 82, 255), (92, 46, 24, 255)),      # 2 Outlaw Denim + Cowboy Boots
-        ((64, 72, 54, 255), (46, 52, 38, 255), (34, 24, 18, 255)),       # 3 Commander
-        ((52, 58, 70, 255), (36, 40, 50, 255), (28, 30, 36, 255)),       # 4 Spec-Ops
-        ((62, 74, 96, 255), (44, 54, 72, 255), (30, 34, 42, 255)),       # 5 Enforcer
-        ((78, 82, 90, 255), (56, 60, 68, 255), (52, 36, 26, 255)),       # 6 Rebel
-        ((126, 112, 90, 255), (96, 84, 68, 255), (218, 220, 226, 255)),  # 7 Scout Sneakers
-        ((64, 72, 86, 255), (44, 50, 62, 255), (42, 48, 60, 255)),       # 8 Cyborg
-        ((76, 82, 92, 255), (52, 58, 66, 255), (34, 36, 42, 255)),       # 9 Breacher
+        ((38, 88, 106, 255), (26, 66, 82, 255), (92, 46, 24, 255)),      # 2 Outlaw Denim
+        ((82, 98, 56, 255), (58, 72, 40, 255), (36, 28, 20, 255)),       # 3 Camo
+        ((44, 48, 56, 255), (30, 34, 42, 255), (22, 24, 28, 255)),       # 4 Spec-Ops
+        ((162, 44, 40, 255), (122, 30, 28, 255), (212, 166, 56, 255)),   # 5 Spartan
+        ((158, 42, 38, 255), (118, 28, 26, 255), (110, 64, 34, 255)),    # 6 Centurion
+        ((102, 68, 44, 255), (74, 48, 30, 255), (168, 152, 128, 255)),   # 7 Viking
+        ((134, 140, 148, 255), (96, 102, 110, 255), (192, 198, 208, 255)),# 8 Crusader
+        ((126, 36, 48, 255), (92, 24, 34, 255), (224, 178, 58, 255)),    # 9 King
+        ((46, 44, 48, 255), (32, 30, 34, 255), (76, 42, 26, 255)),       # 10 Pirate
+        ((52, 44, 78, 255), (36, 30, 56, 255), (30, 26, 40, 255)),       # 11 Ninja
+        ((74, 82, 64, 255), (54, 60, 46, 255), (62, 48, 34, 255)),       # 12 Zombie
+        ((38, 40, 46, 255), (28, 30, 34, 255), (235, 232, 222, 255)),    # 13 Skeleton
+        ((232, 242, 252, 255), (186, 208, 230, 255), (172, 196, 222, 255)),# 14 Ghost
+        ((216, 204, 168, 255), (178, 166, 134, 255), (192, 180, 146, 255)),# 15 Mummy
+        ((146, 156, 170, 255), (112, 120, 134, 255), (78, 86, 98, 255)), # 16 Robot
+        ((54, 118, 92, 255), (38, 88, 68, 255), (42, 48, 56, 255)),      # 17 Bio Cyborg
+        ((42, 44, 50, 255), (28, 30, 36, 255), (242, 238, 230, 255)),    # 18 Cat
+        ((56, 74, 92, 255), (38, 52, 66, 255), (188, 148, 52, 255)),     # 19 Dragon Hero
+        ((102, 58, 94, 255), (76, 42, 70, 255), (84, 54, 34, 255)),      # 20 Orc
+        ((76, 56, 46, 255), (54, 38, 30, 255), (248, 132, 34, 255)),     # 21 Magma
+        ((232, 138, 204, 255), (186, 96, 162, 255), (248, 174, 224, 255)),# 22 Crystal
+        ((122, 78, 44, 255), (88, 54, 30, 255), (188, 166, 134, 255)),   # 23 Monk
     ]
     p_hi, p_sh, boot = pant_palette[arch % len(pant_palette)]
 
@@ -449,23 +607,18 @@ def _draw_archetype_legs(arch: int, f: int) -> Canvas:
         return c
 
     py = p["py"]
-    thick = 6.2 if arch in (5, 9) else 5.2
+    thick = 6.2 if arch in (8, 16, 20, 21, 22) else 5.2
 
-    # Back Leg
     c.fill_capsule(43, py, p["llx"], p["lly"] - 4, thick, p_sh, INK, 2.5)
-    # Front Leg
     c.fill_capsule(52, py, p["lrx"], p["lry"] - 4, thick + 0.4, p_hi, INK, 2.5)
-
-    # Crotch seam overlap clean fill
     c.fill_round_rect(39, py - 4, 19, 8, 3, p_hi, INK, 2.0)
 
-    if arch in (5, 9):
-        c.fill_round_rect(p["lrx"] - 5, (py + p["lry"]) * 0.5 - 3, 11, 8, 3, (112, 118, 128, 255), INK, 1.8)
-    elif arch == 8:
-        c.fill_circle((52 + p["lrx"]) * 0.5, (py + p["lry"]) * 0.5, 4.0, (60, 232, 255, 255), INK, 1.8)
+    if arch in (5, 6, 8, 19):
+        c.fill_round_rect(p["lrx"] - 5, (py + p["lry"]) * 0.5 - 3, 11, 7, 2.5, (216, 174, 64, 255), INK, 1.6)
+    elif arch == 21:
+        c.fill_capsule(p["lrx"] - 2, py + 2, p["lrx"] + 2, p["lry"] - 6, 1.4, (255, 146, 36, 255))
 
-    # Chunky Chibi Boots with Bold Outlines
-    bw = 14.0 if arch == 2 else 13.0
+    bw = 14.0 if arch in (8, 16, 21, 22) else 13.0
     c.fill_round_rect(p["llx"] - 6.0, p["lly"] - 5.0, bw, 9.0, 3.2, boot, INK, 2.5)
     c.fill_round_rect(p["lrx"] - 5.5, p["lry"] - 5.0, bw + 1.0, 9.0, 3.2, boot, INK, 2.5)
     return c
@@ -475,82 +628,104 @@ def _draw_archetype_torso(arch: int, f: int) -> Canvas:
     c = Canvas(SPRITE_SIZE, SPRITE_SIZE)
     p = _pose_metrics(f)
     if p["dead"]:
-        shirt_c = [(94, 102, 58, 255), (218, 202, 178, 255), (198, 204, 210, 255)][min(arch, 2)]
-        c.fill_round_rect(34, 62, 26, 18, 6, shirt_c, INK, 2.4)
+        c.fill_round_rect(34, 62, 26, 18, 6, (120, 128, 140, 255), INK, 2.4)
         return c
 
     ty = p["ty"]
-    # Reference-authentic shirt/vest palettes & details
     if arch == 0:
-        # Ref #1 Soldier: olive shirt + collar + brown straps + twin front ammo pouches
-        shirt = (94, 104, 58, 255)
-        shirt_sh = (74, 82, 44, 255)
-        strap = (142, 98, 56, 255)
-        pouch = (140, 112, 74, 255)
+        # Soldier: olive shirt + collar + brown straps + twin pouches
+        shirt, shirt_sh = (94, 104, 58, 255), (74, 82, 44, 255)
+        strap, pouch = (142, 98, 56, 255), (140, 112, 74, 255)
         c.fill_round_rect(33, ty, 30, 22, 6, shirt, INK, 2.6)
-        # Shoulders / sleeves
         c.fill_round_rect(28, ty + 2, 10, 15, 4, shirt_sh, INK, 2.2)
         c.fill_round_rect(58, ty + 2, 10, 15, 4, shirt, INK, 2.2)
-        # V Collar
         c.fill_triangle((42, ty), (54, ty), (48, ty + 6), shirt_sh, INK, 1.8)
-        # Suspenders & twin front chest/belt pouches
         c.fill_round_rect(38, ty + 1, 5, 16, 1.5, strap, INK, 1.6)
         c.fill_round_rect(51, ty + 1, 5, 16, 1.5, strap, INK, 1.6)
         c.fill_round_rect(35, ty + 12, 11, 9, 2.5, pouch, INK, 2.0)
         c.fill_round_rect(47, ty + 12, 11, 9, 2.5, pouch, INK, 2.0)
     elif arch == 1:
-        # Ref #2 Explorer: tan collared button shirt + open brown vest + silver belt buckle
-        shirt = (220, 204, 180, 255)
-        vest = (96, 70, 44, 255)
-        belt = (58, 40, 28, 255)
-        buckle = (212, 220, 228, 255)
+        # Explorer: tan button shirt + open vest + silver buckle
+        shirt, vest, belt, buckle = (220, 204, 180, 255), (96, 70, 44, 255), (58, 40, 28, 255), (212, 220, 228, 255)
         c.fill_round_rect(34, ty, 28, 21, 6, shirt, INK, 2.6)
         c.fill_round_rect(29, ty + 2, 9, 13, 4, shirt, INK, 2.2)
         c.fill_round_rect(58, ty + 2, 9, 13, 4, shirt, INK, 2.2)
-        # Open vest panels
         c.fill_round_rect(35, ty + 1, 10, 17, 3, vest, INK, 2.0)
         c.fill_round_rect(51, ty + 1, 10, 17, 3, vest, INK, 2.0)
-        # Belt & Silver Square Buckle
         c.fill_round_rect(34, ty + 15, 28, 6, 2, belt, INK, 2.0)
         c.fill_round_rect(45, ty + 14.5, 8, 7, 1.5, buckle, INK, 1.8)
     elif arch == 2:
-        # Ref #3 Outlaw: light cool gray shirt + red neckerchief + dark charcoal vest + gold buckle
-        shirt = (202, 208, 214, 255)
-        vest = (74, 76, 80, 255)
-        scarf = (220, 56, 42, 255)
-        belt = (118, 66, 36, 255)
-        buckle = (236, 176, 62, 255)
+        # Outlaw: gray shirt + red neckerchief + charcoal vest + gold buckle
+        shirt, vest, scarf = (202, 208, 214, 255), (74, 76, 80, 255), (220, 56, 42, 255)
+        belt, buckle = (118, 66, 36, 255), (236, 176, 62, 255)
         c.fill_round_rect(33, ty, 30, 22, 6, shirt, INK, 2.6)
         c.fill_round_rect(28, ty + 2, 9, 12, 4, shirt, INK, 2.2)
         c.fill_round_rect(59, ty + 2, 9, 12, 4, shirt, INK, 2.2)
-        # Charcoal vest sides
         c.fill_round_rect(35, ty + 1, 11, 16, 3, vest, INK, 2.0)
         c.fill_round_rect(50, ty + 1, 11, 16, 3, vest, INK, 2.0)
-        # Bright red neckerchief triangle at throat
         c.fill_polygon([(40, ty), (56, ty), (48, ty + 9)], scarf, INK, 1.9)
-        # Brown gun belt + gold buckle
         c.fill_round_rect(33, ty + 15, 30, 6, 2, belt, INK, 2.0)
         c.fill_round_rect(44, ty + 14.5, 8, 7, 1.5, buckle, INK, 1.8)
     else:
-        # Archetypes 3..9 matching rich chibi outfit geometry
+        # Presets 3..23 bespoke iconic details
         style_map = {
-            3: ((84, 94, 66, 255), (120, 96, 64, 255), (235, 192, 68, 255)),    # Commander
-            4: ((46, 52, 64, 255), (68, 78, 92, 255), (85, 220, 175, 255)),     # Spec-Ops
-            5: ((54, 68, 94, 255), (82, 96, 118, 255), (225, 185, 65, 255)),    # Enforcer Riot
-            6: ((126, 64, 52, 255), (72, 66, 64, 255), (210, 175, 78, 255)),    # Urban Rebel
-            7: ((196, 174, 136, 255), (96, 110, 78, 255), (240, 125, 45, 255)), # Scout
-            8: ((72, 82, 100, 255), (145, 160, 180, 255), (40, 238, 255, 255)), # Cyborg
-            9: ((78, 96, 116, 255), (160, 170, 182, 255), (240, 190, 60, 255)), # Breacher
+            3: ((102, 122, 68, 255), (68, 86, 44, 255), (144, 108, 62, 255)),   # Camo Commando
+            4: ((46, 52, 62, 255), (72, 82, 96, 255), (96, 198, 238, 255)),      # Spec-Ops Goggles
+            5: ((212, 164, 52, 255), (168, 44, 38, 255), (242, 206, 92, 255)),   # Golden Spartan
+            6: ((172, 178, 186, 255), (166, 42, 38, 255), (222, 178, 64, 255)),  # Roman Centurion
+            7: ((136, 86, 48, 255), (192, 172, 144, 255), (222, 176, 62, 255)),  # Viking
+            8: ((238, 240, 244, 255), (168, 34, 34, 255), (224, 178, 56, 255)),  # Crusader (White + Red Cross)
+            9: ((178, 42, 48, 255), (242, 240, 236, 255), (244, 196, 56, 255)),  # Royal King
+            10: ((168, 44, 42, 255), (236, 232, 224, 255), (222, 174, 56, 255)), # Pirate
+            11: ((48, 42, 74, 255), (86, 54, 132, 255), (182, 192, 208, 255)),   # Shadow Ninja
+            12: ((96, 84, 62, 255), (132, 186, 86, 255), (156, 58, 64, 255)),    # Brain Zombie
+            13: ((34, 36, 42, 255), (238, 236, 226, 255), (146, 148, 156, 255)), # Skeleton Ribcage
+            14: ((242, 248, 255, 255), (196, 218, 240, 255), (42, 48, 58, 255)), # Spooky Ghost Sheet
+            15: ((222, 210, 174, 255), (178, 166, 132, 255), (226, 178, 54, 255)),# Mummy Linen
+            16: ((178, 188, 202, 255), (72, 82, 96, 255), (255, 220, 62, 255)),  # Cyber Robot
+            17: ((188, 148, 54, 255), (62, 136, 108, 255), (64, 236, 248, 255)), # Bio Cyborg
+            18: ((42, 44, 50, 255), (238, 232, 222, 255), (246, 196, 52, 255)),  # Shadow Cat
+            19: ((58, 118, 148, 255), (224, 176, 58, 255), (86, 222, 168, 255)), # Dragon Hero
+            20: ((152, 92, 140, 255), (234, 226, 208, 255), (212, 166, 62, 255)),# Fierce Orc
+            21: ((78, 56, 46, 255), (252, 132, 34, 255), (255, 202, 72, 255)),   # Magma Golem
+            22: ((242, 158, 214, 255), (206, 98, 174, 255), (255, 218, 242, 255)),# Crystal Golem
+            23: ((216, 160, 112, 255), (168, 106, 56, 255), (232, 206, 168, 255)),# Tribal Monk
         }
         s_col, v_col, acc_col = style_map[arch]
-        w_t = 34 if arch in (5, 9) else 30
+        w_t = 34 if arch in (8, 16, 20, 21, 22) else 30
         x_t = 48 - w_t * 0.5
         c.fill_round_rect(x_t, ty, w_t, 22, 6, s_col, INK, 2.6)
         c.fill_round_rect(x_t - 5, ty + 2, 9, 13, 4, s_col, INK, 2.2)
         c.fill_round_rect(x_t + w_t - 4, ty + 2, 9, 13, 4, s_col, INK, 2.2)
-        c.fill_round_rect(x_t + 3, ty + 3, w_t - 6, 13, 4, v_col, INK, 2.0)
-        c.fill_round_rect(44, ty + 6, 8, 6, 2, acc_col, INK, 1.5)
-        c.fill_round_rect(x_t, ty + 16, w_t, 5, 2, (48, 44, 42, 255), INK, 1.8)
+
+        if arch == 8:
+            # Crusader red cross
+            c.fill_round_rect(45, ty + 2, 6, 15, 1, v_col, INK, 1.3)
+            c.fill_round_rect(40, ty + 6, 16, 5, 1, v_col, INK, 1.3)
+        elif arch == 13:
+            # Skeleton ribcage rungs
+            c.fill_round_rect(46, ty + 2, 4, 16, 1, v_col)
+            for ry in (ty + 4, ty + 9, ty + 14):
+                c.fill_round_rect(38, ry, 20, 3, 1.5, v_col)
+        elif arch == 18:
+            # Cat belly & golden bell
+            c.fill_ellipse(48, ty + 12, 8.5, 8.0, v_col)
+            c.fill_round_rect(36, ty + 1, 24, 4, 1.5, (186, 44, 44, 255), INK, 1.4)
+            c.fill_circle(48, ty + 5, 3.8, acc_col, INK, 1.6)
+        elif arch == 20 or arch == 23:
+            # Tribal bead necklace
+            for bx in range(38, 60, 5):
+                c.fill_circle(bx, ty + 4 + abs(bx - 48) * 0.25, 2.8, acc_col, INK, 1.3)
+        elif arch == 21:
+            # Glowing lava fissure on chest
+            c.fill_capsule(39, ty + 4, 49, ty + 13, 1.6, v_col)
+            c.fill_capsule(55, ty + 5, 47, ty + 15, 1.5, v_col)
+        else:
+            c.fill_round_rect(x_t + 3, ty + 3, w_t - 6, 12, 3.5, v_col, INK, 1.8)
+            c.fill_round_rect(44, ty + 5, 8, 6, 2, acc_col, INK, 1.4)
+
+        if arch not in (14, 15, 18, 21, 22):
+            c.fill_round_rect(x_t, ty + 16, w_t, 5, 2, (48, 44, 42, 255), INK, 1.8)
     return c
 
 
@@ -563,31 +738,20 @@ def _draw_archetype_headgear(arch: int, f: int) -> Canvas:
     hx, hy = p["hx"], p["hy"]
 
     if arch == 0:
-        # Ref #1: Steel Military M1 Helmet (Olive dome + wide curved rim)
-        dome = (136, 142, 84, 255)
-        hi = (158, 166, 102, 255)
-        rim = (104, 110, 64, 255)
+        dome, hi, rim = (136, 142, 84, 255), (158, 166, 102, 255), (104, 110, 64, 255)
         c.fill_ellipse(hx, hy - 14.0, 24.5, 14.5, dome, INK, 2.6)
         c.fill_ellipse(hx + 4.0, hy - 18.0, 13.0, 6.0, hi)
         c.fill_ellipse(hx + 0.5, hy - 8.0, 26.5, 5.2, rim, INK, 2.5)
     elif arch == 1:
-        # Ref #2: Explorer Sun / Safari Hat (Tan dome + slate hatband + wide curved brim)
-        dome = (158, 132, 102, 255)
-        band = (86, 92, 98, 255)
-        brim = (142, 114, 86, 255)
+        dome, band, brim = (158, 132, 102, 255), (86, 92, 98, 255), (142, 114, 86, 255)
         c.fill_ellipse(hx, hy - 14.5, 21.0, 13.0, dome, INK, 2.6)
         c.fill_round_rect(hx - 20.0, hy - 15.0, 40.0, 6.0, 2.0, band, INK, 2.0)
         c.fill_ellipse(hx + 1.0, hy - 8.5, 31.0, 6.0, brim, INK, 2.6)
     elif arch == 2:
-        # Ref #3: Cowboy / Outback Hat (Dark chocolate crown + brown band + star + upturned brim)
-        crown = (75, 53, 40, 255)
-        band = (126, 78, 48, 255)
-        brim = (62, 43, 32, 255)
-        star = (212, 150, 82, 255)
+        crown, band, brim, star = (75, 53, 40, 255), (126, 78, 48, 255), (62, 43, 32, 255), (212, 150, 82, 255)
         c.fill_round_rect(hx - 17.0, hy - 28.0, 34.0, 19.0, 7.0, crown, INK, 2.6)
         c.fill_round_rect(hx - 17.0, hy - 16.5, 34.0, 6.0, 2.0, band, INK, 1.9)
         c.fill_circle(hx + 4.0, hy - 13.5, 3.0, star, INK, 1.4)
-        # Sculpted curved cowboy brim
         c.fill_polygon(
             [(hx - 30, hy - 14), (hx - 26, hy - 18), (hx - 15, hy - 11),
              (hx + 16, hy - 11), (hx + 27, hy - 18), (hx + 31, hy - 14),
@@ -595,54 +759,158 @@ def _draw_archetype_headgear(arch: int, f: int) -> Canvas:
             brim, INK, 2.6
         )
     elif arch == 3:
-        # Military Beret + Gold Badge
-        beret = (166, 40, 44, 255)
-        band = (36, 32, 34, 255)
-        c.fill_ellipse(hx - 2.0, hy - 15.0, 25.0, 10.5, beret, INK, 2.6)
-        c.fill_round_rect(hx - 21.0, hy - 11.5, 42.0, 5.5, 2.0, band, INK, 2.0)
-        c.fill_circle(hx + 9.0, hy - 14.5, 3.5, (242, 196, 62, 255), INK, 1.5)
+        # Woodland Camo M1 Helmet
+        c.fill_ellipse(hx, hy - 14.0, 24.5, 14.5, (124, 152, 72, 255), INK, 2.6)
+        c.fill_ellipse(hx - 9.0, hy - 17.0, 6.0, 4.0, (66, 86, 42, 255))
+        c.fill_ellipse(hx + 8.0, hy - 15.0, 7.0, 4.5, (72, 54, 38, 255))
+        c.fill_ellipse(hx + 0.5, hy - 8.0, 26.5, 5.2, (86, 108, 48, 255), INK, 2.5)
     elif arch == 4:
-        # Spec-Ops Helmet + NVG Mount
-        c.fill_ellipse(hx, hy - 12.0, 24.0, 14.0, (54, 62, 74, 255), INK, 2.6)
-        c.fill_round_rect(hx + 11.0, hy - 20.0, 11.0, 8.0, 2.5, (86, 96, 110, 255), INK, 2.0)
-        c.fill_circle(hx + 20.0, hy - 16.0, 3.2, (60, 248, 155, 255), INK, 1.5)
+        # SWAT Tactical Helmet + White Twin Ski Goggles
+        c.fill_ellipse(hx, hy - 13.0, 24.5, 14.0, (62, 68, 78, 255), INK, 2.6)
+        c.fill_round_rect(hx - 18.0, hy - 14.5, 36.0, 5.0, 2.0, (34, 38, 46, 255))
+        c.fill_round_rect(hx - 10.0, hy - 20.0, 14.0, 11.0, 4.0, (236, 242, 248, 255), INK, 2.2)
+        c.fill_round_rect(hx + 6.0, hy - 20.0, 14.0, 11.0, 4.0, (236, 242, 248, 255), INK, 2.2)
     elif arch == 5:
-        # Enforcer Heavy Riot Helmet + Clear Shield
-        c.fill_ellipse(hx, hy - 11.0, 26.0, 16.0, (66, 82, 112, 255), INK, 2.7)
-        c.fill_round_rect(hx + 2.0, hy - 10.0, 20.0, 13.0, 4.0, (120, 210, 240, 195), INK, 2.2)
+        # Golden Spartan Corinthian Helmet + Red Plume Crest
+        c.fill_polygon([(hx - 16, hy - 28), (hx + 16, hy - 28), (hx + 18, hy - 16), (hx - 12, hy - 16)], (188, 38, 34, 255), INK, 2.4)
+        c.fill_ellipse(hx, hy - 11.5, 24.5, 14.0, (218, 172, 54, 255), INK, 2.6)
+        c.fill_round_rect(hx - 21.0, hy - 11.0, 12.0, 22.0, 4.0, (198, 152, 42, 255), INK, 2.2)
+        c.fill_round_rect(hx + 4.0, hy - 11.0, 6.0, 14.0, 2.0, (218, 172, 54, 255), INK, 1.8)
     elif arch == 6:
-        # Urban Rebel Hood / Scarf Wrap
-        c.fill_ellipse(hx - 2.0, hy - 11.0, 24.0, 15.0, (132, 62, 52, 255), INK, 2.6)
-        c.fill_round_rect(hx - 6.0, hy + 4.0, 26.0, 13.0, 5.0, (166, 48, 42, 255), INK, 2.2)
+        # Roman Centurion Steel Galea + Tall Red Crest
+        c.fill_polygon([(hx - 10, hy - 30), (hx + 12, hy - 30), (hx + 14, hy - 18), (hx - 8, hy - 18)], (182, 42, 38, 255), INK, 2.3)
+        c.fill_ellipse(hx, hy - 12.5, 24.0, 13.5, (168, 174, 184, 255), INK, 2.6)
+        c.fill_round_rect(hx - 22.0, hy - 9.0, 44.0, 4.5, 2.0, (226, 178, 56, 255), INK, 2.0)
     elif arch == 7:
-        # Scout Baseball Cap + Headset
-        c.fill_ellipse(hx - 1.0, hy - 13.0, 22.0, 11.5, (218, 102, 42, 255), INK, 2.6)
-        c.fill_round_rect(hx + 4.0, hy - 9.5, 24.0, 6.0, 2.5, (186, 76, 30, 255), INK, 2.2)
-        c.fill_circle(hx - 12.0, hy + 2.0, 5.5, (64, 70, 82, 255), INK, 2.0)
+        # Viking Horned Iron Helmet
+        c.fill_polygon([(hx - 16, hy - 15), (hx - 29, hy - 28), (hx - 23, hy - 10)], (242, 236, 214, 255), INK, 2.3)
+        c.fill_polygon([(hx + 16, hy - 15), (hx + 29, hy - 28), (hx + 23, hy - 10)], (242, 236, 214, 255), INK, 2.3)
+        c.fill_ellipse(hx, hy - 13.5, 23.0, 12.5, (112, 118, 128, 255), INK, 2.6)
+        c.fill_round_rect(hx - 22.0, hy - 10.5, 44.0, 5.0, 2.0, (186, 148, 62, 255), INK, 2.0)
     elif arch == 8:
-        # Cyborg Head Crest & Glow Optic Fin
-        c.fill_round_rect(hx - 10.0, hy - 23.0, 24.0, 10.0, 4.0, (132, 146, 166, 255), INK, 2.4)
-        c.fill_round_rect(hx + 2.0, hy - 21.0, 8.0, 5.0, 2.0, (45, 242, 255, 255))
+        # Crusader White Great-Helm + Small Side Horns & Gold Trim
+        c.fill_polygon([(hx - 18, hy - 17), (hx - 28, hy - 27), (hx - 21, hy - 12)], (232, 224, 198, 255), INK, 2.2)
+        c.fill_polygon([(hx + 18, hy - 17), (hx + 28, hy - 27), (hx + 21, hy - 12)], (232, 224, 198, 255), INK, 2.2)
+        c.fill_ellipse(hx, hy - 12.5, 24.5, 13.5, (238, 240, 244, 255), INK, 2.6)
+        c.fill_round_rect(hx - 22.0, hy - 10.0, 44.0, 4.5, 2.0, (224, 176, 52, 255), INK, 2.0)
+    elif arch == 9:
+        # Royal Jeweled Golden Crown
+        c.fill_ellipse(hx, hy - 13.0, 20.0, 8.0, (168, 36, 44, 255), INK, 2.2)
+        c.fill_polygon(
+            [(hx - 18, hy - 8), (hx - 20, hy - 26), (hx - 8, hy - 16),
+             (hx, hy - 29), (hx + 8, hy - 16), (hx + 20, hy - 26), (hx + 18, hy - 8)],
+            (248, 198, 48, 255), INK, 2.5
+        )
+        c.fill_circle(hx, hy - 14.0, 2.6, (218, 42, 62, 255))
+    elif arch == 10:
+        # Pirate Skull-and-Crossbones Hat
+        c.fill_polygon(
+            [(hx - 27, hy - 10), (hx - 18, hy - 24), (hx + 18, hy - 24), (hx + 27, hy - 10), (hx + 23, hy - 5), (hx - 23, hy - 5)],
+            (38, 36, 40, 255), INK, 2.6
+        )
+        c.fill_circle(hx + 3.0, hy - 14.5, 4.5, (242, 240, 234, 255), INK, 1.5)
+        c.fill_circle(hx + 1.5, hy - 15.0, 1.1, INK)
+        c.fill_circle(hx + 4.5, hy - 15.0, 1.1, INK)
+    elif arch == 11:
+        # Shadow Ninja Bandana Hood + Silver Forehead Plate
+        c.fill_ellipse(hx, hy - 12.5, 23.5, 12.5, (64, 48, 96, 255), INK, 2.6)
+        c.fill_round_rect(hx - 12.0, hy - 14.0, 26.0, 7.0, 2.0, (176, 186, 200, 255), INK, 2.0)
+        c.fill_polygon([(hx - 22, hy - 12), (hx - 32, hy - 18), (hx - 29, hy - 7)], (84, 52, 134, 255), INK, 2.0)
+    elif arch == 12:
+        # Exposed Pink Brain Dome
+        c.fill_ellipse(hx, hy - 15.5, 21.0, 10.5, (242, 124, 158, 255), INK, 2.5)
+        c.fill_ellipse(hx - 7.0, hy - 16.5, 7.0, 5.0, (255, 158, 186, 255), INK, 1.6)
+        c.fill_ellipse(hx + 6.0, hy - 15.5, 7.5, 5.0, (255, 158, 186, 255), INK, 1.6)
+    elif arch == 13:
+        # Dark Horned Skull Cap + Sticking Arrow
+        c.fill_polygon([(hx - 16, hy - 14), (hx - 27, hy - 25), (hx - 20, hy - 10)], (220, 216, 198, 255), INK, 2.2)
+        c.fill_polygon([(hx + 16, hy - 14), (hx + 27, hy - 25), (hx + 20, hy - 10)], (220, 216, 198, 255), INK, 2.2)
+        c.fill_ellipse(hx, hy - 13.0, 22.5, 10.0, (44, 46, 54, 255), INK, 2.5)
+    elif arch == 14:
+        # Pointed White Ghost Hood Tip
+        c.fill_polygon([(hx - 18, hy - 12), (hx - 4, hy - 30), (hx + 19, hy - 12)], (246, 250, 255, 255), INK, 2.6)
+    elif arch == 15:
+        # Mummy Gold Band + Loose Bandage Tail
+        c.fill_round_rect(hx - 21.0, hy - 13.5, 42.0, 6.0, 2.0, (226, 178, 56, 255), INK, 2.0)
+        c.fill_polygon([(hx - 20, hy - 12), (hx - 32, hy - 6), (hx - 27, hy + 2)], (222, 210, 174, 255), INK, 2.0)
+    elif arch == 16:
+        # Cyber Robot Antenna Crest
+        c.fill_round_rect(hx - 18.0, hy - 19.0, 36.0, 9.0, 3.5, (148, 158, 172, 255), INK, 2.5)
+        c.fill_capsule(hx - 2.0, hy - 19.0, hx - 2.0, hy - 29.0, 2.0, INK)
+        c.fill_circle(hx - 2.0, hy - 30.0, 3.6, (255, 216, 58, 255), INK, 1.8)
+    elif arch == 17:
+        # Bio-Hazard Helmet Crest Fin
+        c.fill_ellipse(hx, hy - 13.5, 23.0, 11.5, (52, 134, 102, 255), INK, 2.6)
+        c.fill_round_rect(hx - 5.0, hy - 26.0, 12.0, 12.0, 3.5, (238, 194, 58, 255), INK, 2.2)
+    elif arch == 18:
+        # Pointed Shadow Cat Ears
+        c.fill_polygon([(hx - 19, hy - 10), (hx - 16, hy - 29), (hx - 3, hy - 14)], (46, 48, 54, 255), INK, 2.5)
+        c.fill_polygon([(hx + 4, hy - 14), (hx + 16, hy - 29), (hx + 20, hy - 10)], (46, 48, 54, 255), INK, 2.5)
+        c.fill_polygon([(hx - 15, hy - 13), (hx - 14, hy - 23), (hx - 7, hy - 15)], (242, 132, 158, 255))
+        c.fill_polygon([(hx + 8, hy - 15), (hx + 15, hy - 23), (hx + 17, hy - 13)], (242, 132, 158, 255))
+    elif arch == 19:
+        # Spiky Emerald Dragon Hero Hair
+        c.fill_polygon(
+            [(hx - 22, hy - 8), (hx - 24, hy - 24), (hx - 10, hy - 20), (hx + 2, hy - 29),
+             (hx + 14, hy - 21), (hx + 26, hy - 23), (hx + 20, hy - 8), (hx + 8, hy - 12), (hx - 6, hy - 9)],
+            (28, 148, 118, 255), INK, 2.5
+        )
+    elif arch == 20:
+        # Orc Turquoise Mohawk Crest
+        c.fill_polygon(
+            [(hx - 14, hy - 13), (hx - 12, hy - 30), (hx - 2, hy - 24), (hx + 6, hy - 31),
+             (hx + 14, hy - 13)],
+            (46, 186, 206, 255), INK, 2.5
+        )
+    elif arch == 21:
+        # Magma Golem Volcanic Jagged Crown
+        c.fill_polygon(
+            [(hx - 20, hy - 12), (hx - 15, hy - 26), (hx - 4, hy - 18), (hx + 4, hy - 28),
+             (hx + 16, hy - 17), (hx + 22, hy - 12)],
+            (72, 52, 42, 255), INK, 2.5
+        )
+    elif arch == 22:
+        # Pink Crystal Golem Spires
+        c.fill_polygon(
+            [(hx - 19, hy - 12), (hx - 14, hy - 29), (hx - 4, hy - 18), (hx + 5, hy - 31),
+             (hx + 14, hy - 18), (hx + 22, hy - 25), (hx + 21, hy - 12)],
+            (248, 156, 218, 255), INK, 2.5
+        )
     else:
-        # Heavy Breacher Helmet + Golden Armored Visor
-        c.fill_circle(hx, hy - 2.0, 24.5, (92, 112, 138, 255), INK, 2.7)
-        c.fill_round_rect(hx + 1.0, hy - 10.0, 22.0, 14.0, 4.5, (40, 46, 56, 255), INK, 2.2)
-        c.fill_round_rect(hx + 5.0, hy - 7.0, 14.0, 8.0, 2.5, (248, 198, 64, 255), INK, 1.6)
+        # Tribal Monk Crimson Headband
+        c.fill_round_rect(hx - 21.0, hy - 12.0, 42.0, 6.5, 2.0, (192, 42, 42, 255), INK, 2.2)
+        c.fill_polygon([(hx - 20, hy - 10), (hx - 32, hy - 15), (hx - 28, hy - 4)], (192, 42, 42, 255), INK, 2.0)
     return c
 
 
 def _draw_archetype_hands(arch: int, f: int) -> Canvas:
     c = Canvas(SPRITE_SIZE, SPRITE_SIZE)
     p = _pose_metrics(f)
-    hand_col = (165, 180, 198, 255) if arch == 8 else ((64, 72, 86, 255) if arch in (4, 5, 9) else (246, 190, 160, 255))
+    hand_map = {
+        4: (44, 48, 56, 255),
+        8: (182, 190, 202, 255),
+        10: (202, 142, 102, 255),
+        11: (54, 42, 82, 255),
+        12: (122, 174, 78, 255),
+        13: (240, 238, 228, 255),
+        14: (242, 248, 255, 255),
+        15: (218, 206, 170, 255),
+        16: (176, 186, 198, 255),
+        17: (64, 134, 106, 255),
+        18: (42, 44, 50, 255),
+        20: (148, 88, 136, 255),
+        21: (78, 58, 48, 255),
+        22: (242, 152, 210, 255),
+        23: (214, 158, 108, 255),
+    }
+    hand_col = hand_map.get(arch, (246, 190, 160, 255))
     if p["dead"]:
         c.fill_circle(54, 80, 5.5, hand_col, INK, 2.3)
         return c
 
     ty = p["ty"]
-    r_h = 5.4 if arch in (5, 9) else 4.8
+    r_h = 5.4 if arch in (8, 16, 20, 21, 22) else 4.8
     if p["firing"]:
-        # Forward extended braced weapon grip pose
         c.fill_circle(38, ty + 14, r_h, hand_col, INK, 2.4)
         c.fill_circle(65, ty + 11, r_h, hand_col, INK, 2.4)
     else:
@@ -669,33 +937,48 @@ def _draw_archetype_accessories(arch: int, f: int) -> Canvas:
         c.fill_triangle((24, ty + 18), (32, ty + 18), (27, 83), (255, 242, 150, 255))
 
     if arch == 1:
-        # Ref #2 Explorer: Big Backpack + Rolled Sleeping Bag on Back!
+        # Explorer Backpack + Rolled Bedroll
         c.fill_round_rect(18, ty - 2, 18, 24, 6, pack_br, INK, 2.6)
         c.fill_round_rect(19, ty - 8, 16, 9, 4, roll_br, INK, 2.4)
         c.fill_round_rect(19, ty + 10, 14, 10, 3, roll_br, INK, 2.0)
     elif arch == 2:
-        # Ref #3 Outlaw: Side Gun Holster hanging on Hip
+        # Outlaw Holster
         c.fill_round_rect(28, ty + 16, 11, 14, 3.5, holster_br, INK, 2.4)
         c.fill_round_rect(20, ty + 2, 12, 16, 4, steel, INK, 2.2)
-    elif arch == 6:
-        # Rebel diagonal brass bullet bandolier
-        c.fill_round_rect(20, ty + 1, 13, 18, 5, steel, INK, 2.3)
-        c.fill_capsule(35, ty + 2, 57, ty + 16, 3.2, holster_br, INK, 1.8)
-        for bx, by in [(40, ty + 6), (46, ty + 10), (52, ty + 13)]:
-            c.fill_round_rect(bx, by, 4, 5, 1, (242, 198, 66, 255), INK, 1.2)
-    elif arch in (5, 9):
-        # Heavy Shoulder Guards + Jetpack Pack
-        c.fill_round_rect(19, ty + 1, 14, 19, 5, steel, INK, 2.4)
-        c.fill_round_rect(26, ty - 4, 13, 10, 3.5, steel, INK, 2.2)
-        c.fill_round_rect(57, ty - 4, 13, 10, 3.5, steel, INK, 2.2)
+    elif arch in (5, 6, 9):
+        # Royal / Spartan / Roman Flowing Crimson Cape
+        cape_col = (168, 36, 36, 255) if arch in (5, 9) else (152, 42, 38, 255)
+        c.fill_polygon([(28, ty + 2), (16, ty + 24), (34, ty + 26), (38, ty + 4)], cape_col, INK, 2.4)
+    elif arch in (8, 10, 11, 19):
+        # Slanted Blade / Sword / Katana / Cutlass behind Shoulder
+        c.fill_polygon([(16, ty - 14), (22, ty - 18), (38, ty + 8), (32, ty + 12)], (210, 220, 232, 255), INK, 2.3)
+        c.fill_round_rect(20, ty + 1, 13, 19, 5, steel, INK, 2.3)
+    elif arch == 7:
+        # Round Wooden Viking Shield on Back
+        c.fill_circle(25, ty + 10, 12.5, (148, 94, 48, 255), INK, 2.5)
+        c.fill_circle(25, ty + 10, 4.5, (186, 192, 200, 255), INK, 1.8)
+    elif arch == 14:
+        # Ghost Grim Reaper Scythe on Back
+        c.fill_capsule(20, ty + 22, 32, ty - 12, 2.2, (82, 54, 34, 255), INK, 1.8)
+        c.fill_polygon([(32, ty - 14), (16, ty - 16), (12, ty - 4), (27, ty - 9)], (196, 206, 218, 255), INK, 2.2)
+    elif arch == 18:
+        # Curled Black Cat Tail
+        c.fill_capsule(32, ty + 18, 16, ty + 12, 3.8, (42, 44, 50, 255), INK, 2.3)
+        c.fill_capsule(16, ty + 12, 18, ty + 3, 3.5, (42, 44, 50, 255), INK, 2.3)
+    elif arch == 22:
+        # Pink Crystal Cluster Spires on Back
+        c.fill_polygon([(28, ty + 8), (15, ty - 6), (22, ty + 16)], (248, 156, 218, 255), INK, 2.3)
+        c.fill_polygon([(26, ty + 15), (12, ty + 10), (24, ty + 22)], (228, 118, 192, 255), INK, 2.2)
+    elif arch == 23:
+        # Monk Tall Wooden Staff on Back
+        c.fill_capsule(22, ty - 18, 34, ty + 24, 2.8, (132, 82, 42, 255), INK, 2.2)
     else:
-        # Compact tactical jetpack / field pack behind torso
         c.fill_round_rect(20, ty + 1, 13, 19, 5, steel, INK, 2.4)
     return c
 
 
 def build_modular_character_assets() -> None:
-    for arch in range(10):
+    for arch in range(24):
         s_skin = Canvas(SPRITE_SIZE * 8, SPRITE_SIZE)
         s_legs = Canvas(SPRITE_SIZE * 8, SPRITE_SIZE)
         s_torso = Canvas(SPRITE_SIZE * 8, SPRITE_SIZE)
@@ -1070,4 +1353,4 @@ if __name__ == "__main__":
     build_projectiles_and_fx()
     build_tileset_and_bgs()
     build_audio()
-    print("Generated 60 modular character PNGs, 11x3 weapons sheet, and real-world audio WAVs.")
+    print("Generated 144 modular character PNGs, 11x3 weapons sheet, and real-world audio WAVs.")

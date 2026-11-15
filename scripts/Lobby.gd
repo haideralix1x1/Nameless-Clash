@@ -20,6 +20,7 @@ var _team_toggle_btn: Button
 var _bot_minus_btn: Button
 var _bot_plus_btn: Button
 var _bot_count_label: Label
+var _bot_diff_opt: OptionButton
 var _local_bot_count: int = 3
 
 
@@ -266,6 +267,21 @@ func _build_ui() -> void:
 	_bot_plus_btn.pressed.connect(_step_bot_count.bind(1))
 	bot_row.add_child(_bot_plus_btn)
 
+	var bot_diff_row := HBoxContainer.new()
+	lv.add_child(bot_diff_row)
+	var bot_diff_lbl := Label.new()
+	bot_diff_lbl.text = "Bot Level:"
+	bot_diff_lbl.custom_minimum_size = Vector2(115, 0)
+	bot_diff_lbl.add_theme_font_size_override("font_size", 15)
+	bot_diff_row.add_child(bot_diff_lbl)
+	_bot_diff_opt = OptionButton.new()
+	_bot_diff_opt.custom_minimum_size = Vector2(0, 44)
+	for d_name in NetworkManager.BOT_DIFFICULTY_NAMES:
+		_bot_diff_opt.add_item(d_name)
+	_bot_diff_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bot_diff_opt.item_selected.connect(_on_match_config_changed)
+	bot_diff_row.add_child(_bot_diff_opt)
+
 	lv.add_child(HSeparator.new())
 
 	_host_btn = Button.new()
@@ -369,10 +385,12 @@ func _step_bot_count(delta_step: int) -> void:
 func _on_match_config_changed(_idx: int) -> void:
 	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
 		return
+	var diff_idx: int = _bot_diff_opt.selected if is_instance_valid(_bot_diff_opt) else NetworkManager.bot_difficulty
 	NetworkManager.host_update_match_settings(
 		_mode_opt.selected,
 		_map_opt.selected,
-		_local_bot_count
+		_local_bot_count,
+		diff_idx
 	)
 	_refresh_bot_label()
 	_refresh_players()
@@ -446,6 +464,8 @@ func _refresh_match_settings_ui() -> void:
 	_mode_opt.selected = NetworkManager.match_mode
 	_map_opt.selected = NetworkManager.selected_map_id
 	_local_bot_count = NetworkManager.bot_count
+	if is_instance_valid(_bot_diff_opt):
+		_bot_diff_opt.selected = clampi(NetworkManager.bot_difficulty, 0, 2)
 	_refresh_bot_label()
 	_refresh_team_button()
 	_refresh_controls_state()
@@ -467,6 +487,8 @@ func _refresh_controls_state() -> void:
 	_map_opt.disabled = not can_edit_match
 	_bot_minus_btn.disabled = not can_edit_match
 	_bot_plus_btn.disabled = not can_edit_match
+	if is_instance_valid(_bot_diff_opt):
+		_bot_diff_opt.disabled = not can_edit_match
 	_room_ip_banner.text = "Room IP: " + NetworkManager.get_primary_local_ip()
 	_refresh_team_button()
 
@@ -492,7 +514,7 @@ func _refresh_players() -> void:
 			var role: String = "Host" if pid == 1 else "Ready"
 			var team_txt: String = "Solo" if NetworkManager.match_mode == 0 else ("Blue Team" if t_id == 0 else "Red Team")
 			border_col = NetworkManager.get_team_color(t_id if NetworkManager.match_mode == 1 else int(info.get("color_index", 0)))
-			var arch_lbl: String = ProfileManager.ARCHETYPES[clampi(int(av["archetype_id"]), 0, 9)]["name"]
+			var arch_lbl: String = ProfileManager.ARCHETYPES[clampi(int(av["archetype_id"]), 0, ProfileManager.ARCHETYPES.size() - 1)]["name"]
 			slot_text = "%s (%s)  •  %s  •  %s  •  %s" % [
 				str(info.get("name", "Trooper")),
 				arch_lbl,

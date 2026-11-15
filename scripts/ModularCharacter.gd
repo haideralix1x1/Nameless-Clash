@@ -6,6 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
+const MAX_PART_INDEX := 23
 
 const ANIM_DEFS: Dictionary = {
 	"idle": {"frames": [0, 1], "fps": 3.5, "loop": true},
@@ -93,13 +94,13 @@ func _get_or_create_animated(node_name: String) -> AnimatedSprite2D:
 func apply_loadout(config: Dictionary) -> void:
 	_ensure_layers()
 
-	var arch_idx := clampi(int(config.get("archetype", 0)), 0, 9)
-	var skin_id := clampi(int(config.get("skin_id", arch_idx)), 0, 9)
-	var head_id := clampi(int(config.get("head_id", arch_idx)), 0, 9)
-	var torso_id := clampi(int(config.get("torso_id", arch_idx)), 0, 9)
-	var legs_id := clampi(int(config.get("legs_id", arch_idx)), 0, 9)
-	var acc_id := clampi(int(config.get("accessories_id", arch_idx)), 0, 9)
-	var hands_id := clampi(int(config.get("hands_id", arch_idx)), 0, 9)
+	var arch_idx := clampi(int(config.get("archetype", 0)), 0, MAX_PART_INDEX)
+	var skin_id := clampi(int(config.get("skin_id", arch_idx)), 0, MAX_PART_INDEX)
+	var head_id := clampi(int(config.get("head_id", arch_idx)), 0, MAX_PART_INDEX)
+	var torso_id := clampi(int(config.get("torso_id", arch_idx)), 0, MAX_PART_INDEX)
+	var legs_id := clampi(int(config.get("legs_id", arch_idx)), 0, MAX_PART_INDEX)
+	var acc_id := clampi(int(config.get("accessories_id", arch_idx)), 0, MAX_PART_INDEX)
+	var hands_id := clampi(int(config.get("hands_id", arch_idx)), 0, MAX_PART_INDEX)
 
 	var head_path := str(config.get("head_texture", config.get("skin_texture",
 		"res://assets/sprites/modular/skin_%d.png" % skin_id)))

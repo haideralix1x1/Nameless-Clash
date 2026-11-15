@@ -27,53 +27,151 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 5
 	},
 	{
-		"name": "The Commander",
-		"desc": "Field officer in a crimson beret, gold insignia, and reinforced field chest rig.",
+		"name": "Camo Commando",
+		"desc": "Cheerful jungle commando wearing spotted woodland camo gear and field canteen.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 2
+		"weapon": 1
 	},
 	{
-		"name": "The Spec-Ops",
-		"desc": "Night-ops specialist equipped with helmet NVG optics and stealth ballistic vest.",
+		"name": "Spec-Ops Goggles",
+		"desc": "SWAT breaching specialist in a dark tactical helmet with twin white ski goggles.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 3
 	},
 	{
-		"name": "The Enforcer",
-		"desc": "Heavy riot unit protected by full visor helmet, armored kneepads, and chest plates.",
+		"name": "Golden Spartan",
+		"desc": "Ancient Greek champion clad in golden bronze cuirass, crimson plume, and billowing cape.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 6
+		"weapon": 2
 	},
 	{
-		"name": "The Rebel",
-		"desc": "Street fighter in an urban hood, crimson scarf wrap, and denim tactical gear.",
+		"name": "Roman Centurion",
+		"desc": "Imperial legion officer with silver Galea crest helmet and segmented steel armor.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 0
 	},
 	{
-		"name": "The Scout",
-		"desc": "High-mobility runner with cap, comms headset, and desert light rig.",
+		"name": "Viking Berserker",
+		"desc": "Fearsome northern raider with horned iron helm, braided orange beard, and round shield.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 6
+	},
+	{
+		"name": "Crusader Knight",
+		"desc": "Heavy armored paladin in white Templar cross tabard, horned great-helm, and broadsword.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 2
+	},
+	{
+		"name": "Royal King",
+		"desc": "Majestic monarch crowned with jewels, snowy white beard, and crimson royal mantle.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 8
+	},
+	{
+		"name": "Pirate Buccaneer",
+		"desc": "Swashbuckling sea captain sporting an eyepatch, skull tricorne hat, and steel cutlass.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 5
+	},
+	{
+		"name": "Shadow Ninja",
+		"desc": "Silent shinobi assassin with purple cloth mask, silver forehead plate, and back katana.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{
-		"name": "The Cyborg",
-		"desc": "Cybernetic fighter featuring metallic plating and glowing cyan optic crest.",
+		"name": "Brain Zombie",
+		"desc": "Undead brawler with exposed pink brain, glowing yellow zombie eyes, and tattered jacket.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 6
+	},
+	{
+		"name": "Skull Skeleton",
+		"desc": "Risen bone warrior featuring hollow skull sockets, horned cap, and exposed ribcage.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 7
 	},
 	{
-		"name": "The Breacher",
-		"desc": "Armored vanguard wearing an oversized blast helmet and gold visor.",
+		"name": "Spooky Ghost",
+		"desc": "Haunting phantom floating in an alabaster shroud with grim reaper scythe slung behind.",
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 2
+		"weapon": 4
+	},
+	{
+		"name": "Ancient Mummy",
+		"desc": "Bandage-wrapped tomb guardian with glowing amber eyes and golden pharaoh band.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 3
+	},
+	{
+		"name": "Cyber Robot",
+		"desc": "Heavy steel automaton powered by glowing yellow optic sensors and twin thrusters.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 10
+	},
+	{
+		"name": "Bio-Hazard Cyborg",
+		"desc": "Toxic hazard trooper sealed inside an emerald gas-mask visor and pressurized rig.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 7
+	},
+	{
+		"name": "Shadow Cat",
+		"desc": "Agile black feline fighter with pointed ears, golden collar bell, whiskers, and curled tail.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 4
+	},
+	{
+		"name": "Dragon Hero",
+		"desc": "Spiky emerald-haired champion equipped with ornate gold-trimmed fantasy armor and blade.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 1
+	},
+	{
+		"name": "Fierce Orc",
+		"desc": "Purple-skinned ogre warlord boasting twin ivory tusks, cyan mohawk, and bone necklace.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 10
+	},
+	{
+		"name": "Magma Golem",
+		"desc": "Volcanic stone colossus pulsing with molten orange magma eyes and glowing rock cracks.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 5
+	},
+	{
+		"name": "Crystal Golem",
+		"desc": "Radiant pink quartz elemental crowned with sharp crystal spires and faceted stone armor.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 8
+	},
+	{
+		"name": "Tribal Monk",
+		"desc": "Battle-hardened brawler with crimson headband, prayer bead necklace, and wooden bo-staff.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 0
 	}
 ]
 
@@ -86,41 +184,61 @@ const WEAPON_SKIN_NAMES: Array[String] = ["Digital Camo", "Solid Matte", "Neon T
 const RAIL_MOD_NAMES: Array[String] = ["Iron Sights", "Suppressor", "Tactical Scope"]
 
 const ARCHETYPE_ROLES: Array[String] = [
-	"Infantry Trooper",
-	"Field Adventurer",
-	"Outback Marksman",
-	"Squad Officer",
-	"Night Operative",
-	"Riot Breaker",
-	"Urban Fighter",
-	"Recon Runner",
-	"Tech Warrior",
-	"Heavy Breacher"
+	"Infantry Trooper", "Field Adventurer", "Outback Marksman", "Jungle Raider",
+	"Tactical Breacher", "Arena Champion", "Legion Officer", "Northern Raider",
+	"Templar Paladin", "High Sovereign", "Sea Buccaneer", "Shadow Assassin",
+	"Undead Brawler", "Cursed Warrior", "Spectral Phantom", "Tomb Guardian",
+	"Heavy Automaton", "Bio Specialist", "Feline Striker", "Blade Hero",
+	"Ogre Warlord", "Lava Colossus", "Quartz Elemental", "Martial Master"
 ]
 
 const HEAD_NAMES: Array[String] = [
-	"Steel Helmet", "Explorer Sun Hat", "Cowboy Hat", "Officer Beret", "NVG Helmet",
-	"Riot Shield Helm", "Rebel Hood", "Scout Cap", "Cyber Crest", "Blast Helmet"
+	"Steel Helmet", "Explorer Sun Hat", "Cowboy Hat", "Camo M1 Helmet",
+	"SWAT Goggles Helm", "Spartan Plume", "Centurion Crest", "Viking Horns",
+	"Crusader Great-Helm", "Royal Gold Crown", "Pirate Skull Hat", "Ninja Forehead Plate",
+	"Exposed Brain", "Horned Skull Cap", "Ghost Pointed Hood", "Pharaoh Band",
+	"Robot Antenna", "Bio-Hazard Crest", "Shadow Cat Ears", "Emerald Spiky Hair",
+	"Cyan Orc Mohawk", "Volcanic Rock Crown", "Pink Crystal Spires", "Crimson Headband"
 ]
 const TORSO_NAMES: Array[String] = [
-	"Olive Pouches", "Explorer Vest", "Outlaw Vest", "Command Rig", "Stealth Suit",
-	"Riot Armor", "Rebel Coat", "Light Harness", "Synth Chassis", "Breach Plate"
+	"Olive Pouches", "Explorer Vest", "Outlaw Vest", "Camo Uniform",
+	"SWAT Tactical Rig", "Spartan Cuirass", "Roman Lorica", "Viking Fur Jerkin",
+	"Crusader Tabard", "Royal Ermine Robe", "Captain Coat", "Shinobi Gi",
+	"Tattered Jacket", "Bone Ribcage", "Spectral Shroud", "Mummy Wrappings",
+	"Mech Core Chassis", "Hazard Exo-Rig", "Cat Collar & Bell", "Dragon Scale Armor",
+	"Orc Bone Harness", "Molten Rock Chest", "Crystal Facet Chest", "Prayer Beads Chest"
 ]
 const LEGS_NAMES: Array[String] = [
-	"Olive Fatigues", "Field Khakis", "Outlaw Denim", "Officer Boots", "Spec-Ops Pants",
-	"Riot Kneepads", "Street Pants", "Scout Cargo", "Cyber Greaves", "Heavy Treads"
+	"Olive Fatigues", "Field Khakis", "Outlaw Denim", "Camo Cargo",
+	"Black SWAT Pants", "Spartan Greaves", "Roman Sandals", "Viking Fur Boots",
+	"Chainmail Greaves", "Royal Crimson Pants", "Buccaneer Boots", "Shinobi Leggings",
+	"Ripped Zombie Slacks", "Skeleton Shin Bones", "Floating Ghost Hem", "Bandaged Legs",
+	"Robot Piston Legs", "Bio-Suit Greaves", "Black Cat Paws", "Hero Armor Greaves",
+	"Orc Hide Boots", "Obsidian Stompers", "Crystal Pillar Legs", "Monk Martial Wraps"
 ]
 const HANDS_NAMES: Array[String] = [
-	"Bare Hands", "Adventurer Grip", "Outlaw Hands", "Officer Hands", "Stealth Gloves",
-	"Riot Gauntlets", "Rebel Grip", "Scout Hands", "Cyber Claws", "Heavy Mitts"
+	"Bare Hands", "Adventurer Grip", "Outlaw Hands", "Camo Trooper",
+	"SWAT Gloves", "Spartan Fists", "Roman Bracers", "Viking Fists",
+	"Knight Gauntlets", "Royal Hands", "Pirate Grip", "Ninja Wraps",
+	"Zombie Claws", "Skeletal Hands", "Ghost Hands", "Mummy Wraps",
+	"Robot Pincers", "Bio-Armor Gloves", "Shadow Cat Paws", "Hero Gauntlets",
+	"Purple Ogre Fists", "Boulder Fists", "Crystal Fists", "Taped Monk Fists"
 ]
 const ACC_NAMES: Array[String] = [
-	"Infantry Pack", "Trail Backpack", "Thigh Holster", "Comms Unit", "NVG Pack",
-	"Riot Thrusters", "Bandolier Pack", "Recon Pack", "Plasma Pack", "Jet Rig"
+	"Infantry Pack", "Trail Backpack", "Thigh Holster", "Field Canteen",
+	"Comms Pack", "Spartan Crimson Cape", "Centurion Mantle", "Viking Round Shield",
+	"Templar Broadsword", "Royal Mantle Cape", "Pirate Cutlass", "Back Katana",
+	"Toxic Pack", "Grave Pack", "Grim Reaper Scythe", "Relic Pack",
+	"Twin Jet Thrusters", "Isotope Tank", "Black Cat Tail", "Hero Greatsword",
+	"Ogre Cleaver", "Lava Spine", "Crystal Cluster", "Wooden Bo-Staff"
 ]
 const SKIN_NAMES: Array[String] = [
-	"Neutral Face", "Smiling Explorer", "Gritty Bearded", "Stern Vet", "Tactical Mask",
-	"Riot Visor", "Masked Rebel", "Focused Scout", "Android Face", "Armored Face"
+	"Neutral Soldier", "Smiling Explorer", "Bearded Outlaw", "Grinning Commando",
+	"Glasses Agent", "Stern Spartan", "Scowling Roman", "Braided Beard",
+	"Knight Visor Eyes", "White-Beard King", "Eyepatch Pirate", "Masked Ninja",
+	"Drooling Zombie", "Hollow Skull", "Spooky Ghost Face", "Glowing-Eye Mummy",
+	"Yellow-Optic Bot", "Green Gas-Mask", "Whiskered Cat", "Amber-Eye Hero",
+	"Tusked Purple Orc", "Magma Cracked Face", "Pink Gem Face", "Bearded Monk"
 ]
 
 const COLOR_SWATCHES: Array[Color] = [
@@ -223,13 +341,14 @@ func load_profile() -> void:
 	player_name = str(cfg.get_value("profile", "player_name", player_name)).strip_edges().left(16)
 	if player_name.is_empty():
 		player_name = "Trooper"
-	archetype_id = clampi(int(cfg.get_value("modular", "archetype_id", 0)), 0, 9)
-	skin_id = clampi(int(cfg.get_value("modular", "skin_id", archetype_id)), 0, 9)
-	head_id = clampi(int(cfg.get_value("modular", "head_id", archetype_id)), 0, 9)
-	torso_id = clampi(int(cfg.get_value("modular", "torso_id", archetype_id)), 0, 9)
-	legs_id = clampi(int(cfg.get_value("modular", "legs_id", archetype_id)), 0, 9)
-	hands_id = clampi(int(cfg.get_value("modular", "hands_id", archetype_id)), 0, 9)
-	accessories_id = clampi(int(cfg.get_value("modular", "accessories_id", archetype_id)), 0, 9)
+	var max_idx: int = ARCHETYPES.size() - 1
+	archetype_id = clampi(int(cfg.get_value("modular", "archetype_id", 0)), 0, max_idx)
+	skin_id = clampi(int(cfg.get_value("modular", "skin_id", archetype_id)), 0, max_idx)
+	head_id = clampi(int(cfg.get_value("modular", "head_id", archetype_id)), 0, max_idx)
+	torso_id = clampi(int(cfg.get_value("modular", "torso_id", archetype_id)), 0, max_idx)
+	legs_id = clampi(int(cfg.get_value("modular", "legs_id", archetype_id)), 0, max_idx)
+	hands_id = clampi(int(cfg.get_value("modular", "hands_id", archetype_id)), 0, max_idx)
+	accessories_id = clampi(int(cfg.get_value("modular", "accessories_id", archetype_id)), 0, max_idx)
 
 	shirt_color = cfg.get_value("colors", "shirt_color", shirt_color) as Color
 	pants_color = cfg.get_value("colors", "pants_color", pants_color) as Color
@@ -296,14 +415,15 @@ func to_dict() -> Dictionary:
 
 
 static func sanitize_avatar(d: Dictionary) -> Dictionary:
+	var max_idx: int = ARCHETYPES.size() - 1
 	return {
-		"archetype_id": clampi(int(d.get("archetype_id", 0)), 0, 9),
-		"skin_id": clampi(int(d.get("skin_id", 0)), 0, 9),
-		"head_id": clampi(int(d.get("head_id", 0)), 0, 9),
-		"torso_id": clampi(int(d.get("torso_id", 0)), 0, 9),
-		"legs_id": clampi(int(d.get("legs_id", 0)), 0, 9),
-		"hands_id": clampi(int(d.get("hands_id", 0)), 0, 9),
-		"accessories_id": clampi(int(d.get("accessories_id", 0)), 0, 9),
+		"archetype_id": clampi(int(d.get("archetype_id", 0)), 0, max_idx),
+		"skin_id": clampi(int(d.get("skin_id", 0)), 0, max_idx),
+		"head_id": clampi(int(d.get("head_id", 0)), 0, max_idx),
+		"torso_id": clampi(int(d.get("torso_id", 0)), 0, max_idx),
+		"legs_id": clampi(int(d.get("legs_id", 0)), 0, max_idx),
+		"hands_id": clampi(int(d.get("hands_id", 0)), 0, max_idx),
+		"accessories_id": clampi(int(d.get("accessories_id", 0)), 0, max_idx),
 		"shirt_color": d.get("shirt_color", Color.WHITE),
 		"pants_color": d.get("pants_color", Color.WHITE),
 		"skin_color": d.get("skin_color", Color.WHITE),

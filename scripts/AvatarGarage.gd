@@ -310,7 +310,7 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 	scroll.add_child(v)
 
 	var hint := Label.new()
-	hint.text = "Mix and match gear parts from all 10 Soldiers."
+	hint.text = "Mix and match gear parts from all %d Soldiers." % ProfileManager.ARCHETYPES.size()
 	hint.modulate = Color(0.72, 0.88, 1.0)
 	hint.add_theme_font_size_override("font_size", 15)
 	v.add_child(hint)

@@ -277,7 +277,7 @@ func _spawn_bot(bot_index: int) -> void:
 	var bot_avatar: Dictionary = {
 		"archetype_id": arch_idx,
 		"skin_id": arch_idx,
-		"head_id": (arch_idx + bot_index) % 10,
+		"head_id": (arch_idx + bot_index) % ProfileManager.ARCHETYPES.size(),
 		"torso_id": arch_idx,
 		"legs_id": arch_idx,
 		"hands_id": arch_idx,

@@ -29,7 +29,7 @@ func _ready() -> void:
 		if is_instance_valid(node) and node.has_method("add_screen_shake"):
 			var dist: float = global_position.distance_to(node.global_position)
 			if dist < 650.0:
-				node.add_screen_shake(clampf(1.0 - dist / 650.0, 0.1, 1.0) * (14.0 if max_damage > 0 else 4.0))
+				node.add_screen_shake(clampf(1.0 - dist / 650.0, 0.1, 1.0) * (2.6 if max_damage > 0 else 0.8))
 	if can_deal_damage and max_damage > 0 and not _dealt_damage:
 		_dealt_damage = true
 		call_deferred("_apply_splash_damage")

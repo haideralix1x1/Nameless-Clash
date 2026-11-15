@@ -9,6 +9,7 @@ var _preview: SoldierPreview
 var _callsign_label: Label
 var _loadout_label: Label
 var _transitioning: bool = false
+var _diff_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -184,6 +185,29 @@ func _build_ui() -> void:
 	)
 	nav_v.add_child(btn_solo)
 
+	var diff_row := HBoxContainer.new()
+	diff_row.add_theme_constant_override("separation", 8)
+	nav_v.add_child(diff_row)
+
+	var diff_lbl := Label.new()
+	diff_lbl.text = "BOT LEVEL:"
+	diff_lbl.add_theme_font_size_override("font_size", 14)
+	diff_lbl.modulate = Color(0.75, 0.88, 1.0)
+	diff_row.add_child(diff_lbl)
+
+	_diff_buttons.clear()
+	var diff_labels: Array[String] = ["EASY", "MID", "HARD"]
+	for i in range(diff_labels.size()):
+		var db := Button.new()
+		db.text = diff_labels[i]
+		db.custom_minimum_size = Vector2(0, 42)
+		db.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		db.add_theme_font_size_override("font_size", 15)
+		db.pressed.connect(_select_bot_difficulty.bind(i))
+		diff_row.add_child(db)
+		_diff_buttons.append(db)
+	_refresh_diff_buttons()
+
 	var btn_join_lan := _make_arcade_button("WIFI MULTIPLAYER LOBBY", Color(0.26, 0.74, 1.0), 66.0, 20, Color(0.10, 0.20, 0.34, 0.96))
 	btn_join_lan.pressed.connect(func(): _transition_to(NetworkManager.go_to_lobby))
 	nav_v.add_child(btn_join_lan)
@@ -248,7 +272,7 @@ func _build_credits_overlay() -> void:
 	c_body.text = (
 		"Fast-Paced 2D Multiplayer Arena Combat!\n\n"
 		+ "Play Solo against AI Bots or battle friends over Local Wi-Fi / Hotspot.\n\n"
-		+ "Visit Hero & Armory to customize 10 unique Soldiers\n"
+		+ "Visit Hero & Armory to customize %d unique Heroes\n" % ProfileManager.ARCHETYPES.size()
 		+ "and equip 11 real-world weapons."
 	)
 	cv.add_child(c_body)
@@ -274,6 +298,28 @@ func _transition_to(target_fn: Callable) -> void:
 	tw.tween_property(_hub_container, "modulate:a", 0.0, 0.16)
 	tw.tween_property(_hub_container, "position:y", -18.0, 0.16)
 	tw.finished.connect(target_fn)
+
+
+func _select_bot_difficulty(level: int) -> void:
+	NetworkManager.bot_difficulty = clampi(level, 0, 2)
+	_refresh_diff_buttons()
+
+
+func _refresh_diff_buttons() -> void:
+	var active_colors: Array[Color] = [
+		Color(0.28, 0.90, 0.48),
+		Color(0.98, 0.72, 0.20),
+		Color(0.95, 0.28, 0.28)
+	]
+	for i in range(_diff_buttons.size()):
+		var db: Button = _diff_buttons[i]
+		var is_active: bool = (i == NetworkManager.bot_difficulty)
+		var border_col: Color = active_colors[i] if is_active else Color(0.32, 0.42, 0.56)
+		var bg_col: Color = active_colors[i].darkened(0.65) if is_active else Color(0.09, 0.12, 0.18, 0.95)
+		db.add_theme_stylebox_override("normal", _make_style(bg_col, border_col, 8))
+		db.add_theme_stylebox_override("hover", _make_style(bg_col.lightened(0.14), border_col.lightened(0.25), 8))
+		db.add_theme_stylebox_override("pressed", _make_style(border_col.darkened(0.35), border_col, 8))
+		db.modulate = Color.WHITE if is_active else Color(0.75, 0.80, 0.88)
 
 
 func _on_quick_host_pressed() -> void:

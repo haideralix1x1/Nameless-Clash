@@ -38,11 +38,18 @@ const TEAM_NAMES: Array[String] = [
 	"Red Team"
 ]
 
+const BOT_DIFFICULTY_NAMES: Array[String] = [
+	"Easy",
+	"Mid",
+	"Hard"
+]
+
 var local_player_name: String = "Trooper"
 var local_color_index: int = 0
 var local_team: int = 0
 var local_room_name: String = "Hotspot Arena"
 var bot_count: int = 3
+var bot_difficulty: int = 1      # 0 = Easy, 1 = Mid, 2 = Hard
 var match_mode: int = 0         # 0 = Free-For-All, 1 = Red vs Blue
 var selected_map_id: int = 0    # 0 = Bunker Base, 1 = Factory Ruins, 2 = Desert Outpost
 
@@ -208,21 +215,24 @@ func set_player_team_rpc(team_idx: int) -> void:
 		sync_all_players.rpc(players)
 
 
-func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int) -> void:
+func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = -1) -> void:
 	match_mode = clampi(new_mode, 0, 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
 	bot_count = clampi(new_bots, 0, 5)
+	if new_bot_diff >= 0:
+		bot_difficulty = clampi(new_bot_diff, 0, 2)
 	if is_host_active():
-		sync_match_settings_rpc.rpc(match_mode, selected_map_id, bot_count)
+		sync_match_settings_rpc.rpc(match_mode, selected_map_id, bot_count, bot_difficulty)
 	else:
 		match_settings_updated.emit()
 
 
 @rpc("authority", "call_local", "reliable")
-func sync_match_settings_rpc(new_mode: int, new_map_id: int, new_bots: int) -> void:
+func sync_match_settings_rpc(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = 1) -> void:
 	match_mode = clampi(new_mode, 0, 1)
 	selected_map_id = clampi(new_map_id, 0, MAP_NAMES.size() - 1)
 	bot_count = clampi(new_bots, 0, 5)
+	bot_difficulty = clampi(new_bot_diff, 0, 2)
 	match_settings_updated.emit()
 
 
@@ -371,7 +381,7 @@ func _poll_lan_packets() -> void:
 func _on_peer_connected(peer_id: int) -> void:
 	if multiplayer.is_server():
 		sync_all_players.rpc_id(peer_id, players)
-		sync_match_settings_rpc.rpc_id(peer_id, match_mode, selected_map_id, bot_count)
+		sync_match_settings_rpc.rpc_id(peer_id, match_mode, selected_map_id, bot_count, bot_difficulty)
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
@@ -426,16 +436,17 @@ func sync_all_players(all_players: Dictionary) -> void:
 
 func host_start_match() -> void:
 	if is_host_active():
-		start_match_rpc.rpc(bot_count, match_mode, selected_map_id)
+		start_match_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty)
 	else:
 		go_to_arena()
 
 
 @rpc("authority", "call_local", "reliable")
-func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int) -> void:
+func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1) -> void:
 	bot_count = synced_bot_count
 	match_mode = clampi(synced_mode, 0, 1)
 	selected_map_id = clampi(synced_map_id, 0, MAP_NAMES.size() - 1)
+	bot_difficulty = clampi(synced_bot_diff, 0, 2)
 	match_started.emit()
 	go_to_arena()
 

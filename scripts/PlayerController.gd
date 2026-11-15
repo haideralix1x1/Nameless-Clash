@@ -26,6 +26,7 @@ const FUEL_CONSUME_RATE: float = 38.0
 const FUEL_RECHARGE_GROUND: float = 48.0
 const FUEL_RECHARGE_AIR: float = 14.0
 const RESPAWN_TIME: float = 3.0
+const MAX_SCREEN_SHAKE: float = 3.2
 
 @export var peer_id: int = 1
 @export var player_name: String = "Trooper"
@@ -90,6 +91,8 @@ var _shake_amount: float = 0.0
 var _bot_think_timer: float = 0.0
 var _bot_strafe_dir: float = 1.0
 var _bot_want_jetpack: bool = false
+var _bot_allow_fire: bool = true
+var _bot_aim_error: float = 0.0
 var _spawn_points: Array[Vector2] = []
 
 @onready var _collision_shape: CollisionShape2D = $CollisionShape2D
@@ -204,7 +207,7 @@ func _is_controlled_locally() -> bool:
 
 func add_screen_shake(strength: float) -> void:
 	if is_local_human:
-		_shake_amount = minf(_shake_amount + strength, 24.0)
+		_shake_amount = minf(MAX_SCREEN_SHAKE, maxf(_shake_amount, strength) + strength * 0.15)
 
 
 func _physics_process(delta: float) -> void:
@@ -223,10 +226,11 @@ func _physics_process(delta: float) -> void:
 		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
 
 	if _shake_amount > 0.0:
-		_shake_amount = maxf(0.0, _shake_amount - delta * 28.0)
+		_shake_amount = maxf(0.0, _shake_amount - delta * 18.0)
 	if is_local_human and is_instance_valid(_camera):
 		var s: float = _shake_amount * SettingsManager.screen_shake_intensity
-		_camera.offset = Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.1 else Vector2.ZERO
+		var target_off: Vector2 = Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO
+		_camera.offset = _camera.offset.lerp(target_off, 0.45)
 		var target_zoom_val: float = _weapon.scope_zoom if (not is_dead and _weapon != null) else 1.05
 		var target_zoom := Vector2(target_zoom_val, target_zoom_val)
 		_camera.zoom = _camera.zoom.lerp(target_zoom, clampf(delta * 8.0, 0.0, 1.0))
@@ -333,6 +337,9 @@ func _process_alive(delta: float) -> void:
 	_update_crouch_collider(is_crouching)
 
 	var speed_mult: float = _weapon.move_speed_multiplier if _weapon != null else 1.0
+	if is_bot:
+		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+		speed_mult *= (0.72 if bot_diff == 0 else (0.86 if bot_diff == 1 else 1.0))
 	var target_speed: float = (CROUCH_SPEED if is_crouching else MOVE_SPEED) * speed_mult * move_dir
 	var accel: float = GROUND_ACCEL if is_on_floor() else AIR_ACCEL
 	if absf(move_dir) > 0.05:
@@ -415,11 +422,11 @@ func _update_crouch_collider(crouching: bool) -> void:
 	if crouching:
 		cap.height = 32.0
 		_collision_shape.position.y = 11.0
-		_weapon_pivot.position.y = 4.0
+		_weapon_pivot.position.y = 9.0
 	else:
 		cap.height = 48.0
 		_collision_shape.position.y = 3.0
-		_weapon_pivot.position.y = -4.0
+		_weapon_pivot.position.y = 6.0
 
 
 func get_current_weapon() -> WeaponData:
@@ -430,6 +437,10 @@ func _fire_weapon() -> void:
 	_fire_cooldown = _weapon.fire_interval
 	if is_dual_wielding and _weapon.supports_dual_wield:
 		_fire_cooldown *= 0.72
+	if is_bot:
+		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+		var fire_delay_mult: float = 1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0)
+		_fire_cooldown *= fire_delay_mult
 
 	var shots_to_fire: int = 2 if (is_dual_wielding and _weapon.supports_dual_wield and current_ammo >= 2) else 1
 	current_ammo = maxi(0, current_ammo - shots_to_fire)
@@ -438,7 +449,7 @@ func _fire_weapon() -> void:
 	var fire_angle: float = aim_angle
 	var aim_dir: Vector2 = Vector2.from_angle(fire_angle)
 	velocity -= aim_dir * _weapon.recoil_impulse * (1.25 if shots_to_fire == 2 else 1.0)
-	add_screen_shake(clampf(_weapon.recoil_impulse * 0.025, 1.0, 6.0))
+	add_screen_shake(clampf(_weapon.recoil_impulse * 0.004, 0.15, 0.85))
 
 	# Predictable vertical recoil bias (positive climbs upward; Kriss Vector negative compensates downward)
 	var recoil_sign: float = -1.0 if cos(aim_angle) >= 0.0 else 1.0
@@ -609,7 +620,7 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 		return
 	_hit_flash_timer = 0.12
 	_play_local_sfx("res://assets/audio/hit.wav", -3.0)
-	add_screen_shake(4.5)
+	add_screen_shake(clampf(float(dmg) * 0.03, 0.35, 1.35))
 
 	if not _is_controlled_locally():
 		return
@@ -796,6 +807,7 @@ func is_alive() -> bool:
 
 
 func _compute_bot_input(delta: float) -> Dictionary:
+	var diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 	_bot_think_timer -= delta
 	var nearest_target: Node2D = null
 	var nearest_dist: float = 99999.0
@@ -813,10 +825,27 @@ func _compute_bot_input(delta: float) -> Dictionary:
 			nearest_target = node as Node2D
 
 	if _bot_think_timer <= 0.0:
-		_bot_think_timer = randf_range(0.28, 0.65)
-		if randf() < 0.35:
-			_bot_strafe_dir = -1.0 if randf() < 0.5 else 1.0
-		_bot_want_jetpack = randf() < 0.42
+		if diff == 0:
+			_bot_think_timer = randf_range(0.75, 1.35)
+			if randf() < 0.25:
+				_bot_strafe_dir = -1.0 if randf() < 0.5 else 1.0
+			_bot_want_jetpack = randf() < 0.10
+			_bot_allow_fire = randf() < 0.42
+			_bot_aim_error = randf_range(-0.36, 0.36)
+		elif diff == 1:
+			_bot_think_timer = randf_range(0.48, 0.90)
+			if randf() < 0.30:
+				_bot_strafe_dir = -1.0 if randf() < 0.5 else 1.0
+			_bot_want_jetpack = randf() < 0.22
+			_bot_allow_fire = randf() < 0.68
+			_bot_aim_error = randf_range(-0.20, 0.20)
+		else:
+			_bot_think_timer = randf_range(0.28, 0.65)
+			if randf() < 0.35:
+				_bot_strafe_dir = -1.0 if randf() < 0.5 else 1.0
+			_bot_want_jetpack = randf() < 0.42
+			_bot_allow_fire = true
+			_bot_aim_error = randf_range(-0.07, 0.07)
 
 	var move_x: float = _bot_strafe_dir
 	var want_jump: bool = false
@@ -824,17 +853,25 @@ func _compute_bot_input(delta: float) -> Dictionary:
 	var want_fire: bool = false
 	var desired_angle: float = aim_angle
 
+	var sight_range: float = 440.0 if diff == 0 else (580.0 if diff == 1 else 760.0)
+	var jet_chase_dy: float = -120.0 if diff == 0 else (-80.0 if diff == 1 else -65.0)
+
 	if nearest_target != null:
 		var to_target: Vector2 = nearest_target.global_position - _weapon_pivot.global_position
 		var dist: float = to_target.length()
-		desired_angle = to_target.angle() + randf_range(-0.07, 0.07)
+		if diff == 2:
+			desired_angle = to_target.angle() + randf_range(-0.07, 0.07)
+		elif diff == 1:
+			desired_angle = lerp_angle(aim_angle, to_target.angle() + _bot_aim_error, clampf(delta * 6.5, 0.0, 1.0))
+		else:
+			desired_angle = lerp_angle(aim_angle, to_target.angle() + _bot_aim_error, clampf(delta * 3.5, 0.0, 1.0))
 
 		if dist > 360.0:
 			move_x = signf(to_target.x)
 		elif dist < 160.0:
 			move_x = -signf(to_target.x)
 
-		if to_target.y < -65.0 and jetpack_fuel > 25.0:
+		if to_target.y < jet_chase_dy and jetpack_fuel > 25.0:
 			want_jet = true
 		elif is_on_wall() and jetpack_fuel > 20.0:
 			want_jump = true
@@ -842,7 +879,7 @@ func _compute_bot_input(delta: float) -> Dictionary:
 		elif _bot_want_jetpack and jetpack_fuel > 45.0:
 			want_jet = true
 
-		if dist < 760.0:
+		if dist < sight_range and _bot_allow_fire:
 			var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
 			var ray := PhysicsRayQueryParameters2D.create(
 				_weapon_pivot.global_position,
