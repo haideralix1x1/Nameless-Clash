@@ -120,13 +120,13 @@ func _build_ui() -> void:
 	title_lbl.text = "NAMELESS CLASH"
 	title_lbl.add_theme_font_override("font", UIStyle.FONT_MAIN)
 	title_lbl.add_theme_font_size_override("font_size", 36)
-	title_lbl.modulate = Color(1.0, 0.84, 0.28)
+	title_lbl.modulate = Color(0.90, 0.78, 0.46)
 	title_v.add_child(title_lbl)
 
 	var sub_lbl := Label.new()
 	sub_lbl.text = "2D MULTIPLAYER ARENA SHOOTER"
 	sub_lbl.add_theme_font_size_override("font_size", 15)
-	sub_lbl.modulate = Color(0.68, 0.88, 1.0)
+	sub_lbl.modulate = Color(0.66, 0.74, 0.82)
 	title_v.add_child(sub_lbl)
 
 	# Main Split: Left (Your Soldier Showcase) + Right (Big Touch Battle Modes)
@@ -139,7 +139,7 @@ func _build_ui() -> void:
 	var preview_panel := PanelContainer.new()
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_stretch_ratio = 0.88
-	preview_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.92), Color(0.82, 0.48, 1.0, 0.88), 14))
+	preview_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.92), Color(0.32, 0.46, 0.62, 0.90), 14))
 	split.add_child(preview_panel)
 
 	var pv := VBoxContainer.new()
@@ -150,14 +150,14 @@ func _build_ui() -> void:
 	p_hdr.text = "YOUR SOLDIER"
 	p_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	p_hdr.add_theme_font_size_override("font_size", 16)
-	p_hdr.modulate = Color(0.86, 0.68, 1.0)
+	p_hdr.modulate = Color(0.70, 0.78, 0.86)
 	pv.add_child(p_hdr)
 
 	_callsign_label = Label.new()
 	_callsign_label.text = ProfileManager.player_name.to_upper()
 	_callsign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_callsign_label.add_theme_font_size_override("font_size", 26)
-	_callsign_label.modulate = Color(1.0, 0.86, 0.34)
+	_callsign_label.modulate = Color(0.90, 0.78, 0.46)
 	pv.add_child(_callsign_label)
 
 	var stage := PanelContainer.new()
@@ -181,14 +181,14 @@ func _build_ui() -> void:
 	_loadout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loadout_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_loadout_label.add_theme_font_size_override("font_size", 16)
-	_loadout_label.modulate = Color(0.78, 0.92, 1.0)
+	_loadout_label.modulate = Color(0.76, 0.82, 0.88)
 	var arch_name: String = ProfileManager.ARCHETYPES[ProfileManager.archetype_id]["name"]
 	var pri_weapon: WeaponData = WeaponData.get_weapon(ProfileManager.primary_weapon_id, ProfileManager.weapon_skin_id, ProfileManager.m4a1_rail_mod)
 	var sec_weapon: WeaponData = WeaponData.get_weapon(ProfileManager.secondary_weapon_id, ProfileManager.weapon_skin_id, 0)
 	_loadout_label.text = "%s\n%s  +  %s" % [arch_name, pri_weapon.display_name, sec_weapon.display_name]
 	pv.add_child(_loadout_label)
 
-	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.82, 0.48, 1.0), 58.0, 18, Color(0.18, 0.11, 0.28, 0.96))
+	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.86, 0.62, 0.24), 58.0, 18, Color(0.18, 0.14, 0.10, 0.96))
 	edit_avatar_btn.pressed.connect(func(): _transition_to(NetworkManager.go_to_avatar_garage))
 	pv.add_child(edit_avatar_btn)
 
@@ -207,7 +207,7 @@ func _build_ui() -> void:
 	var nav_hdr := Label.new()
 	nav_hdr.text = "BATTLE MODES"
 	nav_hdr.add_theme_font_size_override("font_size", 17)
-	nav_hdr.modulate = Color(0.55, 0.86, 1.0)
+	nav_hdr.modulate = Color(0.70, 0.78, 0.86)
 	nav_v.add_child(nav_hdr)
 
 	var btn_solo := _make_arcade_button("▶  PLAY SOLO (GUNFIGHT)", Color(0.30, 0.92, 0.48), 66.0, 20, Color(0.09, 0.28, 0.16, 0.98))

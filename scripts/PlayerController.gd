@@ -670,6 +670,10 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 			b.damage_falloff_start = w.damage_falloff_start
 			b.min_damage_ratio = w.min_damage_ratio
 			b.can_deal_damage = deal_damage
+			if w.pellet_count > 1:
+				# Shotguns deal devastating 1-shot burst only at close range (~220 px)
+				b.max_lifetime = 0.24
+				b.knockback_mult = 1.5 / float(w.pellet_count)
 			parent_node.add_child(b)
 
 	_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
@@ -1409,7 +1413,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 6)), 7.0, col, ab_name, stun_dur, 1280.0, local_auth)
 			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -3.0)
 		"shotgun_blast":
-			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 6)), 18.0, col, ab_name, stun_dur, 1060.0, local_auth)
+			_cast_gun_burst(origin, cast_angle, maxi(dmg, 20), maxi(int(ab.get("shots", 7)), 7), 14.0, col, ab_name, stun_dur, 920.0, local_auth, 0.24)
 			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0)
 		"ult_gun_storm":
 			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 14)), 14.0, col, ab_name, stun_dur, 1340.0, local_auth)
@@ -1477,11 +1481,11 @@ func _cast_teleport(cast_pos: Vector2, angle: float, max_dist: float, dmg: int, 
 		_spawn_styled_projectile(dest + dir * 24.0, angle + 0.16, 860.0, dmg, "slash_wave", col, ab_name, stun_dur, 0.0, false, 60.0, 1.4, true, local_auth, 0.65, 2.2)
 
 
-func _cast_gun_burst(origin: Vector2, angle: float, dmg: int, shots: int, spread_deg: float, col: Color, ab_name: String, stun_dur: float, speed: float, local_auth: bool) -> void:
+func _cast_gun_burst(origin: Vector2, angle: float, dmg: int, shots: int, spread_deg: float, col: Color, ab_name: String, stun_dur: float, speed: float, local_auth: bool, life: float = 1.1) -> void:
 	for i in range(shots):
 		var frac: float = (float(i) / float(maxi(1, shots - 1))) - 0.5
 		var off: float = deg_to_rad(spread_deg) * frac
-		_spawn_styled_projectile(origin, angle + off, speed, dmg, "bullet", col, ab_name, stun_dur, 0.0, false, 60.0, 0.85, false, local_auth, 1.1, 1.15)
+		_spawn_styled_projectile(origin, angle + off, speed, dmg, "bullet", col, ab_name, stun_dur, 0.0, false, 60.0, 0.85, false, local_auth, life, 1.15)
 
 
 func _spawn_barrier_wall(cast_pos: Vector2, angle: float, wall_hp: int, duration: float, col: Color) -> void:

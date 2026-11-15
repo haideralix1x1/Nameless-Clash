@@ -419,7 +419,7 @@ func _build_ui() -> void:
 	_hp_bar.show_percentage = false
 	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_bar.custom_minimum_size = Vector2(0, 16)
-	_hp_bar.modulate = Color(0.28, 0.92, 0.45)
+	_hp_bar.modulate = Color(0.34, 0.74, 0.42)
 	hp_row.add_child(_hp_bar)
 
 	var fuel_row := HBoxContainer.new()
@@ -435,7 +435,7 @@ func _build_ui() -> void:
 	_fuel_bar.show_percentage = false
 	_fuel_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_fuel_bar.custom_minimum_size = Vector2(0, 14)
-	_fuel_bar.modulate = Color(1.0, 0.72, 0.18)
+	_fuel_bar.modulate = Color(0.84, 0.64, 0.26)
 	fuel_row.add_child(_fuel_bar)
 
 	var w_row := HBoxContainer.new()
@@ -534,8 +534,8 @@ func _build_ui() -> void:
 	_agent_action_panel.anchor_right = 0.5
 	_agent_action_panel.anchor_top = 1.0
 	_agent_action_panel.anchor_bottom = 1.0
-	_agent_action_panel.offset_left = -300
-	_agent_action_panel.offset_right = 300
+	_agent_action_panel.offset_left = -356
+	_agent_action_panel.offset_right = 356
 	_agent_action_panel.offset_top = -126
 	_agent_action_panel.offset_bottom = -12
 	_agent_action_panel.add_theme_constant_override("separation", 6)
@@ -789,7 +789,7 @@ func _refresh_scoreboard() -> void:
 func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -> Button:
 	var btn := Button.new()
 	btn.text = title
-	btn.custom_minimum_size = Vector2(142, 60)
+	btn.custom_minimum_size = Vector2(166, 56)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.focus_mode = Control.FOCUS_NONE
 	_style_action_button(btn, bg, border, 12)
@@ -815,7 +815,7 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 		if not is_instance_valid(btn):
 			continue
 		var ab: Dictionary = AgentData.get_ability_slot(arch_id, i)
-		var ab_name: String = str(ab["name"]).left(16)
+		var ab_name: String = str(ab["name"]).left(20)
 		var cd: float = float(cooldowns[i]) if i < cooldowns.size() else 0.0
 		var max_cd: float = float(max_cooldowns[i]) if i < max_cooldowns.size() else 1.0
 		if stun_left > 0.0:
@@ -827,7 +827,7 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 			var _unused := max_cd
 		else:
 			btn.text = "%s %s\nREADY" % [keys[i], ab_name]
-			btn.modulate = Color(1.0, 0.92, 0.45) if i == 3 else Color.WHITE
+			btn.modulate = Color(0.92, 0.82, 0.48) if i == 3 else Color(0.92, 0.94, 0.96)
 
 	if is_instance_valid(_btn_throw):
 		if local_player != null and int(local_player.get("grabbed_player_id")) != 0:

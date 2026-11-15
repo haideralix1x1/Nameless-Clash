@@ -156,7 +156,7 @@ func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
 func _compute_falloff_damage() -> int:
 	if min_damage_ratio >= 0.999 or _distance_traveled <= damage_falloff_start:
 		return damage
-	var falloff_span: float = maxf(240.0, damage_falloff_start)
+	var falloff_span: float = maxf(85.0, damage_falloff_start * 0.85)
 	var t: float = clampf((_distance_traveled - damage_falloff_start) / falloff_span, 0.0, 1.0)
 	var ratio: float = lerpf(1.0, clampf(min_damage_ratio, 0.1, 1.0), t)
 	return maxi(1, int(round(float(damage) * ratio)))

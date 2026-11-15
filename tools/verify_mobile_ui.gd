@@ -2,6 +2,7 @@ extends SceneTree
 
 const AgentDataScript = preload("res://scripts/AgentData.gd")
 const WeaponDataScript = preload("res://scripts/Weapon.gd")
+const UIStyleScript = preload("res://scripts/UIStyle.gd")
 
 var _failures: Array[String] = []
 
@@ -210,6 +211,101 @@ func _run_checks() -> void:
 		nm.apply_rules_dict(saved_rules)
 	nm.match_mode = saved_mode
 	print("CHECK 3B GRAB & THROW PLAYER (3-PLAYER COLLISION): ok")
+
+	# 3C. Close-Range 1-Shot Kill Shotguns vs Far-Range Pellet Expiry + Procedural Classic UI Styles
+	var w_spas := WeaponDataScript.get_weapon(5, 0, 0)
+	var w_rem := WeaponDataScript.get_weapon(6, 0, 0)
+	_assert(w_spas.damage * w_spas.pellet_count >= 140, "SPAS-12 burst damage too low: %d" % (w_spas.damage * w_spas.pellet_count))
+	_assert(w_rem.damage * w_rem.pellet_count >= 140, "Remington 870 burst damage too low: %d" % (w_rem.damage * w_rem.pellet_count))
+	_assert(w_spas.damage_falloff_start <= 120.0 and w_rem.damage_falloff_start <= 120.0, "Shotgun falloff start should be close range (<=120)")
+	if player_scene != null:
+		nm.match_mode = 0
+		nm.apply_rules_dict({"gravity_scale": 0.0, "only_pistols": false, "allow_shotguns": true})
+		var shooter: Node = player_scene.instantiate()
+		var close_target: Node = player_scene.instantiate()
+		var far_target: Node = player_scene.instantiate()
+		shooter.set("peer_id", 1)
+		shooter.set("is_local_human", true)
+		shooter.set("team_id", 0)
+		shooter.set("position", Vector2(400, 500))
+		shooter.set("spawn_invuln_timer", 0.0)
+		close_target.set("peer_id", -3)
+		close_target.set("is_bot", true)
+		close_target.set("team_id", 1)
+		close_target.set("position", Vector2(480, 500))
+		close_target.set("spawn_invuln_timer", 0.0)
+		close_target.set("_bot_think_timer", 5.0)
+		close_target.set("_bot_allow_fire", false)
+		close_target.set("_bot_want_jetpack", false)
+		close_target.set("_bot_strafe_dir", 0.0)
+		far_target.set("peer_id", -4)
+		far_target.set("is_bot", true)
+		far_target.set("team_id", 1)
+		far_target.set("position", Vector2(760, 500))
+		far_target.set("spawn_invuln_timer", 0.0)
+		far_target.set("_bot_think_timer", 5.0)
+		far_target.set("_bot_allow_fire", false)
+		far_target.set("_bot_want_jetpack", false)
+		far_target.set("_bot_strafe_dir", 0.0)
+		root.add_child(shooter)
+		root.add_child(close_target)
+		root.add_child(far_target)
+		await process_frame
+		shooter.global_position = Vector2(400, 500)
+		close_target.global_position = Vector2(480, 500)
+		far_target.global_position = Vector2(760, 500)
+		close_target.set("health", 100)
+		far_target.set("health", 100)
+		shooter.set("spawn_invuln_timer", 0.0)
+		close_target.set("spawn_invuln_timer", 0.0)
+		far_target.set("spawn_invuln_timer", 0.0)
+		close_target.set("_bot_think_timer", 5.0)
+		close_target.set("_bot_allow_fire", false)
+		close_target.set("_bot_strafe_dir", 0.0)
+		far_target.set("_bot_think_timer", 5.0)
+		far_target.set("_bot_allow_fire", false)
+		far_target.set("_bot_strafe_dir", 0.0)
+		shooter.call("_apply_weapon", 5)
+		shooter.set("virtual_aim", Vector2.RIGHT)
+		shooter.set("aim_angle", 0.0)
+		shooter.call("_update_visual_state", 0.016)
+		shooter.call("_fire_weapon")
+		for _step in range(12):
+			await physics_frame
+		_assert(bool(close_target.get("is_dead")) and int(close_target.get("health")) <= 0, "Close-range shotgun failed 1-shot kill! hp=%s dead=%s" % [str(close_target.get("health")), str(close_target.get("is_dead"))])
+		close_target.global_position = Vector2(480, 200)
+		shooter.global_position = Vector2(400, 500)
+		shooter.set("_fire_cooldown", 0.0)
+		shooter.set("current_ammo", 8)
+		shooter.set("virtual_aim", Vector2.RIGHT)
+		shooter.set("aim_angle", 0.0)
+		shooter.call("_update_visual_state", 0.016)
+		shooter.call("_fire_weapon")
+		for _step in range(25):
+			await physics_frame
+		_assert(int(far_target.get("health")) == 100 and not bool(far_target.get("is_dead")), "Far-range shotgun should deal 0 dmg (pellets expire at close range), got hp=%s" % str(far_target.get("health")))
+		shooter.queue_free()
+		close_target.queue_free()
+		far_target.queue_free()
+		await process_frame
+		await process_frame
+		nm.apply_rules_dict(saved_rules)
+		nm.match_mode = saved_mode
+
+	var card_sb: StyleBox = UIStyleScript.make_card_stylebox("blue")
+	_assert(card_sb is StyleBoxFlat, "UIStyle card stylebox should be procedural StyleBoxFlat")
+	if card_sb is StyleBoxFlat:
+		var flat_card := card_sb as StyleBoxFlat
+		_assert(flat_card.bg_color.r < 0.35 and flat_card.bg_color.g < 0.35 and flat_card.bg_color.b < 0.35, "Card bg should use classic muted dark tone")
+	var test_btn := Button.new()
+	UIStyleScript.style_layer_button(test_btn, "green", "battle", 16, 10)
+	var btn_sb: StyleBox = test_btn.get_theme_stylebox("normal")
+	_assert(btn_sb is StyleBoxFlat, "UIStyle button normal stylebox should be procedural StyleBoxFlat")
+	if btn_sb is StyleBoxFlat:
+		var flat_btn := btn_sb as StyleBoxFlat
+		_assert(flat_btn.bg_color.r < 0.35 and flat_btn.bg_color.g < 0.35 and flat_btn.bg_color.b < 0.35, "Button bg should use classic non-neon tone")
+	test_btn.free()
+	print("CHECK 3C SHOTGUN 1-SHOT CLOSE RANGE & CLASSIC UI STYLE: ok")
 
 	# 4. WeaponData.GUN_PRESETS & Game Rules filtering
 	_assert(WeaponDataScript.GUN_PRESETS.size() == 6, "Expected 6 GUN_PRESETS")
