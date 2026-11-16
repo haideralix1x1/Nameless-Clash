@@ -351,24 +351,11 @@ func _parse_color(value: Variant, fallback: Color) -> Color:
 
 
 func apply_taunt_pose(_anim_name: String, _p: float, _facing_right: bool) -> void:
-	_ensure_layers()
-	position = Vector2.ZERO
-	rotation = 0.0
-	scale = Vector2.ONE
-	for n in [_anim_head, _sprite_gear, _anim_torso, _anim_legs, _sprite_hands, _sprite_back]:
-		if n != null:
-			n.position = Vector2.ZERO
-			n.rotation = 0.0
+	pass
 
 
 func reset_taunt_pose() -> void:
-	position = Vector2.ZERO
-	rotation = 0.0
-	scale = Vector2.ONE
-	for n in [_anim_head, _sprite_gear, _anim_torso, _anim_legs, _sprite_hands, _sprite_back]:
-		if n != null:
-			n.position = Vector2.ZERO
-			n.rotation = 0.0
+	pass
 
 
 func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:

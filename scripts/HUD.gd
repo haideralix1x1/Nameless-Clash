@@ -69,6 +69,8 @@ var _chat_panel: PanelContainer
 var _chat_log: RichTextLabel
 var _chat_input: LineEdit
 var _chat_lines: Array[String] = []
+var _chat_toast_label: RichTextLabel
+var _chat_toast_items: Array[Dictionary] = []
 
 var _preset_overlay: PanelContainer
 var _preset_timer_label: Label
@@ -117,6 +119,7 @@ func _process(delta: float) -> void:
 	_update_stick_and_button_positions()
 	if not get_tree().paused:
 		_tick_killfeed(delta)
+		_tick_chat_toasts(delta)
 	_push_input_to_player()
 	_update_scope_overlay()
 	if is_instance_valid(_indicator_overlay):
@@ -1024,10 +1027,30 @@ func _build_ui() -> void:
 		_chat_panel.visible = not _chat_panel.visible
 		if _chat_panel.visible:
 			_chat_toggle_btn.text = "💬 CHAT"
+		if is_instance_valid(_chat_toast_label):
+			_chat_toast_label.visible = (not _chat_panel.visible) and (not _chat_toast_items.is_empty())
 		if is_instance_valid(_killfeed_label):
-			_killfeed_label.offset_top = 308 if _chat_panel.visible else 48
+			_killfeed_label.offset_top = 308 if _chat_panel.visible else 138
 			_killfeed_label.offset_bottom = _killfeed_label.offset_top + 100
 	)
+
+	# Floating borderless chat lines under CHAT button (no box, fades away)
+	_chat_toast_label = RichTextLabel.new()
+	_chat_toast_label.bbcode_enabled = true
+	_chat_toast_label.fit_content = true
+	_chat_toast_label.scroll_active = false
+	_chat_toast_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chat_toast_label.anchor_left = 1.0
+	_chat_toast_label.anchor_right = 1.0
+	_chat_toast_label.offset_left = -360
+	_chat_toast_label.offset_right = -12
+	_chat_toast_label.offset_top = 48
+	_chat_toast_label.offset_bottom = 136
+	_chat_toast_label.add_theme_font_size_override("normal_font_size", 14)
+	_chat_toast_label.add_theme_constant_override("outline_size", 3)
+	_chat_toast_label.add_theme_color_override("font_outline_color", Color(0.04, 0.06, 0.10, 0.95))
+	_chat_toast_label.visible = false
+	add_child(_chat_toast_label)
 
 	# Floating Killfeed (top-right, below chat bar, highlighted for local kills/deaths)
 	_killfeed_label = RichTextLabel.new()
@@ -1325,8 +1348,40 @@ func _on_chat_message_received(sender_name: String, message: String) -> void:
 		_chat_lines.remove_at(0)
 	if is_instance_valid(_chat_log):
 		_chat_log.text = "\n".join(_chat_lines)
-	if is_instance_valid(_chat_toggle_btn) and is_instance_valid(_chat_panel) and not _chat_panel.visible:
-		_chat_toggle_btn.text = "💬 NEW!"
+	_chat_toast_items.append({"text": "[right][color=#70d0ff]%s:[/color] [color=#ffffff]%s[/color][/right]" % [s_esc, m_esc], "ttl": 4.5})
+	if _chat_toast_items.size() > 4:
+		_chat_toast_items.remove_at(0)
+	_render_chat_toasts()
+
+
+func _tick_chat_toasts(delta: float) -> void:
+	if _chat_toast_items.is_empty():
+		return
+	var changed: bool = false
+	for i in range(_chat_toast_items.size() - 1, -1, -1):
+		_chat_toast_items[i]["ttl"] = float(_chat_toast_items[i]["ttl"]) - delta
+		if float(_chat_toast_items[i]["ttl"]) <= 0.0:
+			_chat_toast_items.remove_at(i)
+			changed = true
+	if changed:
+		_render_chat_toasts()
+	elif is_instance_valid(_chat_toast_label) and not _chat_toast_items.is_empty():
+		var max_ttl: float = 0.0
+		for it in _chat_toast_items:
+			max_ttl = maxf(max_ttl, float(it["ttl"]))
+		_chat_toast_label.modulate.a = clampf(max_ttl, 0.0, 1.0) if max_ttl < 1.0 else 1.0
+
+
+func _render_chat_toasts() -> void:
+	if not is_instance_valid(_chat_toast_label):
+		return
+	var lines: PackedStringArray = PackedStringArray()
+	for it in _chat_toast_items:
+		lines.append(str(it["text"]))
+	_chat_toast_label.text = "\n".join(lines)
+	_chat_toast_label.modulate.a = 1.0
+	var show_toasts: bool = (not _chat_toast_items.is_empty()) and (not is_instance_valid(_chat_panel) or not _chat_panel.visible)
+	_chat_toast_label.visible = show_toasts
 
 
 func _on_killfeed_event(killer_name: String, victim_name: String, weapon_name: String) -> void:

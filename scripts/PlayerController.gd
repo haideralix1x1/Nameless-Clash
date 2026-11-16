@@ -616,11 +616,6 @@ func _process_alive(delta: float) -> void:
 		_taunt_cooldown = maxf(0.0, _taunt_cooldown - delta)
 	if _taunt_timer > 0.0:
 		_taunt_timer = maxf(0.0, _taunt_timer - delta)
-		if is_instance_valid(_modular_rig):
-			var p: float = 1.5 - _taunt_timer
-			_modular_rig.apply_taunt_pose(_taunt_anim, p, facing_right)
-		if _taunt_timer <= 0.0 and is_instance_valid(_modular_rig):
-			_modular_rig.reset_taunt_pose()
 
 	facing_right = cos(aim_angle) >= 0.0
 
