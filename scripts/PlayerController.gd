@@ -7,10 +7,17 @@ signal weapon_changed(weapon_data: WeaponData, dual_wield: bool)
 signal died_signal(respawn_seconds: float)
 signal respawned_signal
 signal bombs_changed(count: int, bomb_type: String)
+signal zoom_changed(zoom_level: int, max_zoom: int)
 signal agent_state_changed(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float)
+signal nearby_weapon_changed(crate_idx: int, weapon_id: int)
+signal nearby_interactable_changed(inter_idx: int, label_text: String)
+signal held_prop_changed(prop_kind: String)
+signal agent_abilities_changed
 
 const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
+const BOMB_SCRIPT: Script = preload("res://scripts/Bomb.gd")
+const ZOOM_LEVEL_VALUES: Array[float] = [1.05, 0.94, 0.85, 0.77, 0.70, 0.64, 0.58]
 
 const MOVE_SPEED: float = 310.0
 const CROUCH_SPEED: float = 165.0
@@ -24,9 +31,9 @@ const WALL_JUMP_X: float = 320.0
 const JETPACK_THRUST: float = 1850.0
 const JETPACK_MAX_UP_SPEED: float = -430.0
 const MAX_FUEL: float = 100.0
-const FUEL_CONSUME_RATE: float = 38.0
-const FUEL_RECHARGE_GROUND: float = 48.0
-const FUEL_RECHARGE_AIR: float = 14.0
+const FUEL_CONSUME_RATE: float = 18.0
+const FUEL_RECHARGE_GROUND: float = 55.0
+const FUEL_RECHARGE_AIR: float = 20.0
 const RESPAWN_TIME: float = 3.0
 const MAX_SCREEN_SHAKE: float = 3.2
 
@@ -69,9 +76,16 @@ var gear_color: Color = Color.WHITE
 
 var max_health: int = 100
 var current_ammo: int = 30
+const SPAWN_INVULN_SEC: float = 3.0
 var is_reloading: bool = false
-var spawn_invuln_timer: float = 0.0
+var spawn_invuln_timer: float = SPAWN_INVULN_SEC
 var _equipped_primary_id: int = 0
+var nearby_weapon_crate: int = -1
+var nearby_weapon_id: int = -1
+var nearby_interactable_idx: int = -1
+var held_prop_kind: String = ""
+var custom_ability_slots: Array[Dictionary] = []
+var reverse_controls_timer: float = 0.0
 
 # Virtual joystick overrides fed from HUD
 var virtual_move: Vector2 = Vector2.ZERO
@@ -102,11 +116,17 @@ const THROW_PLAYER_SPEED: float = 980.0
 const THROWN_SELF_DAMAGE: int = 36
 const THROWN_TARGET_DAMAGE: int = 44
 const THROWN_WALL_DAMAGE: int = 22
+const DEFAULT_SHOE_ITEM_ID: int = 5
+const SHOE_COOLDOWN_SEC: float = 5.0
+const SHOE_WINDUP_SEC: float = 1.0
 
 # Agent Clash Mode state
 var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var ability_max_cooldowns: Array[float] = [6.0, 8.0, 8.5, 22.0]
 var held_throwable_id: int = -1
+var held_throwables: Array[int] = []
+var shoe_cooldown_timer: float = 0.0
+var _shoe_windup_timer: float = 0.0
 var grabbed_player_id: int = 0
 var carried_by_peer_id: int = 0
 var _grab_hold_timer: float = 0.0
@@ -128,6 +148,11 @@ var selected_gun_preset_id: int = 0
 var bomb_count: int = 3
 var max_bombs: int = 3
 var bomb_type: String = "frag"
+var current_zoom_level: int = 1
+var taunt_id: int = 0
+var _taunt_timer: float = 0.0
+var _taunt_cooldown: float = 0.0
+var _taunt_anim: String = ""
 var _bomb_cooldown: float = 0.0
 
 @onready var _collision_shape: CollisionShape2D = $CollisionShape2D
@@ -185,6 +210,7 @@ func setup_player(
 	bomb_count = max_bombs
 	weapon_skin_id = int(av["weapon_skin_id"])
 	m4a1_rail_mod = int(av["m4a1_rail_mod"])
+	taunt_id = int(av.get("taunt_id", 0))
 
 	var auth_id: int = 1 if p_id < 0 else p_id
 	set_multiplayer_authority(auth_id)
@@ -199,6 +225,7 @@ func setup_player(
 
 func _ready() -> void:
 	add_to_group("players")
+	spawn_invuln_timer = SPAWN_INVULN_SEC
 	_init_agent_kit()
 	_apply_modular_textures()
 	_apply_weapon(current_weapon_id)
@@ -213,26 +240,102 @@ func _ready() -> void:
 
 func _init_agent_kit() -> void:
 	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
-	var ag: Dictionary = AgentData.get_agent(archetype_id)
-	var abils: Array = ag["abilities"]
-	var ult: Dictionary = ag["ultimate"]
-	ability_max_cooldowns = [
-		float(abils[0]["cooldown"]),
-		float(abils[1]["cooldown"]),
-		float(abils[2]["cooldown"]),
-		float(ult["cooldown"])
-	]
+	if archetype_id == 25:
+		_roll_ray_lina_random_kit()
+	else:
+		custom_ability_slots.clear()
+		var ag: Dictionary = AgentData.get_agent(archetype_id)
+		var abils: Array = ag["abilities"]
+		var ult: Dictionary = ag["ultimate"]
+		ability_max_cooldowns = [
+			float(abils[0]["cooldown"]),
+			float(abils[1]["cooldown"]),
+			float(abils[2]["cooldown"]),
+			float(ult["cooldown"])
+		]
 	if _agent_weapon_node == null and is_instance_valid(_weapon_pivot):
 		var vis := AgentWeaponVisual.new()
 		vis.name = "AgentWeaponVisual"
 		_weapon_pivot.add_child(vis)
 		_agent_weapon_node = vis
-	if _agent_weapon_node != null:
-		var bw: Dictionary = ag["base_weapon"]
-		_agent_weapon_node.set("weapon_style", str(bw["style"]))
-		_agent_weapon_node.set("weapon_color", bw["color"] as Color)
-		_agent_weapon_node.visible = NetworkManager.is_agent_clash_mode() and not is_dead
-		_agent_weapon_node.queue_redraw()
+	if not NetworkManager.kill_scored.is_connected(_on_kill_scored):
+		NetworkManager.kill_scored.connect(_on_kill_scored)
+	if is_local_human:
+		agent_abilities_changed.emit()
+
+
+func get_active_ability_slot(slot_idx: int) -> Dictionary:
+	if custom_ability_slots.size() == 4 and slot_idx >= 0 and slot_idx < 4:
+		return custom_ability_slots[slot_idx]
+	return AgentData.get_ability_slot(archetype_id, slot_idx)
+
+
+func _roll_ray_lina_random_kit() -> void:
+	custom_ability_slots.clear()
+	var pool_count: int = mini(25, AgentData.AGENTS.size() - 1)
+	for slot_i in range(3):
+		var src_ag: Dictionary = AgentData.get_agent(randi() % pool_count)
+		var src_ab: Dictionary = (src_ag["abilities"][slot_i] as Dictionary).duplicate(true)
+		custom_ability_slots.append(src_ab)
+	var ult_ag: Dictionary = AgentData.get_agent(randi() % pool_count)
+	custom_ability_slots.append((ult_ag["ultimate"] as Dictionary).duplicate(true))
+	ability_max_cooldowns = [
+		float(custom_ability_slots[0]["cooldown"]),
+		float(custom_ability_slots[1]["cooldown"]),
+		float(custom_ability_slots[2]["cooldown"]),
+		float(custom_ability_slots[3]["cooldown"])
+	]
+
+
+func _on_kill_scored(killer_id: int, victim_id: int) -> void:
+	if archetype_id != 25 or killer_id != peer_id or victim_id == peer_id:
+		return
+	var victim_arch: int = -1
+	for p in get_tree().get_nodes_in_group("players"):
+		if is_instance_valid(p) and int(p.get("peer_id")) == victim_id:
+			victim_arch = int(p.get("archetype_id"))
+			break
+	if victim_arch < 0 or victim_arch == 25:
+		return
+	var ag: Dictionary = AgentData.get_agent(victim_arch)
+	custom_ability_slots = [
+		(ag["abilities"][0] as Dictionary).duplicate(true),
+		(ag["abilities"][1] as Dictionary).duplicate(true),
+		(ag["abilities"][2] as Dictionary).duplicate(true),
+		(ag["ultimate"] as Dictionary).duplicate(true)
+	]
+	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	ability_max_cooldowns = [
+		float(custom_ability_slots[0]["cooldown"]),
+		float(custom_ability_slots[1]["cooldown"]),
+		float(custom_ability_slots[2]["cooldown"]),
+		float(custom_ability_slots[3]["cooldown"])
+	]
+	if is_local_human:
+		agent_abilities_changed.emit()
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+
+func switch_agent_in_game(new_arch_id: int) -> void:
+	var idx: int = wrapi(new_arch_id, 0, ProfileManager.ARCHETYPES.size())
+	ProfileManager.apply_archetype_preset(idx, true)
+	archetype_id = ProfileManager.archetype_id
+	skin_id = ProfileManager.skin_id
+	head_id = ProfileManager.head_id
+	torso_id = ProfileManager.torso_id
+	legs_id = ProfileManager.legs_id
+	hands_id = ProfileManager.hands_id
+	accessories_id = ProfileManager.accessories_id
+	shirt_color = ProfileManager.shirt_color
+	pants_color = ProfileManager.pants_color
+	skin_color = ProfileManager.skin_color
+	helmet_color = ProfileManager.helmet_color
+	gear_color = ProfileManager.gear_color
+	_init_agent_kit()
+	_apply_modular_textures()
+	_apply_team_visuals()
+	_apply_weapon_visuals()
+	_emit_hud_signals()
 
 
 func _apply_modular_textures() -> void:
@@ -289,6 +392,8 @@ func _physics_process(delta: float) -> void:
 
 	if _hit_flash_timer > 0.0:
 		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
+	if reverse_controls_timer > 0.0:
+		reverse_controls_timer = maxf(0.0, reverse_controls_timer - delta)
 
 	if _shake_amount > 0.0:
 		_shake_amount = maxf(0.0, _shake_amount - delta * 18.0)
@@ -296,7 +401,7 @@ func _physics_process(delta: float) -> void:
 		var s: float = _shake_amount * SettingsManager.screen_shake_intensity
 		var target_off: Vector2 = Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO
 		_camera.offset = _camera.offset.lerp(target_off, 0.45)
-		var target_zoom_val: float = _weapon.scope_zoom if (not NetworkManager.is_agent_clash_mode() and not is_dead and _weapon != null) else 1.05
+		var target_zoom_val: float = get_target_camera_zoom()
 		var target_zoom := Vector2(target_zoom_val, target_zoom_val)
 		_camera.zoom = _camera.zoom.lerp(target_zoom, clampf(delta * 8.0, 0.0, 1.0))
 
@@ -331,6 +436,24 @@ func _process_alive(delta: float) -> void:
 		_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	if _bomb_cooldown > 0.0:
 		_bomb_cooldown = maxf(0.0, _bomb_cooldown - delta)
+	if shoe_cooldown_timer > 0.0:
+		shoe_cooldown_timer = maxf(0.0, shoe_cooldown_timer - delta)
+	if _shoe_windup_timer > 0.0:
+		_shoe_windup_timer = maxf(0.0, _shoe_windup_timer - delta)
+		if is_instance_valid(_modular_rig):
+			var prog: float = clampf(1.0 - (_shoe_windup_timer / SHOE_WINDUP_SEC), 0.0, 1.0)
+			_modular_rig.play_shoe_throw_frame(prog, not facing_right)
+		if _shoe_windup_timer <= 0.0:
+			if is_instance_valid(_modular_rig):
+				_modular_rig.stop_shoe_throw()
+			shoe_cooldown_timer = SHOE_COOLDOWN_SEC
+			if is_local_human and NetworkManager.is_agent_clash_mode():
+				agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+			var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+			if NetworkManager.is_network_active():
+				throw_item_rpc.rpc(DEFAULT_SHOE_ITEM_ID, safe_m, aim_angle)
+			else:
+				_throw_item_local(DEFAULT_SHOE_ITEM_ID, safe_m, aim_angle)
 
 	if NetworkManager.is_agent_clash_mode():
 		for i in range(4):
@@ -457,6 +580,13 @@ func _process_alive(delta: float) -> void:
 		if SettingsManager.auto_aim_assist:
 			aim_angle = _apply_auto_aim_assist(aim_angle)
 
+		if reverse_controls_timer > 0.0:
+			move_dir = -move_dir
+			var tmp_j: bool = want_jump
+			want_jump = want_crouch
+			want_crouch = tmp_j
+			aim_angle = wrapf(aim_angle + PI, -PI, PI)
+
 		want_fire = virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui)
 
 		if NetworkManager.is_agent_clash_mode():
@@ -479,6 +609,18 @@ func _process_alive(delta: float) -> void:
 				toggle_dual_wield()
 			if Input.is_action_just_pressed("throw_item"):
 				throw_bomb()
+		if Input.is_action_just_pressed("taunt"):
+			trigger_taunt()
+
+	if _taunt_cooldown > 0.0:
+		_taunt_cooldown = maxf(0.0, _taunt_cooldown - delta)
+	if _taunt_timer > 0.0:
+		_taunt_timer = maxf(0.0, _taunt_timer - delta)
+		if is_instance_valid(_modular_rig):
+			var p: float = 1.5 - _taunt_timer
+			_modular_rig.apply_taunt_pose(_taunt_anim, p, facing_right)
+		if _taunt_timer <= 0.0 and is_instance_valid(_modular_rig):
+			_modular_rig.reset_taunt_pose()
 
 	facing_right = cos(aim_angle) >= 0.0
 
@@ -554,6 +696,7 @@ func _process_alive(delta: float) -> void:
 
 	if is_local_human:
 		fuel_changed.emit(jetpack_fuel, MAX_FUEL)
+		queue_redraw()
 
 
 func _apply_auto_aim_assist(raw_angle: float) -> float:
@@ -620,9 +763,9 @@ func _fire_weapon() -> void:
 	var recoil_sign: float = -1.0 if cos(aim_angle) >= 0.0 else 1.0
 	aim_angle = wrapf(aim_angle + recoil_sign * _weapon.vertical_recoil_bias, -PI, PI)
 
-	var muzzle_positions := PackedVector2Array([_muzzle_primary.global_position])
+	var muzzle_positions := PackedVector2Array([_get_safe_muzzle_pos(_muzzle_primary.global_position)])
 	if shots_to_fire == 2:
-		muzzle_positions.append(_muzzle_secondary.global_position)
+		muzzle_positions.append(_get_safe_muzzle_pos(_muzzle_secondary.global_position))
 
 	var seed_val: int = int(Time.get_ticks_usec() % 1000000)
 	if NetworkManager.is_network_active():
@@ -670,10 +813,17 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 			b.damage_falloff_start = w.damage_falloff_start
 			b.min_damage_ratio = w.min_damage_ratio
 			b.can_deal_damage = deal_damage
+			b.is_homing = w.is_homing
+			if w.custom_visual_style != "bullet":
+				b.visual_style = w.custom_visual_style
+			elif w.is_explosive:
+				b.visual_style = "rocket"
 			if w.pellet_count > 1:
-				# Shotguns deal devastating 1-shot burst only at close range (~220 px)
-				b.max_lifetime = 0.24
+				# Shotguns deal strong burst at close-to-mid range (~315 px)
+				b.max_lifetime = 0.34
 				b.knockback_mult = 1.5 / float(w.pellet_count)
+			else:
+				b.max_lifetime = w.custom_lifetime
 			parent_node.add_child(b)
 
 	_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
@@ -737,6 +887,14 @@ func apply_gun_preset(preset_idx: int) -> void:
 		bombs_changed.emit(bomb_count, bomb_type)
 
 
+func set_bomb_type(b_type: String) -> void:
+	if NetworkManager.is_agent_clash_mode():
+		return
+	bomb_type = b_type if not b_type.is_empty() else "frag"
+	if is_local_human:
+		bombs_changed.emit(bomb_count, bomb_type)
+
+
 func throw_bomb() -> void:
 	if NetworkManager.is_agent_clash_mode() or is_dead or bomb_count <= 0 or _bomb_cooldown > 0.0 or not NetworkManager.allow_explosives:
 		return
@@ -744,10 +902,11 @@ func throw_bomb() -> void:
 	_bomb_cooldown = 0.65
 	if is_local_human:
 		bombs_changed.emit(bomb_count, bomb_type)
+	var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 	if NetworkManager.is_network_active():
-		throw_bomb_rpc.rpc(_muzzle_primary.global_position, aim_angle, bomb_type)
+		throw_bomb_rpc.rpc(safe_m, aim_angle, bomb_type)
 	else:
-		_throw_bomb_local(_muzzle_primary.global_position, aim_angle, bomb_type)
+		_throw_bomb_local(safe_m, aim_angle, bomb_type)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -757,20 +916,39 @@ func throw_bomb_rpc(origin: Vector2, angle: float, b_type: String) -> void:
 
 func _throw_bomb_local(origin: Vector2, angle: float, b_type: String) -> void:
 	var local_auth: bool = _is_controlled_locally()
-	if b_type == "cluster":
-		for off in [-0.14, 0.0, 0.14]:
-			_spawn_styled_projectile(
-				origin, angle + off, 700.0, 48, "frag_bomb",
-				Color(1.0, 0.42, 0.15), "Cluster Bomb", 0.0, 12.0,
-				true, 125.0, 1.35, false, local_auth, 1.8, 1.0, 0.72
-			)
-	else:
-		_spawn_styled_projectile(
-			origin, angle, 740.0, 82, "frag_bomb",
-			Color(0.28, 0.92, 0.42), "Frag Bomb", 0.0, 10.0,
-			true, 155.0, 1.5, false, local_auth, 1.9, 1.05, 0.72
-		)
+	match b_type:
+		"cluster":
+			for off in [-0.14, 0.0, 0.14]:
+				_spawn_bomb_instance(origin, angle + off, "cluster", 580.0, 48, 125.0, Color(1.0, 0.42, 0.15), "Cluster Bomb", local_auth)
+		"sticky":
+			_spawn_bomb_instance(origin, angle, "sticky", 660.0, 88, 150.0, Color(0.28, 0.72, 1.0), "Sticky Bomb", local_auth)
+		"time":
+			_spawn_bomb_instance(origin, angle, "time", 560.0, 105, 185.0, Color(1.0, 0.30, 0.22), "Time Bomb", local_auth)
+		"mine":
+			_spawn_bomb_instance(origin, angle, "mine", 380.0, 95, 150.0, Color(1.0, 0.62, 0.18), "Mine Bomb", local_auth)
+		_:
+			_spawn_bomb_instance(origin, angle, "frag", 600.0, 82, 155.0, Color(0.28, 0.92, 0.42), "Frag Bomb", local_auth)
 	_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.65)
+
+
+func _spawn_bomb_instance(origin: Vector2, angle: float, b_type: String, speed: float, dmg: int, radius: float, col: Color, w_name: String, local_auth: bool) -> void:
+	var world_node: Node = get_parent()
+	if world_node == null:
+		return
+	var bomb: Node2D = BOMB_SCRIPT.new() as Node2D
+	bomb.global_position = origin
+	bomb.set("bomb_type", b_type)
+	bomb.set("velocity", Vector2.from_angle(angle) * speed + Vector2(0.0, -90.0))
+	bomb.set("damage", dmg)
+	bomb.set("explosion_radius", radius)
+	bomb.set("shooter_peer_id", peer_id)
+	bomb.set("shooter_team", team_id)
+	bomb.set("shooter_name", player_name)
+	bomb.set("shooter_rid", get_rid())
+	bomb.set("weapon_name", w_name)
+	bomb.set("bomb_color", col)
+	bomb.set("can_deal_damage", local_auth)
+	world_node.add_child(bomb)
 
 
 func toggle_dual_wield() -> void:
@@ -801,8 +979,31 @@ func _apply_weapon(weapon_id: int) -> void:
 		is_dual_wielding = false
 	is_reloading = false
 	current_ammo = _weapon.mag_size
+	current_zoom_level = clampi(current_zoom_level, 1, get_max_zoom_level())
 	_apply_weapon_visuals()
 	_emit_hud_signals()
+
+
+func get_max_zoom_level() -> int:
+	if NetworkManager.is_agent_clash_mode() or _weapon == null:
+		return 1
+	return clampi(maxi(2, _weapon.max_zoom_level), 2, ZOOM_LEVEL_VALUES.size())
+
+
+func get_target_camera_zoom() -> float:
+	if NetworkManager.is_agent_clash_mode() or is_dead or _weapon == null:
+		return 1.05
+	var lvl: int = clampi(current_zoom_level, 1, get_max_zoom_level())
+	return ZOOM_LEVEL_VALUES[lvl - 1]
+
+
+func cycle_zoom() -> void:
+	if NetworkManager.is_agent_clash_mode() or is_dead or _weapon == null:
+		return
+	var max_z: int = get_max_zoom_level()
+	current_zoom_level = 1 if current_zoom_level >= max_z else (current_zoom_level + 1)
+	if is_local_human:
+		zoom_changed.emit(current_zoom_level, max_z)
 
 
 func _apply_weapon_visuals() -> void:
@@ -831,7 +1032,7 @@ func _apply_weapon_visuals() -> void:
 
 
 func can_grab_throwable() -> bool:
-	return NetworkManager.is_agent_clash_mode() and held_throwable_id == -1 and grabbed_player_id == 0 and carried_by_peer_id == 0 and not is_dead
+	return NetworkManager.is_agent_clash_mode() and grabbed_player_id == 0 and carried_by_peer_id == 0 and not is_dead
 
 
 func apply_pickup(pickup_type: String, value: int) -> void:
@@ -843,18 +1044,80 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 			health_changed.emit(health, max_health)
 	elif pickup_type == "throwable":
 		if NetworkManager.is_agent_clash_mode():
-			held_throwable_id = clampi(value, 0, AgentData.THROWABLE_ITEMS.size() - 1)
+			var item_id: int = clampi(value, 0, AgentData.THROWABLE_ITEMS.size() - 1)
+			held_throwables.append(item_id)
+			held_throwable_id = held_throwables.back()
 			if is_local_human:
 				agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	elif pickup_type == "weapon":
 		if not NetworkManager.is_agent_clash_mode():
-			_equipped_primary_id = WeaponData.sanitize_weapon_id(value)
-			set_weapon(_equipped_primary_id)
+			var new_w_id: int = WeaponData.sanitize_weapon_id(value)
+			if current_weapon_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id:
+				secondary_weapon_id = new_w_id
+				set_weapon(secondary_weapon_id)
+			else:
+				_equipped_primary_id = new_w_id
+				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
 				bomb_count = mini(max_bombs, bomb_count + 1)
 				if is_local_human:
 					bombs_changed.emit(bomb_count, bomb_type)
 	_play_local_sfx("res://assets/audio/pickup.wav", -2.0)
+
+
+func set_nearby_weapon(crate_idx: int, w_id: int) -> void:
+	if nearby_weapon_crate == crate_idx and nearby_weapon_id == w_id:
+		return
+	nearby_weapon_crate = crate_idx
+	nearby_weapon_id = w_id
+	if is_local_human:
+		nearby_weapon_changed.emit(crate_idx, w_id)
+
+
+func set_nearby_interactable(inter_idx: int, label_text: String) -> void:
+	nearby_interactable_idx = inter_idx
+	if is_local_human:
+		nearby_interactable_changed.emit(inter_idx, label_text)
+
+
+func set_held_prop(prop_kind: String) -> void:
+	held_prop_kind = prop_kind
+	if is_local_human:
+		held_prop_changed.emit(prop_kind)
+
+
+func throw_held_prop() -> void:
+	if held_prop_kind.is_empty() or is_dead:
+		return
+	var kind: String = held_prop_kind
+	set_held_prop("")
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var aim_dir: Vector2 = Vector2.from_angle(aim_angle)
+	var b := BULLET_SCENE.instantiate()
+	b.global_position = global_position + aim_dir * 26.0 + Vector2(0, -8.0)
+	b.velocity = aim_dir.normalized() * 760.0 + Vector2(0, -120.0)
+	b.damage = 38
+	b.shooter_peer_id = peer_id
+	b.shooter_team = team_id
+	b.shooter_name = player_name
+	b.shooter_rid = get_rid()
+	b.weapon_name = kind.replace("_", " ").capitalize()
+	b.bullet_color = Color(0.95, 0.85, 0.55)
+	b.visual_style = "prop_" + kind
+	if kind == "barrel":
+		b.is_explosive = true
+		b.explosion_radius = 140.0
+		b.damage = 65
+		b.bullet_color = Color(1.0, 0.45, 0.14)
+	b.spin_speed = 9.5
+	b.gravity_mult = 0.58
+	b.knockback_mult = 1.65
+	b.max_lifetime = 2.2
+	b.can_deal_damage = _is_controlled_locally()
+	parent_node.add_child(b)
+	_play_local_sfx("res://assets/audio/pickup.wav", 2.0, 0.72)
 
 
 func apply_hit(dmg: int, attacker_id: int, weapon_name: String, attacker_name: String, knockback: Vector2) -> void:
@@ -876,7 +1139,12 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 		return
 	_hit_flash_timer = 0.12
 	_play_local_sfx("res://assets/audio/hit.wav", -3.0)
-	add_screen_shake(clampf(float(dmg) * 0.03, 0.35, 1.35))
+	if SettingsManager.enhanced_visuals:
+		add_screen_shake(clampf(float(dmg) * 0.03, 0.35, 1.35))
+	if SettingsManager.show_blood:
+		_spawn_blood_splatter()
+	if SettingsManager.damage_display:
+		_spawn_damage_popup(dmg)
 
 	if not _is_controlled_locally():
 		return
@@ -945,11 +1213,14 @@ func _respawn_self() -> void:
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
 	held_throwable_id = -1
+	held_throwables.clear()
+	shoe_cooldown_timer = 0.0
+	_shoe_windup_timer = 0.0
 	_release_grab_state()
 	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
 	current_ammo = _weapon.mag_size
-	spawn_invuln_timer = 1.6
+	spawn_invuln_timer = SPAWN_INVULN_SEC
 
 	if NetworkManager.is_network_active():
 		announce_respawn_rpc.rpc(spawn_pos)
@@ -1047,6 +1318,7 @@ func _apply_team_visuals() -> void:
 
 func _update_overhead_ui() -> void:
 	_overhead_ui.visible = not is_dead
+	_name_label.visible = SettingsManager.show_callsigns
 	if NetworkManager.is_agent_clash_mode() and carried_by_peer_id != 0:
 		_name_label.text = "✋ GRABBED!"
 		_name_label.modulate = Color(1.0, 0.65, 0.22)
@@ -1080,6 +1352,7 @@ func _emit_hud_signals() -> void:
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	else:
 		bombs_changed.emit(bomb_count, bomb_type)
+		zoom_changed.emit(clampi(current_zoom_level, 1, get_max_zoom_level()), get_max_zoom_level())
 
 
 func _emit_ammo() -> void:
@@ -1101,6 +1374,37 @@ func is_alive() -> bool:
 
 
 func _compute_bot_input(delta: float) -> Dictionary:
+	if NetworkManager.is_test_mode():
+		var tb: int = NetworkManager.test_bot_behavior
+		if tb == 0:
+			return {
+				"move_x": 0.0,
+				"jump": false,
+				"crouch": false,
+				"jetpack": false,
+				"fire": false,
+				"aim_angle": aim_angle
+			}
+		elif tb == 1:
+			_bot_think_timer -= delta
+			if _bot_think_timer <= 0.0:
+				_bot_think_timer = randf_range(1.1, 2.2)
+				_bot_strafe_dir = -1.0 if randf() < 0.5 else 1.0
+				_bot_want_jetpack = randf() < 0.25
+			if is_on_wall():
+				_bot_strafe_dir = -_bot_strafe_dir
+			var mv: float = _bot_strafe_dir if absf(_bot_strafe_dir) > 0.1 else 1.0
+			var jmp: bool = is_on_wall() and is_on_floor()
+			var jet: bool = _bot_want_jetpack and jetpack_fuel > 30.0
+			return {
+				"move_x": mv,
+				"jump": jmp,
+				"crouch": false,
+				"jetpack": jet,
+				"fire": false,
+				"aim_angle": 0.0 if mv >= 0.0 else PI
+			}
+
 	var diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 	_bot_think_timer -= delta
 	var nearest_target: Node2D = null
@@ -1270,10 +1574,11 @@ func _fire_agent_base_weapon() -> void:
 	var col: Color = bw["color"] as Color
 	var w_label: String = str(bw["name"])
 	if bool(bw["ranged"]):
+		var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 		if NetworkManager.is_network_active():
-			spawn_agent_base_ranged_rpc.rpc(_muzzle_primary.global_position, aim_angle, dmg, col, w_label)
+			spawn_agent_base_ranged_rpc.rpc(safe_m, aim_angle, dmg, col, w_label)
 		else:
-			_spawn_styled_projectile(_muzzle_primary.global_position, aim_angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
+			_spawn_styled_projectile(safe_m, aim_angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
 			_play_local_sfx("res://assets/audio/shoot_smg.wav", -6.0, 1.45)
 	else:
 		var reach: float = float(bw["range"])
@@ -1320,7 +1625,7 @@ func execute_ability_rpc(slot_idx: int, cast_pos: Vector2, cast_angle: float) ->
 
 
 func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float) -> void:
-	var ab: Dictionary = AgentData.get_ability_slot(archetype_id, slot_idx)
+	var ab: Dictionary = get_active_ability_slot(slot_idx)
 	var kind: String = str(ab.get("kind", "cleave"))
 	var dmg: int = int(ab.get("damage", 25))
 	var stun_dur: float = float(ab.get("stun", 0.0))
@@ -1419,6 +1724,170 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 14)), 14.0, col, ab_name, stun_dur, 1340.0, local_auth)
 			add_screen_shake(2.0)
 			_play_local_sfx("res://assets/audio/shoot_scar.wav", -2.0, 0.92)
+		"raven_swarm":
+			_cast_raven_swarm(origin, cast_angle, dmg, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 1.35)
+		"telekinesis":
+			_cast_telekinesis(cast_pos, cast_angle, dmg, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/jump.wav", 0.0, 0.85)
+		"reverse_smoke":
+			_cast_reverse_smoke(origin, cast_angle, dmg, float(ab.get("duration", 4.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.25)
+		"ult_backstab_tp":
+			_cast_backstab_teleport(cast_pos, dmg, col, ab_name, local_auth)
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.3)
+
+
+func apply_reverse_controls(dur: float) -> void:
+	if is_dead or spawn_invuln_timer > 0.0:
+		return
+	if NetworkManager.is_network_active():
+		apply_reverse_controls_rpc.rpc(dur)
+	else:
+		reverse_controls_timer = maxf(reverse_controls_timer, dur)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func apply_reverse_controls_rpc(dur: float) -> void:
+	reverse_controls_timer = maxf(reverse_controls_timer, dur)
+
+
+func _find_nearest_enemy_player(from_pos: Vector2, max_range: float = 1600.0) -> Node2D:
+	var best: Node2D = null
+	var best_d2: float = max_range * max_range
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		var d2: float = from_pos.distance_squared_to((p as Node2D).global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			best = p as Node2D
+	return best
+
+
+func _cast_raven_swarm(origin: Vector2, angle: float, dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	for i in range(3):
+		var spread_off: float = (float(i) - 1.0) * 0.45
+		var b := BULLET_SCENE.instantiate()
+		b.global_position = origin + Vector2(0.0, (float(i) - 1.0) * 26.0)
+		b.velocity = Vector2.from_angle(angle + spread_off) * 560.0
+		b.damage = dmg
+		b.shooter_peer_id = peer_id
+		b.shooter_team = team_id
+		b.shooter_name = player_name
+		b.shooter_rid = get_rid()
+		b.weapon_name = ab_name
+		b.bullet_color = col
+		b.visual_style = "raven"
+		b.scale = Vector2(1.75, 1.75)
+		b.is_homing = true
+		b.homing_turn_rate = 5.8
+		b.allow_self_damage = false
+		b.can_deal_damage = local_auth
+		b.max_lifetime = 3.2
+		parent_node.add_child(b)
+
+
+func _cast_telekinesis(cast_pos: Vector2, cast_angle: float, dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var grab_style: String = "thrown_stone"
+	var start_pos: Vector2 = cast_pos + Vector2.from_angle(cast_angle) * 64.0
+	# Prefer grabbing a nearby ground throwable crate or map prop (never grabs players)
+	var best_prop: Node2D = null
+	var best_crate: Dictionary = {}
+	var best_d2: float = 540.0 * 540.0
+	var arena_node := get_tree().current_scene
+	if arena_node != null and "_crate_nodes" in arena_node:
+		for c_entry in arena_node.get("_crate_nodes"):
+			if bool(c_entry.get("active", false)) and str(c_entry.get("type", "")) == "throwable":
+				var area := c_entry.get("area") as Area2D
+				if is_instance_valid(area):
+					var d2: float = cast_pos.distance_squared_to(area.global_position)
+					if d2 < best_d2:
+						best_d2 = d2
+						best_crate = c_entry
+	if arena_node != null and "_interactables" in arena_node:
+		for inter in arena_node.get("_interactables"):
+			if is_instance_valid(inter) and "prop_kind" in inter and bool(inter.get("is_available")):
+				var d2: float = cast_pos.distance_squared_to((inter as Node2D).global_position)
+				if d2 < best_d2:
+					best_d2 = d2
+					best_prop = inter as Node2D
+					best_crate = {}
+	if not best_crate.is_empty():
+		var item_info: Dictionary = AgentData.get_throwable(int(best_crate.get("val", 0)))
+		grab_style = str(item_info.get("style", "thrown_stone"))
+		var c_area := best_crate.get("area") as Area2D
+		start_pos = c_area.global_position
+		best_crate["active"] = false
+		best_crate["timer"] = 6.0
+		c_area.visible = false
+		c_area.set_deferred("monitoring", false)
+	elif best_prop != null:
+		grab_style = "prop_" + str(best_prop.get("prop_kind"))
+		start_pos = best_prop.global_position
+		if best_prop.has_method("pick_up_prop"):
+			best_prop.pick_up_prop()
+
+	var tk := TelekinesisDragEffect.new()
+	tk.caster = self
+	tk.start_pos = start_pos
+	tk.cast_angle = cast_angle
+	tk.grab_style = grab_style
+	tk.dmg = dmg
+	tk.col = col
+	tk.ab_name = ab_name
+	tk.local_auth = local_auth
+	parent_node.add_child(tk)
+
+
+func _cast_reverse_smoke(origin: Vector2, angle: float, dmg: int, dur: float, col: Color, ab_name: String, local_auth: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var b := BULLET_SCENE.instantiate()
+	b.global_position = origin
+	b.velocity = Vector2.from_angle(angle) * 760.0
+	b.damage = dmg
+	b.shooter_peer_id = peer_id
+	b.shooter_team = team_id
+	b.shooter_name = player_name
+	b.shooter_rid = get_rid()
+	b.weapon_name = ab_name
+	b.bullet_color = col
+	b.visual_style = "smoke_orb"
+	b.reverse_controls_dur = dur
+	b.allow_self_damage = false
+	b.can_deal_damage = local_auth
+	b.max_lifetime = 1.8
+	parent_node.add_child(b)
+
+
+func _cast_backstab_teleport(cast_pos: Vector2, _dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
+	var target: Node2D = _find_nearest_enemy_player(cast_pos, 1800.0)
+	_spawn_vfx_burst(cast_pos, 58.0, col)
+	if target != null:
+		var t_facing: bool = bool(target.get("facing_right")) if "facing_right" in target else true
+		var behind_off: Vector2 = Vector2(-56.0 if t_facing else 56.0, -4.0)
+		var dest: Vector2 = target.global_position + behind_off
+		dest.x = clampf(dest.x, 72.0, 4408.0)
+		dest.y = clampf(dest.y, 72.0, 2400.0)
+		global_position = dest
+		facing_right = t_facing
+		aim_angle = (target.global_position - global_position).angle()
+		_spawn_vfx_burst(global_position, 72.0, col)
+	else:
+		_cast_teleport(cast_pos, aim_angle, 280.0, 0, 0.0, col, ab_name, false, local_auth)
 
 
 func _cast_cleave_or_giant(origin: Vector2, angle: float, dmg: int, stun_dur: float, col: Color, ab_name: String, count: int, spread: float, proj_scale: float, local_auth: bool) -> void:
@@ -1726,20 +2195,34 @@ func throw_held_item() -> void:
 		if is_local_human:
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 		return
-	if held_throwable_id >= 0:
-		var item_id: int = held_throwable_id
-		held_throwable_id = -1
+	if not held_throwables.is_empty():
+		var item_id: int = held_throwables.pop_back()
+		held_throwable_id = held_throwables.back() if not held_throwables.is_empty() else -1
 		if is_local_human:
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 		if NetworkManager.is_network_active():
-			throw_item_rpc.rpc(item_id, _muzzle_primary.global_position, aim_angle)
+			throw_item_rpc.rpc(item_id, safe_m, aim_angle)
 		else:
-			_throw_item_local(item_id, _muzzle_primary.global_position, aim_angle)
+			_throw_item_local(item_id, safe_m, aim_angle)
 		return
 	var target := find_grabbable_player()
 	if target != null:
 		grab_player(target)
 		if is_local_human:
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		return
+	# Default throwable: 1.0s windup to take off shoe, then throw with 5s cooldown
+	throw_shoe()
+
+
+func throw_shoe() -> void:
+	if is_dead or stun_timer > 0.0 or carried_by_peer_id != 0:
+		return
+	if shoe_cooldown_timer <= 0.0 and _shoe_windup_timer <= 0.0:
+		_shoe_windup_timer = SHOE_WINDUP_SEC
+		_play_local_sfx("res://assets/audio/jump.wav", -6.0, 1.35)
+		if is_local_human and NetworkManager.is_agent_clash_mode():
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 
 
@@ -1812,6 +2295,7 @@ func _spawn_styled_projectile(
 	b.pierce_walls = pierce_w
 	b.gravity_mult = grav_mult
 	b.can_deal_damage = deal_dmg
+	b.allow_self_damage = false
 	b.max_lifetime = life
 	b.scale = Vector2(proj_scale, proj_scale)
 	parent_node.add_child(b)
@@ -1830,6 +2314,178 @@ func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color) -> void:
 	parent_node.add_child(exp)
 
 
+func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
+	var pivot_pos: Vector2 = _weapon_pivot.global_position if is_instance_valid(_weapon_pivot) else global_position
+	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var ray := PhysicsRayQueryParameters2D.create(pivot_pos, muzzle_pos, 1)
+	ray.collide_with_areas = false
+	ray.collide_with_bodies = true
+	var hit: Dictionary = space_state.intersect_ray(ray)
+	if not hit.is_empty():
+		var n: Vector2 = hit["normal"]
+		return (hit["position"] as Vector2) + n * 2.0
+	return muzzle_pos
+
+
+func _draw() -> void:
+	if not is_local_human or is_dead or not SettingsManager.sight_laser:
+		return
+	if NetworkManager.is_agent_clash_mode():
+		return
+	if _muzzle_primary == null or not is_instance_valid(_muzzle_primary):
+		return
+	var laser_len: float = 1400.0 if (_weapon != null and _weapon.max_zoom_level >= 6) else 460.0
+	var start_world: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+	var end_world: Vector2 = start_world + Vector2.from_angle(aim_angle) * laser_len
+	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	var ray := PhysicsRayQueryParameters2D.create(start_world, end_world, 1)
+	ray.collide_with_areas = false
+	ray.collide_with_bodies = true
+	var hit: Dictionary = space_state.intersect_ray(ray)
+	if not hit.is_empty():
+		end_world = hit["position"]
+	var p1: Vector2 = to_local(start_world)
+	var p2: Vector2 = to_local(end_world)
+	draw_line(p1, p2, Color(1.0, 0.16, 0.16, 0.45), 1.6)
+	draw_circle(p2, 2.8, Color(1.0, 0.25, 0.22, 0.78))
+
+
+func _spawn_blood_splatter() -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var puff := BloodPuff.new()
+	puff.global_position = global_position
+	parent_node.add_child(puff)
+
+
+func _spawn_damage_popup(dmg: int) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var lbl := Label.new()
+	lbl.text = "-%d" % dmg
+	lbl.global_position = global_position + Vector2(randf_range(-12.0, 12.0), -36.0)
+	lbl.z_index = 40
+	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.modulate = Color(1.0, 0.85, 0.22)
+	parent_node.add_child(lbl)
+	var tw := lbl.create_tween().set_parallel(true)
+	tw.tween_property(lbl, "position:y", lbl.position.y - 28.0, 0.55)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.55)
+	tw.finished.connect(lbl.queue_free)
+
+
+func trigger_taunt() -> void:
+	if is_dead or _taunt_cooldown > 0.0:
+		return
+	var t_id: int = archetype_id if NetworkManager.is_agent_clash_mode() else taunt_id
+	_taunt_cooldown = 2.2
+	if NetworkManager.is_network_active():
+		trigger_taunt_rpc.rpc(t_id)
+	else:
+		_play_taunt_local(t_id)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func trigger_taunt_rpc(t_id: int) -> void:
+	_play_taunt_local(t_id)
+
+
+func _play_taunt_local(t_id: int) -> void:
+	var t: Dictionary = AgentData.get_taunt(t_id)
+	_taunt_timer = 1.5
+	_taunt_anim = str(t.get("anim", "dance"))
+	var col: Color = t.get("color", Color.WHITE) as Color
+	var sfx_kind: String = str(t.get("sfx", "pop"))
+	_play_taunt_sfx(sfx_kind)
+
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	if _taunt_anim == "fart" or _taunt_anim == "burp":
+		var puff_pos: Vector2 = global_position + Vector2(-18.0 if facing_right else 18.0, 10.0)
+		_spawn_vfx_burst(puff_pos, 46.0, col)
+
+	var bubble := Label.new()
+	bubble.text = "%s %s" % [str(t["emoji"]), str(t["text"])]
+	bubble.global_position = global_position + Vector2(-48.0, -76.0)
+	bubble.z_index = 45
+	bubble.add_theme_font_size_override("font_size", 16)
+	bubble.modulate = col
+	parent_node.add_child(bubble)
+	var tw := bubble.create_tween().set_parallel(true)
+	tw.tween_property(bubble, "position:y", bubble.position.y - 26.0, 1.45)
+	tw.tween_property(bubble, "modulate:a", 0.0, 1.45).set_delay(0.6)
+	tw.finished.connect(bubble.queue_free)
+
+
+func _play_taunt_sfx(kind: String) -> void:
+	if _audio_sfx == null or not is_instance_valid(_audio_sfx):
+		return
+	var sr: int = 22050
+	var dur: float = 0.24 if kind == "fart" else 0.16
+	var count: int = int(sr * dur)
+	var data := PackedByteArray()
+	data.resize(count * 2)
+	for i in range(count):
+		var t: float = float(i) / float(sr)
+		var env: float = 1.0 - (float(i) / float(count))
+		var s: float = 0.0
+		match kind:
+			"fart":
+				var freq: float = lerpf(115.0, 62.0, float(i) / float(count))
+				s = sin(TAU * freq * t) * 0.55 + sin(TAU * (freq * 2.1) * t) * 0.35
+			"huh":
+				var freq: float = lerpf(320.0, 620.0, float(i) / float(count))
+				s = sin(TAU * freq * t) * 0.45
+			"laugh":
+				var pulse: float = 0.5 + 0.5 * sin(TAU * 14.0 * t)
+				s = sin(TAU * 540.0 * t) * pulse * 0.45
+			"roar":
+				s = sin(TAU * 145.0 * t) * 0.5 + sin(TAU * 210.0 * t) * 0.25
+			_:
+				var freq: float = 520.0 if (i < count / 2) else 760.0
+				s = sin(TAU * freq * t) * 0.42
+		var sample_i: int = clampi(int(s * env * 28000.0), -32768, 32767)
+		data.encode_s16(i * 2, sample_i)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = sr
+	wav.data = data
+	_audio_sfx.stream = wav
+	_audio_sfx.pitch_scale = 1.0
+	_audio_sfx.play()
+
+
+class BloodPuff extends Node2D:
+	var _drops: Array[Dictionary] = []
+	var _age: float = 0.0
+
+	func _ready() -> void:
+		z_index = 18
+		for _i in range(6):
+			var ang: float = randf_range(0.0, TAU)
+			var spd: float = randf_range(55.0, 175.0)
+			_drops.append({"pos": Vector2.ZERO, "vel": Vector2.from_angle(ang) * spd, "r": randf_range(2.2, 4.2)})
+
+	func _process(delta: float) -> void:
+		_age += delta
+		if _age >= 0.36:
+			queue_free()
+			return
+		for d in _drops:
+			d["vel"] = (d["vel"] as Vector2) + Vector2(0.0, 420.0) * delta
+			d["pos"] = (d["pos"] as Vector2) + (d["vel"] as Vector2) * delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var a: float = 1.0 - (_age / 0.36)
+		var col := Color(0.86, 0.08, 0.10, a)
+		for d in _drops:
+			draw_circle(d["pos"] as Vector2, float(d["r"]), col)
+
+
 class AgentWeaponVisual extends Node2D:
 	var weapon_style: String = "sword"
 	var weapon_color: Color = Color(0.85, 0.90, 0.98)
@@ -1844,8 +2500,10 @@ class AgentWeaponVisual extends Node2D:
 				draw_line(Vector2(4, 0), Vector2(36, 0), Color(0.55, 0.34, 0.16), 4.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(24, -13), Vector2(38, -8), Vector2(38, 10), Vector2(24, 12)]), weapon_color)
 			"bow":
-				draw_arc(Vector2(10, 0), 18.0, -1.15, 1.15, 16, Color(0.68, 0.45, 0.20), 4.0)
-				draw_line(Vector2(17, -16), Vector2(17, 16), weapon_color, 1.8)
+				draw_arc(Vector2(10, 0), 18.0, -1.18, 1.18, 18, Color(0.06, 0.06, 0.09), 7.5)
+				draw_arc(Vector2(10, 0), 18.0, -1.15, 1.15, 18, Color(0.76, 0.52, 0.24), 4.2)
+				draw_line(Vector2(17, -16), Vector2(17, 16), Color(0.06, 0.06, 0.09), 3.6)
+				draw_line(Vector2(17, -16), Vector2(17, 16), weapon_color, 2.0)
 			"scythe":
 				draw_line(Vector2(2, 0), Vector2(42, 0), Color(0.32, 0.28, 0.38), 4.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(38, -2), Vector2(46, 12), Vector2(30, 18), Vector2(34, 4)]), weapon_color)
@@ -1906,3 +2564,69 @@ class BarrierWall extends StaticBody2D:
 		draw_rect(r, Color.WHITE, false, 2.5)
 		var hp_frac: float = clampf(float(hp) / float(max_hp), 0.0, 1.0)
 		draw_rect(Rect2(-16.0, -82.0, 32.0 * hp_frac, 5.0), wall_color.lightened(0.35))
+
+
+class TelekinesisDragEffect extends Node2D:
+	var caster: Node2D = null
+	var start_pos: Vector2 = Vector2.ZERO
+	var cast_angle: float = 0.0
+	var grab_style: String = "thrown_stone"
+	var dmg: int = 38
+	var col: Color = Color(0.68, 0.35, 0.98)
+	var ab_name: String = "Dark Telekinesis"
+	var local_auth: bool = false
+
+	var _elapsed: float = 0.0
+	var _drag_dur: float = 0.36
+	var _obj_pos: Vector2 = Vector2.ZERO
+
+	func _ready() -> void:
+		_obj_pos = start_pos
+		global_position = Vector2.ZERO
+
+	func _process(delta: float) -> void:
+		_elapsed += delta
+		var hold_pos: Vector2 = (caster.global_position + Vector2(0, -34)) if is_instance_valid(caster) else start_pos
+		var t: float = clampf(_elapsed / _drag_dur, 0.0, 1.0)
+		_obj_pos = start_pos.lerp(hold_pos, t * t * (3.0 - 2.0 * t))
+		queue_redraw()
+		if _elapsed >= _drag_dur:
+			_launch_object()
+			queue_free()
+
+	func _launch_object() -> void:
+		var parent_node: Node = get_parent()
+		if parent_node == null or not is_instance_valid(caster):
+			return
+		var target: Node2D = caster._find_nearest_enemy_player(_obj_pos, 1400.0) if caster.has_method("_find_nearest_enemy_player") else null
+		var throw_dir: Vector2 = (target.global_position - _obj_pos).normalized() if target != null else Vector2.from_angle(cast_angle)
+		var b := BULLET_SCENE.instantiate()
+		b.global_position = _obj_pos
+		b.velocity = throw_dir * 980.0
+		b.damage = dmg
+		b.shooter_peer_id = int(caster.get("peer_id"))
+		b.shooter_team = int(caster.get("team_id"))
+		b.shooter_name = str(caster.get("player_name"))
+		b.shooter_rid = (caster as CollisionObject2D).get_rid() if caster is CollisionObject2D else RID()
+		b.weapon_name = ab_name
+		b.bullet_color = col
+		b.visual_style = grab_style
+		if grab_style == "prop_barrel":
+			b.is_explosive = true
+			b.explosion_radius = 140.0
+			b.damage = 65
+			b.bullet_color = Color(1.0, 0.45, 0.14)
+		b.spin_speed = 11.0
+		b.gravity_mult = 0.25
+		b.knockback_mult = 1.65
+		b.allow_self_damage = false
+		b.can_deal_damage = local_auth
+		b.max_lifetime = 2.0
+		parent_node.add_child(b)
+
+	func _draw() -> void:
+		if is_instance_valid(caster):
+			draw_line(caster.global_position + Vector2(0, -10), _obj_pos, Color(col.r, col.g, col.b, 0.78), 3.0)
+		draw_circle(_obj_pos, 18.0, Color(col.r, col.g, col.b, 0.30))
+		draw_arc(_obj_pos, 16.0, 0.0, TAU, 20, col, 2.5)
+		draw_rect(Rect2(_obj_pos - Vector2(10, 8), Vector2(20, 16)), Color(0.42, 0.34, 0.26))

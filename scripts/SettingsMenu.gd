@@ -150,40 +150,22 @@ func _build_controls_tab() -> void:
 		SettingsManager.apply_and_save()
 	)
 
-	v.add_child(HSeparator.new())
-
-	_rebind_prompt_label = Label.new()
-	_rebind_prompt_label.text = "KEYBOARD CONTROLS  (Tap any button to change key)"
-	_rebind_prompt_label.modulate = Color(0.55, 0.88, 1.0)
-	v.add_child(_rebind_prompt_label)
-
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 8)
-	v.add_child(grid)
-
-	for item in SettingsManager.REBINDABLE_ACTIONS:
-		var act: String = str(item["action"])
-		var lbl := Label.new()
-		lbl.text = str(item["label"])
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grid.add_child(lbl)
-
-		var kb_btn := Button.new()
-		kb_btn.custom_minimum_size = Vector2(180, 42)
-		_style_button(kb_btn, Color(0.10, 0.15, 0.24), Color(0.36, 0.54, 0.80), 8)
-		kb_btn.text = SettingsManager.get_action_key_label(act)
-		kb_btn.pressed.connect(_start_rebind.bind(act))
-		grid.add_child(kb_btn)
-		_keybind_buttons[act] = kb_btn
-
 
 func _build_audio_tab() -> void:
 	var v := VBoxContainer.new()
 	v.name = "Audio"
-	v.add_theme_constant_override("separation", 16)
+	v.add_theme_constant_override("separation", 14)
 	_tabs.add_child(v)
+
+	_add_toggle_row(v, "Music:", SettingsManager.music_enabled, func(on: bool):
+		SettingsManager.music_enabled = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Sound FX:", SettingsManager.sfx_enabled, func(on: bool):
+		SettingsManager.sfx_enabled = on
+		SettingsManager.apply_and_save()
+	)
 
 	_add_slider_row(v, "Master Volume:", 0.0, 1.0, 0.02, SettingsManager.master_volume, "%d%%", 100.0, func(val: float):
 		SettingsManager.master_volume = val
@@ -210,38 +192,14 @@ func _build_audio_tab() -> void:
 
 
 func _build_graphics_tab() -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = "Graphics"
+	_tabs.add_child(scroll)
+
 	var v := VBoxContainer.new()
-	v.name = "Graphics"
-	v.add_theme_constant_override("separation", 14)
-	_tabs.add_child(v)
-
-	var res_row := HBoxContainer.new()
-	v.add_child(res_row)
-	var res_lbl := Label.new()
-	res_lbl.text = "Window Resolution:"
-	res_lbl.custom_minimum_size = Vector2(210, 0)
-	res_row.add_child(res_lbl)
-
-	var res_opt := OptionButton.new()
-	for r in SettingsManager.RESOLUTIONS:
-		res_opt.add_item("%d x %d" % [r.x, r.y])
-	res_opt.selected = SettingsManager.resolution_index
-	res_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	res_opt.item_selected.connect(func(idx: int):
-		SettingsManager.resolution_index = idx
-		SettingsManager.apply_and_save()
-	)
-	res_row.add_child(res_opt)
-
-	_add_toggle_row(v, "Fullscreen Mode:", SettingsManager.fullscreen, func(on: bool):
-		SettingsManager.fullscreen = on
-		SettingsManager.apply_and_save()
-	)
-
-	_add_toggle_row(v, "V-Sync:", SettingsManager.vsync_enabled, func(on: bool):
-		SettingsManager.vsync_enabled = on
-		SettingsManager.apply_and_save()
-	)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 12)
+	scroll.add_child(v)
 
 	var fps_row := HBoxContainer.new()
 	v.add_child(fps_row)
@@ -268,6 +226,36 @@ func _build_graphics_tab() -> void:
 
 	_add_slider_row(v, "Screen Shake Intensity:", 0.0, 1.5, 0.05, SettingsManager.screen_shake_intensity, "%d%%", 100.0, func(val: float):
 		SettingsManager.screen_shake_intensity = val
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Sight Laser:", SettingsManager.sight_laser, func(on: bool):
+		SettingsManager.sight_laser = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Show Callsigns:", SettingsManager.show_callsigns, func(on: bool):
+		SettingsManager.show_callsigns = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Blood Effects:", SettingsManager.show_blood, func(on: bool):
+		SettingsManager.show_blood = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Damage Display:", SettingsManager.damage_display, func(on: bool):
+		SettingsManager.damage_display = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Enhanced Visuals:", SettingsManager.enhanced_visuals, func(on: bool):
+		SettingsManager.enhanced_visuals = on
+		SettingsManager.apply_and_save()
+	)
+
+	_add_toggle_row(v, "Diagnostics (FPS):", SettingsManager.show_diagnostics, func(on: bool):
+		SettingsManager.show_diagnostics = on
 		SettingsManager.apply_and_save()
 	)
 

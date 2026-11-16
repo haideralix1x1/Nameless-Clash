@@ -1414,6 +1414,110 @@ const AGENTS: Array[Dictionary] = [
 			"color": Color(1.0, 0.78, 0.24),
 			"desc": "Radiate golden enlightenment blasting and stunning foes 2.0s."
 		}
+	},
+	# 24: Raven // Shadow Corvus
+	{
+		"id": 24,
+		"agent_name": "Raven",
+		"title": "Shadow Corvus",
+		"role": "Dark Mystic",
+		"accent": Color(0.58, 0.28, 0.92),
+		"base_weapon": {
+			"name": "Obsidian Talon Bow",
+			"style": "bow",
+			"damage": 22,
+			"cooldown": 0.36,
+			"range": 260.0,
+			"color": Color(0.58, 0.28, 0.92),
+			"ranged": true
+		},
+		"abilities": [
+			{
+				"name": "Murder of Ravens",
+				"kind": "raven_swarm",
+				"cooldown": 6.5,
+				"damage": 28,
+				"shots": 3,
+				"color": Color(0.28, 0.16, 0.45),
+				"desc": "Spawn 3 homing ravens that fly, track, and attack enemies."
+			},
+			{
+				"name": "Dark Telekinesis",
+				"kind": "telekinesis",
+				"cooldown": 5.5,
+				"damage": 38,
+				"color": Color(0.68, 0.35, 0.98),
+				"desc": "Grab a nearby throwable object and hurl it at an enemy."
+			},
+			{
+				"name": "Shadow Smoke",
+				"kind": "reverse_smoke",
+				"cooldown": 8.0,
+				"damage": 20,
+				"duration": 4.0,
+				"color": Color(0.18, 0.12, 0.26),
+				"desc": "Shoot dark smoke that reverses hit enemies' controls for 4s."
+			}
+		],
+		"ultimate": {
+			"name": "Shadow Ambush",
+			"kind": "ult_backstab_tp",
+			"cooldown": 18.0,
+			"damage": 0,
+			"color": Color(0.62, 0.24, 0.95),
+			"desc": "Teleport directly behind the nearest enemy."
+		}
+	},
+	# 25: Ray Lina // Young Elf
+	{
+		"id": 25,
+		"agent_name": "Ray Lina",
+		"title": "Young Elf",
+		"role": "Adaptive Prodigy",
+		"accent": Color(0.38, 0.96, 0.64),
+		"base_weapon": {
+			"name": "Sylvan Star Bow",
+			"style": "bow",
+			"damage": 21,
+			"cooldown": 0.34,
+			"range": 260.0,
+			"color": Color(0.38, 0.96, 0.64),
+			"ranged": true
+		},
+		"abilities": [
+			{
+				"name": "Random Mimic I",
+				"kind": "ice_shards",
+				"cooldown": 5.0,
+				"damage": 16,
+				"color": Color(0.38, 0.96, 0.64),
+				"desc": "Randomly rolled ability; steals victim's kit on kill."
+			},
+			{
+				"name": "Random Mimic II",
+				"kind": "teleport",
+				"cooldown": 6.0,
+				"damage": 24,
+				"color": Color(0.38, 0.96, 0.64),
+				"desc": "Randomly rolled ability; steals victim's kit on kill."
+			},
+			{
+				"name": "Random Mimic III",
+				"kind": "fireball",
+				"cooldown": 5.5,
+				"damage": 38,
+				"color": Color(0.38, 0.96, 0.64),
+				"desc": "Randomly rolled ability; steals victim's kit on kill."
+			}
+		],
+		"ultimate": {
+			"name": "Mimic Ultimate",
+			"kind": "ult_blink_slash",
+			"cooldown": 20.0,
+			"damage": 58,
+			"color": Color(0.38, 0.96, 0.64),
+			"desc": "Randomly rolled ultimate; steals victim's ultimate on kill."
+		}
 	}
 ]
 static func get_agent(arch_id: int) -> Dictionary:
@@ -1430,3 +1534,35 @@ static func get_ability_slot(arch_id: int, slot_idx: int) -> Dictionary:
 		return ag["ultimate"]
 	var abils: Array = ag["abilities"]
 	return abils[clampi(slot_idx, 0, abils.size() - 1)]
+
+
+const TAUNTS: Array[Dictionary] = [
+	{"id": 0, "name": "Tactical Victory Dance", "emoji": "🕺", "text": "EZ!", "anim": "dance", "sfx": "dance", "color": Color(0.45, 0.92, 0.55)},
+	{"id": 1, "name": "Moonwalk Slide", "emoji": "✨", "text": "SMOOTH!", "anim": "slide", "sfx": "dance", "color": Color(0.38, 0.85, 1.0)},
+	{"id": 2, "name": "Finger-Gun Spin", "emoji": "👉", "text": "Too slow!", "anim": "wink", "sfx": "pop", "color": Color(1.0, 0.78, 0.24)},
+	{"id": 3, "name": "Middle Finger Salute", "emoji": "🖕", "text": "PEACE!", "anim": "salute", "sfx": "pop", "color": Color(1.0, 0.35, 0.28)},
+	{"id": 4, "name": "Yawn & Watch Check", "emoji": "🥱", "text": "Boring...", "anim": "yawn", "sfx": "huh", "color": Color(0.65, 0.78, 0.95)},
+	{"id": 5, "name": "Spartan Chest Pound", "emoji": "🛡️", "text": "THIS IS SPARTA!", "anim": "roar", "sfx": "roar", "color": Color(1.0, 0.42, 0.22)},
+	{"id": 6, "name": "Gladiator Thumbs Down", "emoji": "👎", "text": "NOPE.", "anim": "thumbs_down", "sfx": "huh", "color": Color(0.95, 0.30, 0.30)},
+	{"id": 7, "name": "Viking War Dance", "emoji": "🪓", "text": "SKOL!", "anim": "stomp", "sfx": "dance", "color": Color(0.55, 0.86, 1.0)},
+	{"id": 8, "name": "Polite Tea-Sip Bow", "emoji": "☕", "text": "M'lady", "anim": "bow", "sfx": "pop", "color": Color(0.95, 0.88, 0.55)},
+	{"id": 9, "name": "Royal Hair Flip & Laugh", "emoji": "👑", "text": "HAHAHA!", "anim": "laugh", "sfx": "laugh", "color": Color(1.0, 0.84, 0.22)},
+	{"id": 10, "name": "Pirate Jig", "emoji": "🏴‍☠️", "text": "YARR!", "anim": "jig", "sfx": "dance", "color": Color(0.95, 0.58, 0.20)},
+	{"id": 11, "name": "Ninja \"Huh?\"", "emoji": "❓", "text": "HUH?!", "anim": "huh", "sfx": "huh", "color": Color(0.75, 0.55, 1.0)},
+	{"id": 12, "name": "Toxic Fart Cloud", "emoji": "💨", "text": "*BRAAAP!*", "anim": "fart", "sfx": "fart", "color": Color(0.45, 0.92, 0.25)},
+	{"id": 13, "name": "Skeleton Shuffle", "emoji": "💀", "text": "RATTLE!", "anim": "rattle", "sfx": "dance", "color": Color(0.88, 0.92, 0.98)},
+	{"id": 14, "name": "Peek-a-Boo Spook", "emoji": "👻", "text": "BOO!", "anim": "spook", "sfx": "pop", "color": Color(0.55, 0.95, 1.0)},
+	{"id": 15, "name": "Walk Like an Egyptian", "emoji": "🔺", "text": "PHARAOH!", "anim": "egypt", "sfx": "dance", "color": Color(1.0, 0.82, 0.28)},
+	{"id": 16, "name": "Robot Breakdance", "emoji": "🤖", "text": "BEEP BOOP", "anim": "robot", "sfx": "dance", "color": Color(0.35, 0.82, 1.0)},
+	{"id": 17, "name": "Slap-Knee Laugh", "emoji": "😂", "text": "LMAO!", "anim": "slap_knee", "sfx": "laugh", "color": Color(0.42, 0.96, 0.52)},
+	{"id": 18, "name": "Cat Stretch & Lick", "emoji": "😼", "text": "Meow~", "anim": "stretch", "sfx": "pop", "color": Color(0.98, 0.62, 0.88)},
+	{"id": 19, "name": "\"Bring It\" Wave", "emoji": "👋", "text": "Come on!", "anim": "bring_it", "sfx": "roar", "color": Color(0.38, 0.82, 1.0)},
+	{"id": 20, "name": "Belly Drum & Burp", "emoji": "🤢", "text": "*BURP!*", "anim": "burp", "sfx": "fart", "color": Color(0.58, 0.86, 0.28)},
+	{"id": 21, "name": "Spicy Hot-Foot Dance", "emoji": "🔥", "text": "HOT HOT!", "anim": "hot_foot", "sfx": "dance", "color": Color(1.0, 0.42, 0.14)},
+	{"id": 22, "name": "Disco Spin & Point", "emoji": "🪩", "text": "GROOVY!", "anim": "disco", "sfx": "dance", "color": Color(0.92, 0.48, 1.0)},
+	{"id": 23, "name": "Confused Shrug", "emoji": "🤷", "text": "Huh??", "anim": "shrug", "sfx": "huh", "color": Color(1.0, 0.82, 0.32)}
+]
+
+
+static func get_taunt(taunt_id: int) -> Dictionary:
+	return TAUNTS[clampi(taunt_id, 0, TAUNTS.size() - 1)]

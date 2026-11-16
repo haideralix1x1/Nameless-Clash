@@ -34,12 +34,14 @@ var invert_y_axis: bool = false
 var auto_aim_assist: bool = true
 
 var touch_layout: Dictionary = {}
-var touch_layout_version: int = 3
+var touch_layout_version: int = 4
 
 # Audio
 var master_volume: float = 0.85
 var sfx_volume: float = 0.85
 var music_volume: float = 0.45
+var music_enabled: bool = true
+var sfx_enabled: bool = true
 
 # Graphics & Performance
 var resolution_index: int = 1
@@ -48,6 +50,12 @@ var vsync_enabled: bool = true
 var fps_limit_mode: int = 1
 var particle_intensity: float = 1.0
 var screen_shake_intensity: float = 1.0
+var show_callsigns: bool = true
+var sight_laser: bool = true
+var show_blood: bool = true
+var damage_display: bool = false
+var enhanced_visuals: bool = true
+var show_diagnostics: bool = false
 
 # Match Game Rules / Mutators (synced with NetworkManager)
 var unlimited_jetpack: bool = false
@@ -77,16 +85,16 @@ func _exit_tree() -> void:
 
 func _reset_default_touch_layout(emit_save: bool = true) -> void:
 	touch_layout = {
-		"left_stick": Vector2(0.11, 0.77),
-		"right_stick": Vector2(0.89, 0.77),
+		"left_stick": Vector2(0.12, 0.76),
+		"right_stick": Vector2(0.88, 0.76),
 		"btn_reload": Vector2(0.75, 0.85),
-		"btn_switch": Vector2(0.75, 0.69),
-		"btn_bomb": Vector2(0.75, 0.53),
+		"btn_switch": Vector2(0.76, 0.66),
+		"btn_bomb": Vector2(0.90, 0.50),
 		"btn_dual": Vector2(0.24, 0.85),
 		"ability_bar": Vector2(0.50, 0.84),
-		"btn_presets": Vector2(0.50, 0.06)
+		"btn_presets": Vector2(0.10, 0.06)
 	}
-	touch_layout_version = 3
+	touch_layout_version = 4
 	if emit_save:
 		save_settings()
 		touch_layout_changed.emit()
@@ -149,7 +157,7 @@ func load_settings() -> void:
 	auto_aim_assist = bool(cfg.get_value("controls", "auto_aim_assist", true))
 
 	var saved_layout_ver: int = int(cfg.get_value("touch", "layout_version", 1))
-	var migrate_touch: bool = saved_layout_ver < 3
+	var migrate_touch: bool = saved_layout_ver < 4
 	if not migrate_touch:
 		for k in touch_layout.keys():
 			var saved_v: Variant = cfg.get_value("touch_layout", k, touch_layout[k])
@@ -165,6 +173,8 @@ func load_settings() -> void:
 	master_volume = clampf(float(cfg.get_value("audio", "master_volume", 0.85)), 0.0, 1.0)
 	sfx_volume = clampf(float(cfg.get_value("audio", "sfx_volume", 0.85)), 0.0, 1.0)
 	music_volume = clampf(float(cfg.get_value("audio", "music_volume", 0.45)), 0.0, 1.0)
+	music_enabled = bool(cfg.get_value("audio", "music_enabled", true))
+	sfx_enabled = bool(cfg.get_value("audio", "sfx_enabled", true))
 
 	resolution_index = clampi(int(cfg.get_value("graphics", "resolution_index", 1)), 0, RESOLUTIONS.size() - 1)
 	fullscreen = bool(cfg.get_value("graphics", "fullscreen", false))
@@ -172,6 +182,12 @@ func load_settings() -> void:
 	fps_limit_mode = clampi(int(cfg.get_value("graphics", "fps_limit_mode", 1)), 0, FPS_VALUES.size() - 1)
 	particle_intensity = clampf(float(cfg.get_value("graphics", "particle_intensity", 1.0)), 0.0, 1.5)
 	screen_shake_intensity = clampf(float(cfg.get_value("graphics", "screen_shake_intensity", 1.0)), 0.0, 1.5)
+	show_callsigns = bool(cfg.get_value("graphics", "show_callsigns", true))
+	sight_laser = bool(cfg.get_value("graphics", "sight_laser", true))
+	show_blood = bool(cfg.get_value("graphics", "show_blood", true))
+	damage_display = bool(cfg.get_value("graphics", "damage_display", false))
+	enhanced_visuals = bool(cfg.get_value("graphics", "enhanced_visuals", true))
+	show_diagnostics = bool(cfg.get_value("graphics", "show_diagnostics", false))
 
 	unlimited_jetpack = bool(cfg.get_value("game_rules", "unlimited_jetpack", false))
 	gravity_scale = clampf(float(cfg.get_value("game_rules", "gravity_scale", 1.0)), 0.0, 1.0)
@@ -202,6 +218,8 @@ func save_settings() -> void:
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "sfx_volume", sfx_volume)
 	cfg.set_value("audio", "music_volume", music_volume)
+	cfg.set_value("audio", "music_enabled", music_enabled)
+	cfg.set_value("audio", "sfx_enabled", sfx_enabled)
 
 	cfg.set_value("graphics", "resolution_index", resolution_index)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
@@ -209,6 +227,12 @@ func save_settings() -> void:
 	cfg.set_value("graphics", "fps_limit_mode", fps_limit_mode)
 	cfg.set_value("graphics", "particle_intensity", particle_intensity)
 	cfg.set_value("graphics", "screen_shake_intensity", screen_shake_intensity)
+	cfg.set_value("graphics", "show_callsigns", show_callsigns)
+	cfg.set_value("graphics", "sight_laser", sight_laser)
+	cfg.set_value("graphics", "show_blood", show_blood)
+	cfg.set_value("graphics", "damage_display", damage_display)
+	cfg.set_value("graphics", "enhanced_visuals", enhanced_visuals)
+	cfg.set_value("graphics", "show_diagnostics", show_diagnostics)
 
 	cfg.set_value("game_rules", "unlimited_jetpack", unlimited_jetpack)
 	cfg.set_value("game_rules", "gravity_scale", clampf(gravity_scale, 0.0, 1.0))
@@ -247,8 +271,8 @@ func apply_and_save() -> void:
 
 func _apply_audio_settings() -> void:
 	_set_bus_linear("Master", master_volume)
-	_set_bus_linear("SFX", sfx_volume)
-	_set_bus_linear("Music", music_volume)
+	_set_bus_linear("SFX", sfx_volume if sfx_enabled else 0.0)
+	_set_bus_linear("Music", music_volume if music_enabled else 0.0)
 
 
 func _set_bus_linear(bus_name: String, linear_val: float) -> void:

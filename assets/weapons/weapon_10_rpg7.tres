@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 10
 code_name = "rpg7"
-display_name = "RPG-7"
+display_name = "Bazooka"
 category = "Heavy Ordnance"
 description = "Rocket launcher firing slow warheads with massive splash and backblast."
 damage = 110
@@ -23,6 +23,7 @@ damage_falloff_start = 9999.0
 min_damage_ratio = 1.0
 move_speed_multiplier = 0.86
 scope_zoom = 1.05
+max_zoom_level = 4
 has_backblast = true
 has_accessory_rail = false
 unlimited_reserve = false

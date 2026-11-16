@@ -6,7 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 23
+const MAX_PART_INDEX := 25
 
 const ANIM_DEFS: Dictionary = {
 	"idle": {"frames": [0, 1], "fps": 3.5, "loop": true},
@@ -23,6 +23,7 @@ var _anim_torso: AnimatedSprite2D
 var _anim_head: AnimatedSprite2D
 var _sprite_gear: Sprite2D
 var _sprite_hands: Sprite2D
+var _sprite_shoe_throw: Sprite2D
 
 var _current_anim: String = "idle"
 var _manual_sync_mode: bool = false
@@ -63,6 +64,15 @@ func _ensure_layers() -> void:
 	_anim_head = _get_or_create_animated("AnimatedSprite2D_Head")
 	_sprite_gear = _get_or_create_sprite("Sprite2D_Gear")
 	_sprite_hands = _get_or_create_sprite("Sprite2D_Hands")
+	_sprite_shoe_throw = _get_or_create_sprite("Sprite2D_ShoeThrow")
+	if ResourceLoader.exists("res://assets/sprites/modular/shoe_throw.png"):
+		_sprite_shoe_throw.texture = load("res://assets/sprites/modular/shoe_throw.png") as Texture2D
+	else:
+		var abs_p: String = ProjectSettings.globalize_path("res://assets/sprites/modular/shoe_throw.png")
+		var img := Image.new()
+		if img.load(abs_p) == OK:
+			_sprite_shoe_throw.texture = ImageTexture.create_from_image(img)
+	_sprite_shoe_throw.visible = false
 
 
 func _get_or_create_sprite(node_name: String) -> Sprite2D:
@@ -338,3 +348,47 @@ func _parse_color(value: Variant, fallback: Color) -> Color:
 		if Color.html_is_valid(text):
 			return Color.html(text)
 	return fallback
+
+
+func apply_taunt_pose(_anim_name: String, _p: float, _facing_right: bool) -> void:
+	_ensure_layers()
+	position = Vector2.ZERO
+	rotation = 0.0
+	scale = Vector2.ONE
+	for n in [_anim_head, _sprite_gear, _anim_torso, _anim_legs, _sprite_hands, _sprite_back]:
+		if n != null:
+			n.position = Vector2.ZERO
+			n.rotation = 0.0
+
+
+func reset_taunt_pose() -> void:
+	position = Vector2.ZERO
+	rotation = 0.0
+	scale = Vector2.ONE
+	for n in [_anim_head, _sprite_gear, _anim_torso, _anim_legs, _sprite_hands, _sprite_back]:
+		if n != null:
+			n.position = Vector2.ZERO
+			n.rotation = 0.0
+
+
+func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
+	_ensure_layers()
+	scale = Vector2.ONE
+	rotation = 0.0
+	position = Vector2.ZERO
+	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
+		if n != null:
+			n.visible = false
+	if _sprite_shoe_throw != null:
+		_sprite_shoe_throw.visible = true
+		_sprite_shoe_throw.flip_h = flip_h
+		_sprite_shoe_throw.frame = clampi(int(progress_0_to_1 * float(SHEET_FRAMES)), 0, SHEET_FRAMES - 1)
+
+
+func stop_shoe_throw() -> void:
+	_ensure_layers()
+	if _sprite_shoe_throw != null:
+		_sprite_shoe_throw.visible = false
+	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
+		if n != null:
+			n.visible = true

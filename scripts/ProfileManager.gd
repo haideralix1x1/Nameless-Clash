@@ -196,12 +196,28 @@ const ARCHETYPES: Array[Dictionary] = [
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 0
+	},
+	{
+		"callsign": "Raven",
+		"name": "Raven (Shadow Corvus)",
+		"desc": "Dark corvus mystic commanding homing ravens, telekinetic throws, and mind-reversing shadow smoke.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 3
+	},
+	{
+		"callsign": "Ray Lina",
+		"name": "Ray Lina (Young Elf)",
+		"desc": "Agile young elf prodigy who starts with random abilities and steals her slain enemy's kit on every kill.",
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 7
 	}
 ]
 
 const WEAPON_NAMES: Array[String] = [
-	"AK-47", "M4A1", "SCAR-H", "MP5", "Kriss Vector",
-	"SPAS-12", "Remington 870", "AWM", "Dragunov SVD", "Glock 17", "RPG-7"
+	"AK47", "M4A1", "SCAR-H", "SMG", "Uzi",
+	"Shotgun", "Pump Shotgun", "Sniper", "Auto Sniper", "Deagle", "Bazooka"
 ]
 
 const WEAPON_SKIN_NAMES: Array[String] = ["Digital Camo", "Solid Matte", "Neon Tracer"]
@@ -308,6 +324,7 @@ var primary_weapon_id: int = 0
 var secondary_weapon_id: int = 9
 var weapon_skin_id: int = 0
 var m4a1_rail_mod: int = 0
+var taunt_id: int = 0
 
 
 func _ready() -> void:
@@ -327,15 +344,16 @@ func _default_name() -> String:
 
 func apply_archetype_preset(arch_idx: int, emit_save: bool = true) -> void:
 	var idx: int = clampi(arch_idx, 0, ARCHETYPES.size() - 1)
-	archetype_id = idx
-	skin_id = idx
-	head_id = idx
-	torso_id = idx
-	legs_id = idx
-	hands_id = idx
-	accessories_id = idx
-
 	var arch: Dictionary = ARCHETYPES[idx]
+	var parts: Dictionary = arch.get("parts", {})
+	archetype_id = idx
+	skin_id = int(parts.get("head", idx))
+	head_id = int(parts.get("head", idx))
+	torso_id = int(parts.get("torso", idx))
+	legs_id = int(parts.get("legs", idx))
+	hands_id = int(parts.get("hands", idx))
+	accessories_id = int(parts.get("accessories", idx))
+
 	shirt_color = arch["shirt"]
 	pants_color = arch["pants"]
 	skin_color = arch["skin"]
@@ -384,6 +402,7 @@ func load_profile() -> void:
 	secondary_weapon_id = clampi(int(cfg.get_value("loadout", "secondary_weapon_id", 9)), 0, WEAPON_NAMES.size() - 1)
 	weapon_skin_id = clampi(int(cfg.get_value("loadout", "weapon_skin_id", 0)), 0, WEAPON_SKIN_NAMES.size() - 1)
 	m4a1_rail_mod = clampi(int(cfg.get_value("loadout", "m4a1_rail_mod", 0)), 0, RAIL_MOD_NAMES.size() - 1)
+	taunt_id = clampi(int(cfg.get_value("loadout", "taunt_id", 0)), 0, AgentData.TAUNTS.size() - 1)
 
 
 func save_profile() -> void:
@@ -407,6 +426,7 @@ func save_profile() -> void:
 	cfg.set_value("loadout", "secondary_weapon_id", secondary_weapon_id)
 	cfg.set_value("loadout", "weapon_skin_id", weapon_skin_id)
 	cfg.set_value("loadout", "m4a1_rail_mod", m4a1_rail_mod)
+	cfg.set_value("loadout", "taunt_id", taunt_id)
 	cfg.save(PROFILE_PATH)
 
 
@@ -434,7 +454,8 @@ func to_dict() -> Dictionary:
 		"primary_weapon_id": primary_weapon_id,
 		"secondary_weapon_id": secondary_weapon_id,
 		"weapon_skin_id": weapon_skin_id,
-		"m4a1_rail_mod": m4a1_rail_mod
+		"m4a1_rail_mod": m4a1_rail_mod,
+		"taunt_id": taunt_id
 	}
 
 
@@ -456,5 +477,6 @@ static func sanitize_avatar(d: Dictionary) -> Dictionary:
 		"primary_weapon_id": clampi(int(d.get("primary_weapon_id", 0)), 0, WEAPON_NAMES.size() - 1),
 		"secondary_weapon_id": clampi(int(d.get("secondary_weapon_id", 9)), 0, WEAPON_NAMES.size() - 1),
 		"weapon_skin_id": clampi(int(d.get("weapon_skin_id", 0)), 0, WEAPON_SKIN_NAMES.size() - 1),
-		"m4a1_rail_mod": clampi(int(d.get("m4a1_rail_mod", 0)), 0, RAIL_MOD_NAMES.size() - 1)
+		"m4a1_rail_mod": clampi(int(d.get("m4a1_rail_mod", 0)), 0, RAIL_MOD_NAMES.size() - 1),
+		"taunt_id": clampi(int(d.get("taunt_id", 0)), 0, AgentData.TAUNTS.size() - 1)
 	}

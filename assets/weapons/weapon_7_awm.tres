@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 7
 code_name = "awm"
-display_name = "AWM"
+display_name = "Sniper"
 category = "Sniper Rifle"
 description = "Bolt-action .338 magnum with scope zoom and one-shot knockdown power."
 damage = 100
@@ -23,6 +23,7 @@ damage_falloff_start = 9999.0
 min_damage_ratio = 1.0
 move_speed_multiplier = 0.88
 scope_zoom = 0.72
+max_zoom_level = 7
 has_backblast = false
 has_accessory_rail = false
 unlimited_reserve = false

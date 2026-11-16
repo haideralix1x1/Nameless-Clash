@@ -43,6 +43,7 @@ var _editing_secondary: bool = false
 var _slot_primary_btn: Button
 var _slot_secondary_btn: Button
 var _camo_btn: Button
+var _taunt_opt: OptionButton
 var _rail_btn: Button
 
 var _weapon_icon_rect: TextureRect
@@ -299,7 +300,7 @@ func _build_heroes_tab(parent: VBoxContainer) -> Control:
 
 	_agent_summary_label = Label.new()
 	_agent_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_agent_summary_label.add_theme_font_size_override("font_size", 14)
+	_agent_summary_label.add_theme_font_size_override("font_size", 16)
 	_agent_summary_label.modulate = Color(0.86, 0.72, 1.0)
 	v.add_child(_agent_summary_label)
 
@@ -532,6 +533,30 @@ func _build_weapons_tab(parent: VBoxContainer) -> Control:
 	_rail_btn.pressed.connect(_on_cycle_rail)
 	slot_row.add_child(_rail_btn)
 
+	# Gunfight Taunt Selector Row
+	var taunt_row := HBoxContainer.new()
+	taunt_row.add_theme_constant_override("separation", 8)
+	v.add_child(taunt_row)
+
+	var taunt_lbl := Label.new()
+	taunt_lbl.text = "GUNFIGHT TAUNT:"
+	taunt_lbl.custom_minimum_size = Vector2(148, 0)
+	taunt_lbl.add_theme_font_size_override("font_size", 14)
+	taunt_lbl.modulate = Color(1.0, 0.86, 0.35)
+	taunt_row.add_child(taunt_lbl)
+
+	_taunt_opt = OptionButton.new()
+	_taunt_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_taunt_opt.custom_minimum_size = Vector2(0, 40)
+	for t_dict in AgentData.TAUNTS:
+		_taunt_opt.add_item("%s %s (%s)" % [str(t_dict["emoji"]), str(t_dict["name"]), str(t_dict["text"])])
+	_taunt_opt.selected = clampi(ProfileManager.taunt_id, 0, AgentData.TAUNTS.size() - 1)
+	_taunt_opt.item_selected.connect(func(idx: int):
+		ProfileManager.taunt_id = idx
+		ProfileManager.notify_changed()
+	)
+	taunt_row.add_child(_taunt_opt)
+
 	# Visual Stat Card
 	var stat_card := PanelContainer.new()
 	stat_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.94), Color(0.45, 0.58, 0.80, 0.8), 10, 12, 10))
@@ -761,7 +786,7 @@ func _refresh_ui() -> void:
 		var abils: Array = ag["abilities"]
 		var ult: Dictionary = ag["ultimate"]
 		_agent_summary_label.text = (
-			"⚡ AGENT CLASH KIT — Base: %s | [Q] %s | [E] %s | [C] %s | ★ ULT: %s"
+			"⚡ AGENT CLASH KIT — Base: %s | 1: %s | 2: %s | 3: %s | ★ ULT: %s"
 			% [str(bw["name"]), str(abils[0]["name"]), str(abils[1]["name"]), str(abils[2]["name"]), str(ult["name"])]
 		)
 	_refresh_pose_buttons()
@@ -812,6 +837,8 @@ func _refresh_ui() -> void:
 	_camo_btn.text = "CAMO: " + ProfileManager.WEAPON_SKIN_NAMES[ProfileManager.weapon_skin_id].split(" ")[0].to_upper()
 	_rail_btn.visible = w.has_accessory_rail
 	_rail_btn.text = "RAIL: " + ProfileManager.RAIL_MOD_NAMES[ProfileManager.m4a1_rail_mod]
+	if is_instance_valid(_taunt_opt):
+		_taunt_opt.selected = clampi(ProfileManager.taunt_id, 0, AgentData.TAUNTS.size() - 1)
 
 	var atlas: AtlasTexture = _weapon_icon_rect.texture as AtlasTexture
 	if atlas != null:

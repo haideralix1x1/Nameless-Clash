@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 3
 code_name = "mp5"
-display_name = "MP5"
+display_name = "SMG"
 category = "Submachine Gun"
 description = "High-mobility 9mm SMG with rapid fire and close-range precision."
 damage = 14
@@ -23,6 +23,7 @@ damage_falloff_start = 320.0
 min_damage_ratio = 0.45
 move_speed_multiplier = 1.12
 scope_zoom = 1.08
+max_zoom_level = 3
 has_backblast = false
 has_accessory_rail = false
 unlimited_reserve = false

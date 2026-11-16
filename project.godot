@@ -35,10 +35,6 @@ window/handheld/orientation=4
 
 theme/custom_font="res://assets/Layer Lab/Fonts/LilitaOne-Regular.ttf"
 
-[input_devices]
-
-pointing/emulate_mouse_from_touch=true
-
 [input]
 
 move_left={

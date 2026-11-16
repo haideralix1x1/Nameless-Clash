@@ -16,6 +16,17 @@ var _agent_preview: SoldierPreview
 var _agent_kit_title: Label
 var _agent_kit_body: Label
 var _agent_cards: Array[Button] = []
+var _test_mode_overlay: Control
+var _test_mode_type_buttons: Array[Button] = []
+var _test_bot_beh_buttons: Array[Button] = []
+var _test_mode_choice: int = 0
+var _test_bot_choice: int = 0
+var _map_opt: OptionButton
+var _map_select_overlay: Control
+var _map_preview_tex: TextureRect
+var _map_title_label: Label
+var _map_preview_cache: Dictionary = {}
+var _pending_map_launch: Callable
 
 
 func _ready() -> void:
@@ -214,15 +225,20 @@ func _build_ui() -> void:
 	var btn_solo := _make_arcade_button("▶  PLAY SOLO (GUNFIGHT)", Color(0.30, 0.92, 0.48), 46.0, 17, Color(0.09, 0.28, 0.16, 0.98))
 	btn_solo.pressed.connect(func():
 		NetworkManager.disconnect_network()
+		NetworkManager.test_mode_enabled = false
 		if NetworkManager.is_agent_clash_mode():
 			NetworkManager.match_mode = 0
-		_transition_to(NetworkManager.go_to_arena)
+		_open_map_select(func(): _transition_to(NetworkManager.go_to_arena))
 	)
 	nav_v.add_child(btn_solo)
 
 	var btn_agent := _make_arcade_button("⚡ AGENT CLASH (ABILITIES MODE)", Color(0.78, 0.42, 1.0), 46.0, 17, Color(0.20, 0.10, 0.34, 0.98))
 	btn_agent.pressed.connect(_open_agent_select)
 	nav_v.add_child(btn_agent)
+
+	var btn_test := _make_arcade_button("🎯 TEST / PRACTICE MODE (1 BOT)", Color(0.24, 0.86, 0.82), 42.0, 15, Color(0.08, 0.24, 0.26, 0.98))
+	btn_test.pressed.connect(_open_test_mode_overlay)
+	nav_v.add_child(btn_test)
 
 	var diff_row := HBoxContainer.new()
 	diff_row.add_theme_constant_override("separation", 8)
@@ -246,6 +262,62 @@ func _build_ui() -> void:
 		diff_row.add_child(db)
 		_diff_buttons.append(db)
 	_refresh_diff_buttons()
+
+	var bot_row := HBoxContainer.new()
+	bot_row.add_theme_constant_override("separation", 8)
+	nav_v.add_child(bot_row)
+
+	var bot_lbl := Label.new()
+	bot_lbl.text = "BOTS:"
+	bot_lbl.add_theme_font_size_override("font_size", 14)
+	bot_lbl.modulate = Color(0.75, 0.88, 1.0)
+	bot_row.add_child(bot_lbl)
+
+	var bot_val_lbl := Label.new()
+	bot_val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bot_val_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bot_val_lbl.add_theme_font_size_override("font_size", 15)
+	bot_val_lbl.modulate = Color(1.0, 0.88, 0.35)
+	bot_val_lbl.text = str(NetworkManager.bot_count)
+
+	var bot_minus := _make_arcade_button("-", Color(0.95, 0.42, 0.36), 34.0, 16)
+	bot_minus.custom_minimum_size = Vector2(54, 34)
+	bot_minus.pressed.connect(func():
+		NetworkManager.bot_count = maxi(0, NetworkManager.bot_count - 1)
+		bot_val_lbl.text = str(NetworkManager.bot_count)
+	)
+	bot_row.add_child(bot_minus)
+	bot_row.add_child(bot_val_lbl)
+
+	var bot_plus := _make_arcade_button("+", Color(0.32, 0.92, 0.48), 34.0, 16)
+	bot_plus.custom_minimum_size = Vector2(54, 34)
+	bot_plus.pressed.connect(func():
+		NetworkManager.bot_count = mini(NetworkManager.MAX_BOTS, NetworkManager.bot_count + 1)
+		bot_val_lbl.text = str(NetworkManager.bot_count)
+	)
+	bot_row.add_child(bot_plus)
+
+	var map_row := HBoxContainer.new()
+	map_row.add_theme_constant_override("separation", 8)
+	nav_v.add_child(map_row)
+
+	var map_lbl := Label.new()
+	map_lbl.text = "MAP:"
+	map_lbl.add_theme_font_size_override("font_size", 14)
+	map_lbl.modulate = Color(0.75, 0.88, 1.0)
+	map_row.add_child(map_lbl)
+
+	_map_opt = OptionButton.new()
+	_map_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_opt.custom_minimum_size = Vector2(0, 36)
+	_map_opt.add_theme_font_size_override("font_size", 15)
+	for m_name in NetworkManager.MAP_NAMES:
+		_map_opt.add_item(m_name)
+	_map_opt.selected = clampi(NetworkManager.selected_map_id, 0, NetworkManager.MAP_NAMES.size() - 1)
+	_map_opt.item_selected.connect(func(idx: int):
+		NetworkManager.selected_map_id = idx
+	)
+	map_row.add_child(_map_opt)
 
 	var btn_join_lan := _make_arcade_button("WIFI MULTIPLAYER LOBBY", Color(0.26, 0.74, 1.0), 46.0, 17, Color(0.10, 0.20, 0.34, 0.96))
 	btn_join_lan.pressed.connect(func(): _transition_to(NetworkManager.go_to_lobby))
@@ -276,6 +348,8 @@ func _build_ui() -> void:
 
 	_build_credits_overlay()
 	_build_agent_select_overlay()
+	_build_test_mode_overlay()
+	_build_map_select_overlay()
 
 
 func _build_credits_overlay() -> void:
@@ -438,12 +512,12 @@ func _build_agent_select_overlay() -> void:
 
 	_agent_kit_title = Label.new()
 	_agent_kit_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_agent_kit_title.add_theme_font_size_override("font_size", 19)
+	_agent_kit_title.add_theme_font_size_override("font_size", 21)
 	_agent_kit_title.modulate = Color(1.0, 0.86, 0.34)
 	lv.add_child(_agent_kit_title)
 
 	var stage := PanelContainer.new()
-	stage.custom_minimum_size = Vector2(0, 108)
+	stage.custom_minimum_size = Vector2(0, 174)
 	stage.clip_contents = true
 	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
 	lv.add_child(stage)
@@ -455,15 +529,20 @@ func _build_agent_select_overlay() -> void:
 	anchor_wrap.add_child(anchor)
 
 	_agent_preview = SoldierPreview.new()
-	_agent_preview.scale = Vector2(2.2, 2.2)
+	_agent_preview.scale = Vector2(1.75, 1.75)
 	anchor.add_child(_agent_preview)
+
+	var details_scroll := ScrollContainer.new()
+	details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	details_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	lv.add_child(details_scroll)
 
 	_agent_kit_body = Label.new()
 	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_agent_kit_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_agent_kit_body.add_theme_font_size_override("font_size", 13)
-	_agent_kit_body.modulate = Color(0.84, 0.94, 1.0)
-	lv.add_child(_agent_kit_body)
+	_agent_kit_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_agent_kit_body.add_theme_font_size_override("font_size", 16)
+	_agent_kit_body.modulate = Color(0.88, 0.96, 1.0)
+	details_scroll.add_child(_agent_kit_body)
 
 	var act_row := HBoxContainer.new()
 	act_row.add_theme_constant_override("separation", 8)
@@ -473,9 +552,10 @@ func _build_agent_select_overlay() -> void:
 	play_solo_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play_solo_btn.pressed.connect(func():
 		NetworkManager.disconnect_network()
+		NetworkManager.test_mode_enabled = false
 		NetworkManager.match_mode = 2
 		_close_agent_select()
-		_transition_to(NetworkManager.go_to_arena)
+		_open_map_select(func(): _transition_to(NetworkManager.go_to_arena))
 	)
 	act_row.add_child(play_solo_btn)
 
@@ -506,10 +586,13 @@ func _build_agent_select_overlay() -> void:
 	for i in range(AgentData.AGENTS.size()):
 		var ag: Dictionary = AgentData.AGENTS[i]
 		var cb := Button.new()
-		cb.custom_minimum_size = Vector2(0, 60)
+		cb.custom_minimum_size = Vector2(0, 64)
 		cb.clip_text = true
 		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cb.add_theme_font_size_override("font_size", 14)
+		cb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cb.icon = _make_agent_icon(i)
+		cb.add_theme_font_size_override("font_size", 15)
 		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
 		cb.pressed.connect(_select_agent.bind(i))
 		grid.add_child(cb)
@@ -537,12 +620,12 @@ func _refresh_agent_select_ui() -> void:
 		_agent_preview.refresh_from_profile()
 	if is_instance_valid(_agent_kit_body):
 		_agent_kit_body.text = (
-			"∞ BASE WEAPON: %s (%d DMG)\n" % [str(bw["name"]), int(bw["damage"])]
-			+ "[Q] %s (%.1fs): %s\n" % [str(abils[0]["name"]), float(abils[0]["cooldown"]), str(abils[0]["desc"])]
-			+ "[E] %s (%.1fs): %s\n" % [str(abils[1]["name"]), float(abils[1]["cooldown"]), str(abils[1]["desc"])]
-			+ "[C] %s (%.1fs): %s\n" % [str(abils[2]["name"]), float(abils[2]["cooldown"]), str(abils[2]["desc"])]
-			+ "★ ULTIMATE [X] (%.0fs): %s — %s\n" % [float(ult["cooldown"]), str(ult["name"]), str(ult["desc"])]
-			+ "Ground Axes/Swords spawn across the map — grab & throw with [F]!"
+			"∞ BASE WEAPON: %s (%d DMG)\n\n" % [str(bw["name"]), int(bw["damage"])]
+			+ "• ABIL 1 — %s (%.1fs):\n  %s\n\n" % [str(abils[0]["name"]), float(abils[0]["cooldown"]), str(abils[0]["desc"])]
+			+ "• ABIL 2 — %s (%.1fs):\n  %s\n\n" % [str(abils[1]["name"]), float(abils[1]["cooldown"]), str(abils[1]["desc"])]
+			+ "• ABIL 3 — %s (%.1fs):\n  %s\n\n" % [str(abils[2]["name"]), float(abils[2]["cooldown"]), str(abils[2]["desc"])]
+			+ "★ ULTIMATE — %s (%.0fs):\n  %s\n\n" % [str(ult["name"]), float(ult["cooldown"]), str(ult["desc"])]
+			+ "Ground weapons auto-pickup as you walk over them — tap THROW!"
 		)
 	for i in range(_agent_cards.size()):
 		var is_sel: bool = (i == idx)
@@ -552,6 +635,39 @@ func _refresh_agent_select_ui() -> void:
 		_agent_cards[i].add_theme_stylebox_override("normal", _make_style(bg_c, bd_c, 8))
 		_agent_cards[i].add_theme_stylebox_override("hover", _make_style(bg_c.lightened(0.14), bd_c.lightened(0.25), 8))
 		_agent_cards[i].add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 8))
+
+
+func _make_agent_icon(arch_idx: int) -> Texture2D:
+	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
+	var parts: Dictionary = arch.get("parts", {})
+	var s_idx: int = clampi(int(parts.get("head", arch_idx)), 0, 25)
+	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
+	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	if skin_tex == null:
+		return null
+	var fw: int = skin_tex.get_width() / 8
+	var fh: int = mini(skin_tex.get_height(), int(float(skin_tex.get_height()) * 0.72))
+	var crop := Rect2i(0, 0, fw, fh)
+	var base_img: Image = skin_tex.get_image().get_region(crop)
+	if base_img.get_format() != Image.FORMAT_RGBA8:
+		base_img.convert(Image.FORMAT_RGBA8)
+	if head_tex != null:
+		var head_img: Image = head_tex.get_image().get_region(crop)
+		if head_img.get_format() != Image.FORMAT_RGBA8:
+			head_img.convert(Image.FORMAT_RGBA8)
+		base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
+	var used: Rect2i = base_img.get_used_rect()
+	if used.size.x <= 0 or used.size.y <= 0:
+		return null
+	var trimmed: Image = base_img.get_region(used)
+	var scale_f: float = 42.0 / float(maxi(used.size.x, used.size.y))
+	var tw: int = maxi(1, int(round(float(used.size.x) * scale_f)))
+	var th: int = maxi(1, int(round(float(used.size.y) * scale_f)))
+	trimmed.resize(tw, th, Image.INTERPOLATE_BILINEAR)
+	var sq := Image.create(48, 48, false, Image.FORMAT_RGBA8)
+	sq.fill(Color(0, 0, 0, 0))
+	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((48 - tw) / 2, (48 - th) / 2))
+	return ImageTexture.create_from_image(sq)
 
 
 func _open_agent_select() -> void:
@@ -564,3 +680,284 @@ func _open_agent_select() -> void:
 func _close_agent_select() -> void:
 	if is_instance_valid(_agent_select_overlay):
 		_agent_select_overlay.visible = false
+
+
+func _build_test_mode_overlay() -> void:
+	_test_mode_overlay = ColorRect.new()
+	_test_mode_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_test_mode_overlay.color = Color(0.02, 0.03, 0.06, 0.86)
+	_test_mode_overlay.visible = false
+	add_child(_test_mode_overlay)
+
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_test_mode_overlay.add_child(cc)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(560, 340)
+	card.add_theme_stylebox_override("panel", _make_style(Color(0.07, 0.11, 0.17, 0.98), Color(0.24, 0.86, 0.82, 0.95), 16))
+	cc.add_child(card)
+
+	var cv := VBoxContainer.new()
+	cv.add_theme_constant_override("separation", 12)
+	card.add_child(cv)
+
+	var top_row := HBoxContainer.new()
+	cv.add_child(top_row)
+
+	var title := Label.new()
+	title.text = "TEST / PRACTICE MODE (1 BOT)"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 22)
+	title.modulate = Color(0.38, 0.92, 0.88)
+	top_row.add_child(title)
+
+	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 38.0, 14)
+	close_btn.custom_minimum_size = Vector2(96, 38)
+	close_btn.pressed.connect(_close_test_mode_overlay)
+	top_row.add_child(close_btn)
+
+	var mode_lbl := Label.new()
+	mode_lbl.text = "GAMEPLAY MODE:"
+	mode_lbl.add_theme_font_size_override("font_size", 14)
+	mode_lbl.modulate = Color(0.75, 0.85, 0.95)
+	cv.add_child(mode_lbl)
+
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 8)
+	cv.add_child(mode_row)
+
+	_test_mode_type_buttons.clear()
+	var mode_specs: Array[Dictionary] = [
+		{"mode": 0, "label": "SOLO SHOOTING"},
+		{"mode": 2, "label": "AGENT MODE"}
+	]
+	for ms in mode_specs:
+		var mb := Button.new()
+		mb.text = str(ms["label"])
+		mb.custom_minimum_size = Vector2(0, 44)
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mb.add_theme_font_size_override("font_size", 15)
+		mb.pressed.connect(func():
+			_test_mode_choice = int(ms["mode"])
+			_refresh_test_mode_ui()
+		)
+		mode_row.add_child(mb)
+		_test_mode_type_buttons.append(mb)
+
+	var beh_lbl := Label.new()
+	beh_lbl.text = "PRACTICE BOT BEHAVIOR (CAN ALSO TOGGLE IN-GAME):"
+	beh_lbl.add_theme_font_size_override("font_size", 14)
+	beh_lbl.modulate = Color(0.75, 0.85, 0.95)
+	cv.add_child(beh_lbl)
+
+	var beh_row := HBoxContainer.new()
+	beh_row.add_theme_constant_override("separation", 8)
+	cv.add_child(beh_row)
+
+	_test_bot_beh_buttons.clear()
+	var beh_labels: Array[String] = ["STILL (DO NOTHING)", "MOVE ONLY", "FIGHT (NORMAL BOT)"]
+	for i in range(beh_labels.size()):
+		var bb := Button.new()
+		bb.text = beh_labels[i]
+		bb.custom_minimum_size = Vector2(0, 44)
+		bb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bb.add_theme_font_size_override("font_size", 13)
+		bb.pressed.connect(func():
+			_test_bot_choice = i
+			_refresh_test_mode_ui()
+		)
+		beh_row.add_child(bb)
+		_test_bot_beh_buttons.append(bb)
+
+	var t_bot_row := HBoxContainer.new()
+	t_bot_row.add_theme_constant_override("separation", 8)
+	cv.add_child(t_bot_row)
+
+	var t_bot_lbl := Label.new()
+	t_bot_lbl.text = "BOTS (MIN 1):"
+	t_bot_lbl.add_theme_font_size_override("font_size", 14)
+	t_bot_lbl.modulate = Color(0.75, 0.85, 0.95)
+	t_bot_row.add_child(t_bot_lbl)
+
+	var t_bot_val := Label.new()
+	t_bot_val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t_bot_val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t_bot_val.add_theme_font_size_override("font_size", 16)
+	t_bot_val.modulate = Color(1.0, 0.88, 0.35)
+	t_bot_val.text = str(clampi(NetworkManager.test_bot_count, 1, NetworkManager.MAX_BOTS))
+
+	var t_minus := _make_arcade_button("-", Color(0.95, 0.42, 0.36), 36.0, 16)
+	t_minus.custom_minimum_size = Vector2(54, 36)
+	t_minus.pressed.connect(func():
+		NetworkManager.test_bot_count = maxi(1, NetworkManager.test_bot_count - 1)
+		t_bot_val.text = str(NetworkManager.test_bot_count)
+	)
+	t_bot_row.add_child(t_minus)
+	t_bot_row.add_child(t_bot_val)
+
+	var t_plus := _make_arcade_button("+", Color(0.32, 0.92, 0.48), 36.0, 16)
+	t_plus.custom_minimum_size = Vector2(54, 36)
+	t_plus.pressed.connect(func():
+		NetworkManager.test_bot_count = mini(NetworkManager.MAX_BOTS, NetworkManager.test_bot_count + 1)
+		t_bot_val.text = str(NetworkManager.test_bot_count)
+	)
+	t_bot_row.add_child(t_plus)
+
+	var start_btn := _make_arcade_button("▶  START PRACTICE", Color(0.30, 0.92, 0.56), 50.0, 18)
+	start_btn.pressed.connect(func():
+		NetworkManager.disconnect_network()
+		NetworkManager.test_mode_enabled = true
+		NetworkManager.match_mode = _test_mode_choice
+		NetworkManager.test_bot_behavior = _test_bot_choice
+		_close_test_mode_overlay()
+		_open_map_select(func(): _transition_to(NetworkManager.go_to_arena))
+	)
+	cv.add_child(start_btn)
+	_refresh_test_mode_ui()
+
+
+func _refresh_test_mode_ui() -> void:
+	var mode_vals: Array[int] = [0, 2]
+	for i in range(_test_mode_type_buttons.size()):
+		var btn: Button = _test_mode_type_buttons[i]
+		var active: bool = (_test_mode_choice == mode_vals[i])
+		var bd: Color = Color(0.24, 0.86, 0.82) if active else Color(0.30, 0.40, 0.55)
+		var bg: Color = Color(0.10, 0.28, 0.30) if active else Color(0.09, 0.12, 0.18, 0.95)
+		btn.add_theme_stylebox_override("normal", _make_style(bg, bd, 8))
+		btn.add_theme_stylebox_override("hover", _make_style(bg.lightened(0.12), bd.lightened(0.2), 8))
+		btn.modulate = Color.WHITE if active else Color(0.75, 0.80, 0.88)
+
+	var beh_cols: Array[Color] = [Color(0.35, 0.78, 1.0), Color(0.98, 0.75, 0.22), Color(0.95, 0.32, 0.32)]
+	for i in range(_test_bot_beh_buttons.size()):
+		var btn: Button = _test_bot_beh_buttons[i]
+		var active: bool = (_test_bot_choice == i)
+		var bd: Color = beh_cols[i] if active else Color(0.30, 0.40, 0.55)
+		var bg: Color = beh_cols[i].darkened(0.65) if active else Color(0.09, 0.12, 0.18, 0.95)
+		btn.add_theme_stylebox_override("normal", _make_style(bg, bd, 8))
+		btn.add_theme_stylebox_override("hover", _make_style(bg.lightened(0.12), bd.lightened(0.2), 8))
+		btn.modulate = Color.WHITE if active else Color(0.75, 0.80, 0.88)
+
+
+func _open_test_mode_overlay() -> void:
+	_test_mode_choice = 2 if NetworkManager.is_agent_clash_mode() else 0
+	_test_bot_choice = clampi(NetworkManager.test_bot_behavior, 0, 2)
+	_refresh_test_mode_ui()
+	_test_mode_overlay.visible = true
+	_test_mode_overlay.modulate.a = 0.0
+	create_tween().tween_property(_test_mode_overlay, "modulate:a", 1.0, 0.16)
+
+
+func _close_test_mode_overlay() -> void:
+	if is_instance_valid(_test_mode_overlay):
+		_test_mode_overlay.visible = false
+
+
+func _build_map_select_overlay() -> void:
+	_map_select_overlay = ColorRect.new()
+	_map_select_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_map_select_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
+	_map_select_overlay.visible = false
+	add_child(_map_select_overlay)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_bottom", 20)
+	_map_select_overlay.add_child(margin)
+
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.10, 0.16, 0.98), Color(0.32, 0.78, 1.0, 0.95), 16))
+	margin.add_child(card)
+
+	var mv := VBoxContainer.new()
+	mv.add_theme_constant_override("separation", 12)
+	card.add_child(mv)
+
+	_map_title_label = Label.new()
+	_map_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_map_title_label.add_theme_font_size_override("font_size", 24)
+	_map_title_label.modulate = Color(0.45, 0.90, 1.0)
+	mv.add_child(_map_title_label)
+
+	var mid_row := HBoxContainer.new()
+	mid_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid_row.add_theme_constant_override("separation", 14)
+	mv.add_child(mid_row)
+
+	var prev_btn := _make_arcade_button("◀", Color(0.36, 0.78, 1.0), 80.0, 28)
+	prev_btn.custom_minimum_size = Vector2(76, 0)
+	prev_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	prev_btn.pressed.connect(func():
+		NetworkManager.selected_map_id = wrapi(NetworkManager.selected_map_id - 1, 0, NetworkManager.MAP_NAMES.size())
+		_refresh_map_select_ui()
+	)
+	mid_row.add_child(prev_btn)
+
+	var preview_frame := PanelContainer.new()
+	preview_frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	preview_frame.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.05, 0.09, 0.98), Color(0.28, 0.48, 0.72, 0.85), 12))
+	mid_row.add_child(preview_frame)
+
+	_map_preview_tex = TextureRect.new()
+	_map_preview_tex.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_preview_tex.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_map_preview_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_map_preview_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview_frame.add_child(_map_preview_tex)
+
+	var next_btn := _make_arcade_button("▶", Color(0.36, 0.78, 1.0), 80.0, 28)
+	next_btn.custom_minimum_size = Vector2(76, 0)
+	next_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	next_btn.pressed.connect(func():
+		NetworkManager.selected_map_id = wrapi(NetworkManager.selected_map_id + 1, 0, NetworkManager.MAP_NAMES.size())
+		_refresh_map_select_ui()
+	)
+	mid_row.add_child(next_btn)
+
+	var select_btn := _make_arcade_button("▶  SELECT MAP", Color(0.30, 0.92, 0.54), 56.0, 20)
+	select_btn.pressed.connect(func():
+		if is_instance_valid(_map_opt):
+			_map_opt.selected = NetworkManager.selected_map_id
+		_map_select_overlay.visible = false
+		if _pending_map_launch.is_valid():
+			_pending_map_launch.call()
+	)
+	mv.add_child(select_btn)
+
+
+func _refresh_map_select_ui() -> void:
+	var idx: int = clampi(NetworkManager.selected_map_id, 0, NetworkManager.MAP_NAMES.size() - 1)
+	if is_instance_valid(_map_title_label):
+		_map_title_label.text = "%s  (%d / %d)" % [NetworkManager.MAP_NAMES[idx].to_upper(), idx + 1, NetworkManager.MAP_NAMES.size()]
+	if is_instance_valid(_map_preview_tex):
+		_map_preview_tex.texture = _get_map_preview_texture(idx)
+	if is_instance_valid(_map_opt):
+		_map_opt.selected = idx
+
+
+func _get_map_preview_texture(map_id: int) -> Texture2D:
+	if _map_preview_cache.has(map_id):
+		return _map_preview_cache[map_id] as Texture2D
+	var res_p: String = "res://assets/tilemaps/preview_map_%d.png" % map_id
+	var tex: Texture2D = null
+	if ResourceLoader.exists(res_p):
+		tex = load(res_p) as Texture2D
+	if tex == null:
+		var img := Image.new()
+		if img.load(ProjectSettings.globalize_path(res_p)) == OK:
+			tex = ImageTexture.create_from_image(img)
+	if tex != null:
+		_map_preview_cache[map_id] = tex
+	return tex
+
+
+func _open_map_select(on_confirm: Callable) -> void:
+	_pending_map_launch = on_confirm
+	_refresh_map_select_ui()
+	_map_select_overlay.visible = true
+	_map_select_overlay.modulate.a = 0.0
+	create_tween().tween_property(_map_select_overlay, "modulate:a", 1.0, 0.14)

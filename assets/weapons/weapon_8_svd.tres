@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 8
 code_name = "svd"
-display_name = "Dragunov SVD"
+display_name = "Auto Sniper"
 category = "DMR Sniper"
 description = "Semi-automatic marksman rifle for rapid follow-up long-range shots."
 damage = 58
@@ -23,6 +23,7 @@ damage_falloff_start = 9999.0
 min_damage_ratio = 1.0
 move_speed_multiplier = 0.92
 scope_zoom = 0.84
+max_zoom_level = 6
 has_backblast = false
 has_accessory_rail = false
 unlimited_reserve = false

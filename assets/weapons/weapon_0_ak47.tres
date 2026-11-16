@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 0
 code_name = "ak47"
-display_name = "AK-47"
+display_name = "AK47"
 category = "Assault Rifle"
 description = "High 7.62mm base damage with predictable vertical recoil kick."
 damage = 24
@@ -23,6 +23,7 @@ damage_falloff_start = 9999.0
 min_damage_ratio = 1.0
 move_speed_multiplier = 0.98
 scope_zoom = 1.05
+max_zoom_level = 4
 has_backblast = false
 has_accessory_rail = false
 unlimited_reserve = false

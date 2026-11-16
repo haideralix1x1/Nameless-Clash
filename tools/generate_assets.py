@@ -865,6 +865,17 @@ def _draw_archetype_skin(arch: int, f: int) -> Canvas:
         _glossy_eye(ex_r, ey - 0.5, 3.2, 5.4, (92, 64, 42, 255))
         c.fill_polygon([(hx + 2, hy + 10), (hx + 13, hy + 10), (hx + 8, hy + 18)], (36, 28, 24, 255), INK, 1.6)
         c.fill_capsule(hx + 4.0, hy + 10.0, hx + 11.0, hy + 10.0, 1.3, INK, shade="flat")
+    elif arch == 24:
+        # Raven: shadowed upper face under hood + stubble jaw + glowing violet lightning eye
+        c.fill_ellipse(hx + 4.0, hy + 10.0, 19.0, 9.0, (118, 108, 114, 210), shade="flat")
+        c.fill_capsule(hx + 3.0, hy + 10.5, hx + 11.5, hy + 10.5, 1.3, INK, shade="flat")
+        # Deep shadow covering upper face/brow
+        c.fill_ellipse(hx + 2.0, hy - 5.0, 21.0, 12.0, (14, 12, 20, 255), shade="flat")
+        # Glowing violet/white lightning eye on right eye + purple flame wisp
+        c.fill_ellipse(ex_r, ey, 5.2, 3.0, (172, 78, 248, 255), shade="flat")
+        c.fill_ellipse(ex_r, ey, 3.0, 1.6, (255, 242, 255, 255), shade="flat")
+        c.fill_polygon([(ex_r + 2, ey - 1), (ex_r + 11, ey - 9), (ex_r + 6, ey - 2)], (196, 112, 255, 235), shade="flat")
+        c.fill_polygon([(ex_r, ey + 2), (ex_r - 2, ey + 9), (ex_r + 2, ey + 2)], (162, 68, 238, 220), shade="flat")
     else:
         c.fill_capsule(ex_l - 3.5, ey - 7.5, ex_l + 3.5, ey - 7.2, 2.1, INK, shade="flat")
         c.fill_capsule(ex_r - 3.5, ey - 7.2, ex_r + 3.5, ey - 7.5, 2.1, INK, shade="flat")
@@ -905,6 +916,7 @@ def _draw_archetype_legs(arch: int, f: int) -> Canvas:
         ((36, 76, 62, 255), (24, 54, 44, 255), (44, 46, 52, 255)),        # 21 Red Flame Mage (Ignis)
         ((232, 138, 204, 255), (186, 96, 162, 255), (248, 174, 224, 255)),# 22 Crystal
         ((122, 78, 44, 255), (88, 54, 30, 255), (188, 166, 134, 255)),    # 23 Monk
+        ((46, 48, 60, 255), (30, 32, 42, 255), (26, 28, 36, 255)),         # 24 Raven
     ]
     p_hi, p_sh, boot = pant_palette[arch % len(pant_palette)]
     leg_shade = "crystal" if arch == 22 else ("metal" if arch in (8, 16) else "soft")
@@ -1094,6 +1106,7 @@ def _draw_archetype_torso(arch: int, f: int) -> Canvas:
             20: ((152, 92, 140, 255), (234, 226, 208, 255), (212, 166, 62, 255)),
             22: ((242, 158, 214, 255), (206, 98, 174, 255), (255, 224, 246, 255)),
             23: ((216, 160, 112, 255), (168, 106, 56, 255), (232, 206, 168, 255)),
+            24: ((54, 58, 70, 255), (38, 40, 50, 255), (156, 118, 218, 255)),
         }
         s_col, v_col, acc_col = style_map[arch]
         t_shade = "crystal" if arch == 22 else ("metal" if arch in (5, 6, 8) else "glossy")
@@ -1117,6 +1130,13 @@ def _draw_archetype_torso(arch: int, f: int) -> Canvas:
         elif arch == 20 or arch == 23:
             for bx in range(38, 60, 5):
                 c.fill_circle(bx, ty + 4 + abs(bx - 48) * 0.25, 2.8, acc_col, INK, 1.3, shade="glossy")
+        elif arch == 24:
+            # Raven: dark neck scarf + raven skull brooch + feathered raven pauldrons
+            c.fill_round_rect(x_t + 3, ty + 3, w_t - 6, 12, 3.5, v_col, INK, 1.8, shade="metal")
+            c.fill_round_rect(35, ty - 2, 26, 6, 3, (32, 34, 44, 255), INK, 1.8, shade="glossy")
+            c.fill_circle(48, ty + 5, 3.4, (78, 82, 96, 255), INK, 1.5, shade="metal")
+            c.fill_ellipse(x_t - 2, ty + 3, 7.5, 5.5, (42, 44, 54, 255), INK, 1.8, shade="glossy")
+            c.fill_ellipse(x_t + w_t + 2, ty + 3, 7.5, 5.5, (42, 44, 54, 255), INK, 1.8, shade="glossy")
         else:
             c.fill_round_rect(x_t + 3, ty + 3, w_t - 6, 12, 3.5, v_col, INK, 1.8, shade=t_shade)
             c.fill_round_rect(44, ty + 5, 8, 6, 2, acc_col, INK, 1.4, shade="metal" if arch != 22 else "crystal")
@@ -1281,6 +1301,14 @@ def _draw_archetype_headgear(arch: int, f: int) -> Canvas:
              (hx + 14, hy - 18), (hx + 22, hy - 25), (hx + 21, hy - 12)],
             (248, 156, 218, 255), INK, 2.5, shade="crystal"
         )
+    elif arch == 24:
+        # Raven: dark pointed cowl/hood framing the shadowed face
+        c.fill_polygon(
+            [(hx - 24, hy + 8), (hx - 20, hy - 18), (hx - 4, hy - 29),
+             (hx + 14, hy - 25), (hx + 24, hy + 4), (hx + 15, hy - 9),
+             (hx - 2, hy - 11), (hx - 16, hy - 6)],
+            (44, 46, 58, 255), INK, 2.6, shade="glossy"
+        )
     else:
         c.fill_round_rect(hx - 21.0, hy - 12.0, 42.0, 6.5, 2.0, (192, 42, 42, 255), INK, 2.2, shade="glossy")
         c.fill_polygon([(hx - 20, hy - 10), (hx - 32, hy - 15), (hx - 28, hy - 4)], (192, 42, 42, 255), INK, 2.0, shade="glossy")
@@ -1315,6 +1343,7 @@ def _draw_archetype_hands(arch: int, f: int) -> Canvas:
         21: (132, 74, 34, 255),
         22: (242, 152, 210, 255),
         23: (214, 158, 108, 255),
+        24: (48, 46, 56, 255),
     }
     hand_map = {
         4: (26, 174, 246, 255),
@@ -1332,6 +1361,7 @@ def _draw_archetype_hands(arch: int, f: int) -> Canvas:
         21: (132, 74, 34, 255),
         22: (242, 152, 210, 255),
         23: (214, 158, 108, 255),
+        24: (48, 46, 56, 255),
     }
     arm_col = arm_map.get(arch, (242, 180, 150, 255))
     hand_col = hand_map.get(arch, (246, 190, 160, 255))
@@ -1437,6 +1467,11 @@ def _draw_archetype_accessories(arch: int, f: int) -> Canvas:
         c.fill_polygon([(26, ty + 15), (12, ty + 10), (24, ty + 22)], (228, 118, 192, 255), INK, 2.2, shade="crystal")
     elif arch == 23:
         c.fill_capsule(22, ty - 18, 34, ty + 24, 2.8, (132, 82, 42, 255), INK, 2.2, shade="glossy")
+    elif arch == 24:
+        # Raven: swirling purple shadow flames + tattered black feather cloak
+        c.fill_polygon([(24, ty + 18), (12, ty + 4), (20, ty - 10), (30, ty + 4)], (156, 76, 224, 210), shade="flat")
+        c.fill_polygon([(22, ty + 14), (15, ty + 2), (25, ty + 4)], (214, 148, 255, 220), shade="flat")
+        c.fill_polygon([(28, ty + 2), (16, ty + 26), (26, ty + 24), (34, ty + 28), (39, ty + 4)], (34, 36, 46, 255), INK, 2.3, shade="glossy")
     else:
         c.fill_round_rect(20, ty + 1, 13, 19, 5, steel, INK, 2.4, shade="metal")
     return c

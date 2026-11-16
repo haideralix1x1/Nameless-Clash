@@ -9,6 +9,9 @@ signal connection_failed(reason: String)
 signal server_disconnected
 signal match_started
 signal killfeed_event(killer_name: String, victim_name: String, weapon_name: String)
+signal kill_scored(killer_id: int, victim_id: int)
+signal chat_message_received(sender_name: String, message: String)
+signal interactable_toggled(inter_idx: int, new_state: bool)
 
 const GAME_PORT: int = 44334
 const DISCOVERY_PORT: int = 44335
@@ -18,7 +21,17 @@ const MAX_BOTS: int = 10
 const MAP_NAMES: Array[String] = [
 	"Bunker Base",
 	"Factory Ruins",
-	"Desert Outpost"
+	"Desert Outpost",
+	"Catacombs Maze",
+	"Outpost Towers",
+	"Soarin Islands",
+	"Pharaoh Pyramid",
+	"Snow Blind",
+	"Substructure",
+	"High Tower",
+	"Ring Arena",
+	"Lunar Station",
+	"Jungle Cliff"
 ]
 
 const MODE_NAMES: Array[String] = [
@@ -48,6 +61,12 @@ const BOT_DIFFICULTY_NAMES: Array[String] = [
 	"Hard"
 ]
 
+const TEST_BOT_BEHAVIORS: Array[String] = [
+	"Still",
+	"Move",
+	"Fight"
+]
+
 var local_player_name: String = "Trooper"
 var local_color_index: int = 0
 var local_team: int = 0
@@ -56,6 +75,9 @@ var bot_count: int = 3
 var bot_difficulty: int = 1      # 0 = Easy, 1 = Mid, 2 = Hard
 var match_mode: int = 0         # 0 = Free-For-All, 1 = Red vs Blue
 var selected_map_id: int = 0    # 0 = Bunker Base, 1 = Factory Ruins, 2 = Desert Outpost
+var test_mode_enabled: bool = false
+var test_bot_behavior: int = 0   # 0 = Still, 1 = Move, 2 = Fight
+var test_bot_count: int = 1      # 1..MAX_BOTS in Test/Practice Mode
 
 # Custom Game Rules / Mutators
 var unlimited_jetpack: bool = false
@@ -119,7 +141,8 @@ func _ensure_input_map() -> void:
 		"ability_3": [KEY_C, KEY_3],
 		"ability_ult": [KEY_X, KEY_4],
 		"throw_item": [KEY_F, KEY_G],
-		"loadout_menu": [KEY_B]
+		"loadout_menu": [KEY_B],
+		"taunt": [KEY_T]
 	}
 	for action_name in key_bindings.keys():
 		if not InputMap.has_action(action_name):
@@ -152,6 +175,10 @@ func is_agent_clash_mode() -> bool:
 
 func is_team_mode() -> bool:
 	return match_mode == 1 or match_mode == 3
+
+
+func is_test_mode() -> bool:
+	return test_mode_enabled
 
 
 func get_team_color(color_index: int) -> Color:
@@ -532,6 +559,35 @@ func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_lab
 		players[victim_id]["deaths"] = int(players[victim_id].get("deaths", 0)) + 1
 	player_list_updated.emit()
 	killfeed_event.emit(killer_label, victim_label, weapon_name)
+	kill_scored.emit(killer_id, victim_id)
+
+
+func send_chat_message(msg: String) -> void:
+	var clean: String = msg.strip_edges().substr(0, 80)
+	if clean.is_empty():
+		return
+	var sender: String = local_player_name
+	if is_network_active():
+		send_chat_rpc.rpc(sender, clean)
+	else:
+		chat_message_received.emit(sender, clean)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func send_chat_rpc(sender_name: String, message: String) -> void:
+	chat_message_received.emit(sender_name, message)
+
+
+func toggle_interactable(inter_idx: int, new_state: bool) -> void:
+	if is_network_active():
+		toggle_interactable_rpc.rpc(inter_idx, new_state)
+	else:
+		interactable_toggled.emit(inter_idx, new_state)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func toggle_interactable_rpc(inter_idx: int, new_state: bool) -> void:
+	interactable_toggled.emit(inter_idx, new_state)
 
 
 func go_to_arena() -> void:

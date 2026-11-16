@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 4
 code_name = "vector"
-display_name = "Kriss Vector"
+display_name = "Uzi"
 category = "Submachine Gun"
 description = "Ultra-fast cyclical RPM with downward recoil mitigation and 25-rd mag."
 damage = 12
@@ -23,6 +23,7 @@ damage_falloff_start = 300.0
 min_damage_ratio = 0.42
 move_speed_multiplier = 1.1
 scope_zoom = 1.08
+max_zoom_level = 3
 has_backblast = false
 has_accessory_rail = false
 unlimited_reserve = false
