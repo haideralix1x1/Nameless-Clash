@@ -1313,7 +1313,7 @@ class InteractableProp extends Node2D:
 
 		if prop_kind == "barrel":
 			_hit_body = StaticBody2D.new()
-			_hit_body.collision_layer = 2
+			_hit_body.collision_layer = 3
 			_hit_body.collision_mask = 0
 			_hit_body.add_to_group("destructible_bombs")
 			_hit_body.set_meta("prop_node", self)
@@ -1321,6 +1321,7 @@ class InteractableProp extends Node2D:
 			var h_box := RectangleShape2D.new()
 			h_box.size = Vector2(44, 66)
 			_hit_col.shape = h_box
+			_hit_col.one_way_collision = true
 			_hit_col.position = Vector2(0, -13)
 			_hit_body.add_child(_hit_col)
 			add_child(_hit_body)

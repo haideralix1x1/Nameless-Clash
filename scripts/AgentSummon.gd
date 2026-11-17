@@ -9,14 +9,49 @@ var can_deal: bool = false
 var time_left: float = 5.0
 var damage: int = 25
 var move_dir_x: float = 1.0
+var flight_dir: Vector2 = Vector2.ZERO
 var vel: Vector2 = Vector2.ZERO
 var hp: int = 40
 var linked_target: Node2D = null
+var clone_arch_id: int = 3
+var _modular_clone: ModularCharacter = null
 var _attack_cd: float = 0.0
 var _phase: float = 0.0
 var _wall_gap: float = 110.0
+var _attack_anim_timer: float = 0.0
+var _attack_dir: Vector2 = Vector2.RIGHT
+
+const SUMMON_TEXTURES: Dictionary = {
+	"winged_lion": preload("res://assets/sprites/summons/winged_lion.png"),
+	"flash_bird": preload("res://assets/sprites/summons/bird.png"),
+	"bat": preload("res://assets/sprites/summons/bat.png"),
+	"barbarian": preload("res://assets/sprites/summons/barbarian.png"),
+	"zombie_dog": preload("res://assets/sprites/summons/zombie_dog.png"),
+	"bomb_eagle": preload("res://assets/sprites/summons/eagle.png"),
+	"shadow_mummy": preload("res://assets/sprites/summons/mummy.png"),
+	"small_snake": preload("res://assets/sprites/summons/snake.png"),
+	"giant_snake": preload("res://assets/sprites/summons/snake.png"),
+	"bee": preload("res://assets/sprites/summons/bee.png"),
+	"dragon_strike": preload("res://assets/sprites/summons/dragon.png")
+}
+
+const SUMMON_SCALES: Dictionary = {
+	"winged_lion": 0.72,
+	"flash_bird": 0.44,
+	"bat": 0.44,
+	"barbarian": 0.50,
+	"zombie_dog": 0.52,
+	"bomb_eagle": 0.58,
+	"shadow_mummy": 0.54,
+	"small_snake": 0.38,
+	"giant_snake": 0.68,
+	"bee": 0.36,
+	"dragon_strike": 0.92
+}
 
 var _col_shape: CollisionShape2D = null
+var _sprite: Sprite2D = null
+var _base_scale: float = 0.5
 
 
 func _ready() -> void:
@@ -33,14 +68,47 @@ func _ready() -> void:
 		collision_layer = 2
 		add_to_group("destructible_bombs")
 		set_meta("prop_node", self)
+	if summon_kind == "ghost_clone" or summon_kind == "mirror_clone":
+		add_to_group("decoy_targets")
+	if summon_kind == "ghost_clone" or summon_kind == "mirror_clone":
+		var c_arch: int = int(linked_target.get("archetype_id")) if (summon_kind == "mirror_clone" and is_instance_valid(linked_target)) else clone_arch_id
+		var part: int = ProfileManager.get_archetype_part_id(c_arch)
+		var arch_d: Dictionary = ProfileManager.ARCHETYPES[clampi(c_arch, 0, ProfileManager.ARCHETYPES.size() - 1)]
+		_modular_clone = ModularCharacter.new()
+		_modular_clone.scale = Vector2(0.75, 0.75)
+		add_child(_modular_clone)
+		_modular_clone.apply_loadout({
+			"archetype": c_arch,
+			"skin_id": part, "head_id": part, "torso_id": part,
+			"legs_id": part, "hands_id": part, "accessories_id": part,
+			"shirt_color": arch_d.get("shirt", Color.WHITE),
+			"pants_color": arch_d.get("pants", Color.WHITE),
+			"skin_color": arch_d.get("skin", Color.WHITE),
+			"helmet_color": arch_d.get("helmet", Color.WHITE),
+			"gear_color": arch_d.get("gear", Color.WHITE)
+		})
+		_modular_clone.play_state("run", move_dir_x < 0.0)
 	body_entered.connect(_on_body_entered)
+	if SUMMON_TEXTURES.has(summon_kind):
+		_base_scale = float(SUMMON_SCALES.get(summon_kind, 0.5))
+		_sprite = Sprite2D.new()
+		_sprite.texture = SUMMON_TEXTURES[summon_kind]
+		_sprite.scale = Vector2(_base_scale, _base_scale)
+		_sprite.flip_h = move_dir_x < 0.0
+		_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		add_child(_sprite)
 	queue_redraw()
+
+
+func is_alive() -> bool:
+	return time_left > 0.0
 
 
 func on_shot_hit(dmg: int, attacker_id: int) -> void:
 	if attacker_id == owner_peer_id:
 		return
 	if summon_kind == "ghost_clone":
+		_blast_ghost_clone()
 		queue_free()
 		return
 	if summon_kind == "mirror_clone":
@@ -54,10 +122,25 @@ func on_shot_hit(dmg: int, attacker_id: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _attack_anim_timer > 0.0:
+		_attack_anim_timer = maxf(0.0, _attack_anim_timer - delta)
+		global_position += _attack_dir * 260.0 * delta
+		if is_instance_valid(_sprite):
+			var p_t: float = _attack_anim_timer / 0.35
+			_sprite.scale = Vector2(0.96, 0.88).lerp(Vector2(0.72, 0.72), 1.0 - p_t)
+			_sprite.rotation = (0.28 if not _sprite.flip_h else -0.28) * p_t
+		modulate.a = clampf(_attack_anim_timer / 0.25, 0.0, 1.0)
+		queue_redraw()
+		if _attack_anim_timer <= 0.0:
+			queue_free()
+		return
+
 	time_left -= delta
 	_phase += delta * 6.0
 	if _attack_cd > 0.0:
 		_attack_cd = maxf(0.0, _attack_cd - delta)
+	if summon_kind in ["winged_lion", "dragon_strike"] and time_left < 0.5:
+		modulate.a = clampf(time_left / 0.5, 0.0, 1.0)
 	if time_left <= 0.0:
 		if summon_kind == "bomb_eagle":
 			_drop_eagle_bomb()
@@ -65,25 +148,65 @@ func _physics_process(delta: float) -> void:
 		return
 
 	match summon_kind:
+		"dragon_strike":
+			global_position.x += move_dir_x * 380.0 * delta
+			if is_instance_valid(_sprite):
+				_sprite.flip_h = move_dir_x < 0.0
+				_sprite.position.y = sin(_phase * 2.2) * 8.0
+				var d_flap: float = sin(_phase * 3.0)
+				_sprite.scale = Vector2(_base_scale + d_flap * 0.06, _base_scale - d_flap * 0.07)
 		"flash_bird", "winged_lion", "bat", "shadow_mummy", "giant_snake", "mini_prism":
 			var spd: float = 340.0 if summon_kind == "winged_lion" else (320.0 if summon_kind == "giant_snake" else (300.0 if summon_kind == "flash_bird" else 260.0))
-			var target: Node2D = _find_nearest_enemy(950.0)
+			var detect_r: float = 280.0 if summon_kind == "winged_lion" else (4000.0 if summon_kind == "bat" else 950.0)
+			var target: Node2D = null
+			if summon_kind == "bat" and is_instance_valid(linked_target) and (not linked_target.has_method("is_alive") or linked_target.is_alive()):
+				target = linked_target
+			else:
+				target = _find_nearest_enemy(detect_r)
 			if target != null:
 				var dir: Vector2 = (target.global_position - global_position).normalized()
 				global_position += dir * spd * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = dir.x < 0.0
+					if summon_kind in ["flash_bird", "winged_lion", "bat"]:
+						_sprite.position.y = sin(_phase * 1.8) * 6.5
+						var flap: float = sin(_phase * 2.6)
+						_sprite.scale = Vector2(_base_scale + flap * 0.04, _base_scale - flap * 0.05)
+						_sprite.rotation = clampf(dir.y * 0.35, -0.30, 0.30) * (-1.0 if _sprite.flip_h else 1.0)
+					else:
+						_sprite.position.y = -absf(sin(_phase * 2.4)) * 5.0
+						_sprite.rotation = sin(_phase * 2.4) * 0.08
 				if summon_kind == "shadow_mummy" and global_position.distance_to(target.global_position) <= 34.0 and _attack_cd <= 0.0:
 					_attack_cd = 0.75
 					if can_deal and target.has_method("apply_hit"):
 						target.apply_hit(damage, owner_peer_id, weapon_name, owner_name, dir * 180.0)
 			else:
-				global_position.x += move_dir_x * spd * 0.65 * delta
+				var fwd: Vector2 = flight_dir.normalized() if flight_dir.length_squared() > 0.01 else Vector2(move_dir_x, 0.0)
+				global_position += fwd * spd * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = fwd.x < 0.0
+					_sprite.position.y = sin(_phase * 1.8) * 5.5
+					var flap2: float = sin(_phase * 2.6)
+					_sprite.scale = Vector2(_base_scale + flap2 * 0.04, _base_scale - flap2 * 0.05)
+					_sprite.rotation = clampf(fwd.y * 0.35, -0.30, 0.30) * (-1.0 if _sprite.flip_h else 1.0)
 		"bee":
 			var b_target: Node2D = _find_nearest_enemy(420.0)
 			if b_target != null:
 				var b_dir: Vector2 = (b_target.global_position - global_position).normalized()
 				global_position += b_dir * 250.0 * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = b_dir.x < 0.0
 			else:
-				global_position += Vector2(cos(_phase * 0.7) * 140.0, sin(_phase * 1.1) * 90.0) * delta
+				var vx: float = cos(_phase * 0.7) * 140.0
+				global_position += Vector2(vx, sin(_phase * 1.1) * 90.0) * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = vx < 0.0
+			if is_instance_valid(_sprite):
+				_sprite.position.y = sin(_phase * 4.0) * 4.0
+				var bf: float = sin(_phase * 5.5)
+				_sprite.scale = Vector2(_base_scale + bf * 0.04, _base_scale - bf * 0.05)
+		"blood_bubble":
+			global_position += vel * delta + Vector2(0.0, sin(_phase * 1.5) * 18.0) * delta
 		"barbarian", "zombie_dog", "small_snake":
 			var g_spd: float = 240.0 if summon_kind == "zombie_dog" else 195.0
 			vel.x = move_dir_x * g_spd
@@ -95,18 +218,30 @@ func _physics_process(delta: float) -> void:
 				global_position.y = (hit["position"] as Vector2).y - 16.0
 				vel.y = 0.0
 			global_position += vel * delta
+			if is_instance_valid(_sprite):
+				_sprite.flip_h = move_dir_x < 0.0
+				_sprite.position.y = -absf(sin(_phase * 2.5)) * 5.5
+				_sprite.rotation = sin(_phase * 2.5) * 0.09
 		"bomb_eagle":
 			var e_target: Node2D = _find_nearest_enemy(900.0)
 			if e_target != null:
 				var above := e_target.global_position + Vector2(0.0, -78.0)
 				var to_above := above - global_position
 				global_position += to_above.normalized() * 290.0 * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = to_above.x < 0.0
 				if absf(global_position.x - e_target.global_position.x) < 24.0:
 					_drop_eagle_bomb()
 					queue_free()
 					return
 			else:
 				global_position.x += move_dir_x * 230.0 * delta
+				if is_instance_valid(_sprite):
+					_sprite.flip_h = move_dir_x < 0.0
+			if is_instance_valid(_sprite):
+				_sprite.position.y = sin(_phase * 2.0) * 6.0
+				var ef: float = sin(_phase * 2.8)
+				_sprite.scale = Vector2(_base_scale + ef * 0.04, _base_scale - ef * 0.05)
 		"turret":
 			if _attack_cd <= 0.0:
 				var t_target: Node2D = _find_nearest_enemy(520.0)
@@ -126,8 +261,21 @@ func _physics_process(delta: float) -> void:
 						b.max_lifetime = 1.2
 						get_parent().add_child(b)
 		"ghost_clone":
-			global_position.x += move_dir_x * 130.0 * delta
-			global_position.y += sin(_phase) * 35.0 * delta
+			vel.x = move_dir_x * 165.0
+			vel.y = minf(vel.y + 920.0 * delta, 650.0)
+			var g_space := get_world_2d().direct_space_state
+			var g_ray := PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(0.0, 26.0), 1)
+			var g_hit := g_space.intersect_ray(g_ray)
+			if not g_hit.is_empty() and vel.y > 0.0:
+				global_position.y = (g_hit["position"] as Vector2).y - 22.0
+				vel.y = 0.0
+			global_position += vel * delta
+			if is_instance_valid(_modular_clone):
+				if _attack_cd <= 0.0:
+					_attack_cd = 0.65
+					_modular_clone.play_state("firing", move_dir_x < 0.0)
+				elif _attack_cd < 0.45:
+					_modular_clone.play_state("run", move_dir_x < 0.0)
 		"mirror_clone":
 			if is_instance_valid(linked_target):
 				global_position = global_position.lerp(linked_target.global_position + Vector2(48.0 * move_dir_x, 0.0), clampf(delta * 4.0, 0.0, 1.0))
@@ -157,6 +305,24 @@ func _drop_eagle_bomb() -> void:
 				p.apply_hit(damage, owner_peer_id, weapon_name, owner_name, Vector2(0.0, -180.0))
 
 
+func _blast_ghost_clone() -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var exp := preload("res://scenes/Explosion.tscn").instantiate()
+	exp.global_position = global_position
+	exp.explosion_radius = 125.0
+	exp.max_damage = 40
+	exp.shooter_peer_id = owner_peer_id
+	exp.shooter_team = owner_team
+	exp.shooter_name = owner_name
+	exp.weapon_name = "Ghost Clone Blast"
+	exp.ring_color = Color(0.65, 0.94, 1.0)
+	exp.can_deal_damage = can_deal
+	exp.allow_self_damage = false
+	parent_node.add_child(exp)
+
+
 func _on_body_entered(body: Node) -> void:
 	if body == null or not body.is_in_group("players"):
 		return
@@ -164,12 +330,23 @@ func _on_body_entered(body: Node) -> void:
 		return
 	if NetworkManager.is_team_mode() and int(body.get("team_id")) == owner_team:
 		return
-	if summon_kind in ["shadow_mummy", "turret", "ghost_clone", "mirror_clone", "crush_walls", "bomb_eagle"]:
+	if summon_kind == "ghost_clone":
+		_blast_ghost_clone()
+		queue_free()
+		return
+	if summon_kind in ["shadow_mummy", "turret", "mirror_clone", "crush_walls", "bomb_eagle", "dragon_strike"]:
 		return
 	if can_deal and body.has_method("apply_hit"):
 		body.apply_hit(damage, owner_peer_id, weapon_name, owner_name, Vector2(move_dir_x * 220.0, -120.0))
 		if summon_kind == "flash_bird" and body.has_method("apply_status"):
 			body.apply_status("flashbang", 3.0)
+	if summon_kind == "winged_lion":
+		_attack_anim_timer = 0.35
+		_attack_dir = ((body as Node2D).global_position - global_position).normalized()
+		if _attack_dir.length_squared() < 0.01:
+			_attack_dir = Vector2(move_dir_x, 0.0)
+		set_deferred("monitoring", false)
+		return
 	queue_free()
 
 
@@ -194,15 +371,20 @@ func _find_nearest_enemy(max_range: float) -> Node2D:
 
 func _draw() -> void:
 	match summon_kind:
-		"flash_bird":
-			draw_circle(Vector2.ZERO, 12.0, Color(1.0, 0.96, 0.55))
-			draw_line(Vector2(-16, -6), Vector2(0, 2), Color.WHITE, 3.0)
-			draw_line(Vector2(16, -6), Vector2(0, 2), Color.WHITE, 3.0)
+		"flash_bird", "bat", "barbarian", "zombie_dog", "bomb_eagle", "shadow_mummy", "small_snake", "giant_snake", "bee", "dragon_strike":
+			pass
+		"blood_bubble":
+			draw_circle(Vector2.ZERO, 10.0, Color(0.88, 0.12, 0.22, 0.65))
+			draw_arc(Vector2.ZERO, 10.0, 0.0, TAU, 18, Color(1.0, 0.35, 0.45, 0.92), 2.0)
+			draw_circle(Vector2(-3.0, -3.0), 3.0, Color(1.0, 0.85, 0.88, 0.75))
 		"winged_lion":
-			draw_circle(Vector2.ZERO, 22.0, Color(1.0, 0.78, 0.18))
-			draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 24, Color.WHITE, 3.0)
-			draw_line(Vector2(-26, -12), Vector2(-6, 0), Color(1.0, 0.95, 0.65), 4.0)
-			draw_line(Vector2(26, -12), Vector2(6, 0), Color(1.0, 0.95, 0.65), 4.0)
+			if _attack_anim_timer > 0.0:
+				var slash_a: float = clampf(_attack_anim_timer / 0.35, 0.0, 1.0)
+				draw_arc(Vector2(_attack_dir.x * 26.0, 0.0), 34.0, -0.9, 0.9, 14, Color(1.0, 0.88, 0.25, slash_a), 4.5)
+				draw_arc(Vector2(_attack_dir.x * 32.0, -6.0), 28.0, -0.7, 0.7, 12, Color(1.0, 1.0, 1.0, slash_a * 0.9), 3.0)
+			else:
+				var w_off: float = sin(_phase * 2.6) * 8.0
+				draw_arc(Vector2(-24.0 * (1.0 if (is_instance_valid(_sprite) and not _sprite.flip_h) else -1.0), -10.0 + w_off), 18.0, 0.4, 2.5, 10, Color(1.0, 0.92, 0.55, 0.45), 2.5)
 		"bat":
 			draw_circle(Vector2.ZERO, 9.0, Color(0.55, 0.10, 0.25))
 			draw_line(Vector2(-14, -4), Vector2(14, -4), Color(0.88, 0.18, 0.35), 3.0)
@@ -233,11 +415,11 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 7.0, Color(1.0, 0.85, 0.16))
 			draw_line(Vector2(-4, -5), Vector2(4, -5), Color.BLACK, 2.0)
 		"ghost_clone":
-			draw_circle(Vector2(0, -8), 16.0, Color(0.75, 0.96, 1.0, 0.68))
-			draw_rect(Rect2(-14, -6, 28, 28), Color(0.75, 0.96, 1.0, 0.55))
+			if _attack_cd > 0.48:
+				var slash_x: float = 28.0 * move_dir_x
+				draw_arc(Vector2(slash_x, -4.0), 22.0, -0.8 if move_dir_x > 0 else (PI - 0.8), 0.8 if move_dir_x > 0 else (PI + 0.8), 10, Color(0.75, 0.96, 1.0, 0.85), 3.0)
 		"mirror_clone":
-			draw_circle(Vector2(0, -8), 16.0, Color(0.82, 0.52, 1.0, 0.72))
-			draw_arc(Vector2.ZERO, 24.0, 0.0, TAU, 20, Color(0.95, 0.75, 1.0, 0.9), 2.5)
+			draw_arc(Vector2.ZERO, 28.0, 0.0, TAU, 20, Color(0.95, 0.75, 1.0, 0.65), 2.5)
 		"crush_walls":
 			draw_rect(Rect2(-_wall_gap - 24.0, -76.0, 26.0, 152.0), Color(0.98, 0.44, 0.84, 0.85))
 			draw_rect(Rect2(_wall_gap - 2.0, -76.0, 26.0, 152.0), Color(0.98, 0.44, 0.84, 0.85))

@@ -3,6 +3,7 @@ extends Area2D
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const TEX_BULLET: Texture2D = preload("res://assets/sprites/bullet.png")
 const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
+const TEX_RAVEN: Texture2D = preload("res://assets/sprites/summons/raven.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -27,6 +28,7 @@ var pierce_walls: bool = false
 var gravity_mult: float = 0.0
 var is_homing: bool = false
 var homing_turn_rate: float = 4.8
+var homing_y_offset: float = 0.0
 var allow_self_damage: bool = true
 var reverse_controls_dur: float = 0.0
 var pierce_players: bool = false
@@ -37,7 +39,9 @@ var on_hit_effect_kind: String = ""
 var boomerang_owner: Node2D = null
 var boomerang_return_time: float = 0.0
 var radius_scale: float = 1.0
+var detonate_distance: float = 0.0
 var _pierced_rids: Array[RID] = []
+var _boomerang_returned: bool = false
 var _homing_target_pos: Vector2 = Vector2.INF
 var _visual_spin: float = 0.0
 var _distance_traveled: float = 0.0
@@ -64,6 +68,8 @@ func _ready() -> void:
 
 	_trail.default_color = Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.75)
 	_trail.width = 6.0 if visual_style == "slash_wave" or is_explosive else (5.0 if is_laser else 3.0)
+	if on_hit_effect_kind == "hook_drag":
+		_trail.visible = false
 	_trail_points.append(global_position)
 	_trail_points.append(global_position)
 	_update_trail_visual()
@@ -90,8 +96,13 @@ func _physics_process(delta: float) -> void:
 		velocity.y += 980.0 * gravity_mult * maxf(0.15, NetworkManager.gravity_scale) * delta
 
 	if boomerang_return_time > 0.0 and _age >= boomerang_return_time and is_instance_valid(boomerang_owner):
+		if not _boomerang_returned:
+			_boomerang_returned = true
+			_pierced_rids.clear()
 		var to_owner: Vector2 = boomerang_owner.global_position - global_position
 		if to_owner.length() < 34.0:
+			if "headless_timer" in boomerang_owner and visual_style == "mummy_head":
+				boomerang_owner.set("headless_timer", 0.0)
 			queue_free()
 			return
 		var spd: float = maxf(680.0, velocity.length())
@@ -124,6 +135,7 @@ func _physics_process(delta: float) -> void:
 		query.exclude = excl
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
+	query.hit_from_inside = true
 
 	var hit: Dictionary = space_state.intersect_ray(query)
 	if not hit.is_empty():
@@ -139,12 +151,31 @@ func _physics_process(delta: float) -> void:
 
 	_distance_traveled += prev_pos.distance_to(next_pos)
 	global_position = next_pos
+	if detonate_distance > 0.0 and _distance_traveled >= detonate_distance:
+		_handle_collision(null, next_pos, Vector2.UP)
+		return
+	if wall_bounces_left > 0 or radius_scale >= 1.3:
+		var hit_r: float = (9.5 * radius_scale) if visual_style == "big_blade" else ((13.0 * radius_scale + 4.0) if visual_style == "thrown_stone" else (18.0 * radius_scale + 8.0))
+		for p in get_tree().get_nodes_in_group("players"):
+			if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
+				continue
+			if p.has_method("is_alive") and not p.is_alive():
+				continue
+			if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+				continue
+			if p is CollisionObject2D and _pierced_rids.has((p as CollisionObject2D).get_rid()):
+				continue
+			if (p as Node2D).global_position.distance_to(global_position) <= hit_r:
+				_handle_collision(p, global_position)
+				return
 	_trail_points.append(next_pos)
 	if _trail_points.size() > 8:
 		_trail_points.remove_at(0)
 	_update_trail_visual()
 	if visual_style != "bullet":
 		_visual_spin += spin_speed * delta
+		queue_redraw()
+	elif on_hit_effect_kind == "hook_drag":
 		queue_redraw()
 
 
@@ -153,6 +184,68 @@ func _update_trail_visual() -> void:
 	for pt in _trail_points:
 		local_pts.append(to_local(pt))
 	_trail.points = local_pts
+
+
+class SeveredHeadVfx extends Node2D:
+	var vel: Vector2 = Vector2(140.0, -260.0)
+	var victim: Node = null
+	var _age: float = 0.0
+	var _life: float = 0.75
+	var _has_sprite_head: bool = false
+
+	func _ready() -> void:
+		z_index = 26
+		if is_instance_valid(victim) and victim.has_node("ModularRig"):
+			var rig := victim.get_node("ModularRig")
+			if rig != null and "_anim_head" in rig and "_sprite_gear" in rig:
+				var anim_h := rig.get("_anim_head") as AnimatedSprite2D
+				var gear_s := rig.get("_sprite_gear") as Sprite2D
+				if anim_h != null and anim_h.visible and anim_h.sprite_frames != null and anim_h.sprite_frames.has_animation("idle"):
+					var h_tex: Texture2D = anim_h.sprite_frames.get_frame_texture("idle", 0)
+					if h_tex != null:
+						var hs := Sprite2D.new()
+						hs.texture = h_tex
+						hs.modulate = anim_h.modulate
+						hs.flip_h = anim_h.flip_h
+						hs.scale = anim_h.scale * rig.scale
+						hs.position = Vector2(0.0, 12.0)
+						add_child(hs)
+						_has_sprite_head = true
+				if gear_s != null and gear_s.visible and gear_s.texture != null:
+					var gs := Sprite2D.new()
+					gs.texture = gear_s.texture
+					gs.hframes = gear_s.hframes
+					gs.frame = 0
+					gs.modulate = gear_s.modulate
+					gs.flip_h = gear_s.flip_h
+					gs.scale = gear_s.scale * rig.scale
+					gs.position = Vector2(0.0, 12.0)
+					add_child(gs)
+					_has_sprite_head = true
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_age += delta
+		if _age >= _life:
+			queue_free()
+			return
+		vel.y += 760.0 * delta
+		global_position += vel * delta
+		rotation += 11.0 * delta
+		var a: float = clampf(1.0 - maxf(0.0, (_age - 0.45) / 0.30), 0.0, 1.0)
+		modulate.a = a
+		if not _has_sprite_head:
+			queue_redraw()
+
+	func _draw() -> void:
+		if _has_sprite_head:
+			return
+		var a: float = clampf(1.0 - maxf(0.0, (_age - 0.45) / 0.30), 0.0, 1.0)
+		draw_circle(Vector2.ZERO, 12.0, Color(0.08, 0.05, 0.07, a))
+		draw_circle(Vector2.ZERO, 9.5, Color(0.76, 0.56, 0.44, a))
+		draw_line(Vector2(-7.0, 6.0), Vector2(7.0, 6.0), Color(0.85, 0.14, 0.18, a), 3.0)
+		draw_circle(Vector2(-3.0, -2.0), 2.0, Color(0.08, 0.05, 0.07, a))
+		draw_circle(Vector2(3.0, -2.0), 2.0, Color(0.08, 0.05, 0.07, a))
 
 
 func _find_homing_target() -> Vector2:
@@ -173,7 +266,7 @@ func _find_homing_target() -> Vector2:
 		var d_sq: float = global_position.distance_squared_to(p.global_position)
 		if d_sq < best_dist_sq:
 			best_dist_sq = d_sq
-			best_pos = p.global_position
+			best_pos = p.global_position + Vector2(0.0, homing_y_offset)
 	return best_pos
 
 
@@ -208,6 +301,10 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 		return
 
 	if is_explosive:
+		if collider != null and collider.is_in_group("players") and int(collider.get("peer_id")) != shooter_peer_id:
+			if not (NetworkManager.is_team_mode() and int(collider.get("team_id")) == shooter_team):
+				if can_deal_damage and collider.has_method("apply_hit") and on_hit_effect_kind != "death_kiss":
+					collider.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, velocity.normalized() * 240.0)
 		_trigger_explosion(hit_pos)
 		queue_free()
 		return
@@ -221,18 +318,19 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			_finished = false
 			global_position = hit_pos + velocity.normalized() * 6.0
 			return
-		if can_deal_damage and collider.has_method("apply_hit"):
+		if can_deal_damage and collider.has_method("apply_hit") and on_hit_effect_kind != "death_kiss":
 			var final_damage: int = _compute_falloff_damage()
 			var knockback: Vector2 = velocity.normalized() * (140.0 * knockback_mult)
-			if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner):
-				knockback = (boomerang_owner.global_position - (collider as Node2D).global_position).normalized() * 980.0 + Vector2(0.0, -240.0)
 			collider.apply_hit(final_damage, shooter_peer_id, weapon_name, shooter_name, knockback)
+			if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner) and collider.has_method("start_hook_pull"):
+				var stop_off: float = 42.0 if (collider as Node2D).global_position.x > boomerang_owner.global_position.x else -42.0
+				collider.start_hook_pull(boomerang_owner.global_position + Vector2(stop_off, -8.0))
 			if stun_duration > 0.0 and collider.has_method("apply_stun"):
 				collider.apply_stun(stun_duration, shooter_peer_id)
 			if reverse_controls_dur > 0.0 and collider.has_method("apply_reverse_controls"):
 				collider.apply_reverse_controls(reverse_controls_dur)
 			if status_effect_name != "" and collider.has_method("apply_status"):
-				collider.apply_status(status_effect_name, status_effect_dur)
+				collider.apply_status(status_effect_name, status_effect_dur, shooter_peer_id)
 		_spawn_impact_flash(hit_pos, bullet_color)
 		if on_hit_effect_kind != "":
 			_trigger_on_hit_effect(hit_pos)
@@ -252,6 +350,12 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 						if (p as Node2D).global_position.distance_to(hit_pos) <= 115.0 and p.has_method("apply_reverse_controls"):
 							p.apply_reverse_controls(reverse_controls_dur)
 	else:
+		if pierce_walls:
+			_finished = false
+			if collider is CollisionObject2D:
+				_pierced_rids.append((collider as CollisionObject2D).get_rid())
+			global_position = hit_pos + velocity.normalized() * 14.0
+			return
 		if wall_bounces_left > 0:
 			wall_bounces_left -= 1
 			_finished = false
@@ -261,9 +365,16 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			global_position = hit_pos + n * 8.0
 			_spawn_impact_flash(hit_pos, bullet_color)
 			return
-		_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
-		if on_hit_effect_kind != "":
+		if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner) and boomerang_owner.has_method("start_hook_pull"):
+			_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
+			boomerang_owner.start_hook_pull(hit_pos + hit_norm * 24.0)
+		elif on_hit_effect_kind == "ice_platform":
 			_trigger_on_hit_effect(hit_pos)
+		elif on_hit_effect_kind != "":
+			_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
+			_trigger_on_hit_effect(hit_pos)
+		else:
+			_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
 		if visual_style == "smoke_orb" and reverse_controls_dur > 0.0 and can_deal_damage:
 			for p in get_tree().get_nodes_in_group("players"):
 				if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
@@ -280,28 +391,87 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 	if parent_node == null:
 		return
 	match on_hit_effect_kind:
-		"ability_lock_aoe", "jelly_aoe":
+		"ability_lock_aoe":
 			if can_deal_damage:
-				var eff_name: String = "ability_lock" if on_hit_effect_kind == "ability_lock_aoe" else "slow_mo"
 				for p in get_tree().get_nodes_in_group("players"):
 					if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
 						if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
 							continue
 						if (p as Node2D).global_position.distance_to(hit_pos) <= 145.0 and p.has_method("apply_status"):
-							p.apply_status(eff_name, status_effect_dur)
+							p.apply_status("ability_lock", status_effect_dur)
+		"jelly_aoe":
+			_spawn_impact_flash(hit_pos, bullet_color)
+			var parent_n: Node = get_parent()
+			var b_scene: PackedScene = load("res://scenes/Bullet.tscn") as PackedScene
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+					continue
+				var dist: float = (p as Node2D).global_position.distance_to(hit_pos)
+				if dist <= 130.0:
+					if p.has_method("apply_status"):
+						p.apply_status("slow_mo", status_effect_dur)
+					if can_deal_damage and damage > 0 and p.has_method("apply_hit"):
+						p.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, Vector2.ZERO)
+				elif dist <= 460.0 and parent_n != null and b_scene != null:
+					var bubble := b_scene.instantiate()
+					var b_dir: Vector2 = ((p as Node2D).global_position - hit_pos).normalized()
+					bubble.global_position = hit_pos + b_dir * 12.0
+					bubble.velocity = b_dir * 1150.0
+					bubble.damage = maxi(6, int(damage * 0.5))
+					bubble.shooter_peer_id = shooter_peer_id
+					bubble.shooter_team = shooter_team
+					bubble.shooter_name = shooter_name
+					bubble.shooter_rid = shooter_rid
+					bubble.weapon_name = weapon_name
+					bubble.bullet_color = Color(1.0, 0.52, 0.88)
+					bubble.visual_style = "acid_glob"
+					bubble.radius_scale = 0.95
+					bubble.gravity_mult = 0.0
+					bubble.max_lifetime = 0.75
+					bubble.can_deal_damage = can_deal_damage
+					bubble.status_effect_name = "slow_mo"
+					bubble.status_effect_dur = status_effect_dur
+					parent_n.add_child(bubble)
 		"death_kiss":
-			if can_deal_damage:
-				for p in get_tree().get_nodes_in_group("players"):
-					if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
-						if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
-							continue
-						if (p as Node2D).global_position.distance_to(hit_pos) <= 230.0 and p.has_method("apply_hit"):
-							p.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, Vector2(0, -120))
+			var dk_parent: Node = get_parent()
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+					continue
+				if (p as Node2D).global_position.distance_to(hit_pos) <= 230.0:
+					if "headless_timer" in p:
+						p.set("headless_timer", 0.65)
+					if p.has_method("apply_stun"):
+						p.apply_stun(0.55, shooter_peer_id)
+					if dk_parent != null:
+						var sh := SeveredHeadVfx.new()
+						sh.victim = p
+						sh.global_position = (p as Node2D).global_position + Vector2(0.0, -18.0)
+						sh.vel = Vector2(140.0 if velocity.x >= 0.0 else -140.0, -260.0)
+						dk_parent.add_child(sh)
+					if can_deal_damage and p.has_method("apply_hit"):
+						var target_p: Node = p
+						var dmg_val: int = damage
+						var s_id: int = shooter_peer_id
+						var w_name: String = weapon_name
+						var s_name: String = shooter_name
+						get_tree().create_timer(0.5).timeout.connect(func():
+							if is_instance_valid(target_p) and (not target_p.has_method("is_alive") or target_p.is_alive()):
+								if "headless_timer" in target_p:
+									target_p.set("headless_timer", 0.0)
+								target_p.apply_hit(dmg_val, s_id, w_name, s_name, Vector2(0, -120))
+						)
 			_spawn_impact_flash(hit_pos, Color(0.95, 0.35, 0.85))
 		"ice_platform", "lava_platform":
-			var hz := Area2D.new()
-			var hz_script := load("res://scripts/PlayerController.gd")
 			var zone := Node2D.new()
+			zone.set_script(load("res://scripts/PlatformHazardZone.gd"))
 			var is_lava: bool = (on_hit_effect_kind == "lava_platform")
 			zone.set_meta("is_lava", is_lava)
 			zone.set_meta("shooter_id", shooter_peer_id)
@@ -313,7 +483,6 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 			zone.set_meta("tick_accum", 0.0)
 			zone.global_position = hit_pos
 			parent_node.add_child(zone)
-			zone.set_script(load("res://scripts/PlatformHazardZone.gd"))
 
 
 func _compute_falloff_damage() -> int:
@@ -339,9 +508,20 @@ func _trigger_explosion(pos: Vector2) -> void:
 	exp.weapon_name = weapon_name
 	exp.stun_duration = stun_duration
 	exp.ring_color = bullet_color
+	exp.custom_splash_only = (visual_style == "acid_glob")
 	exp.can_deal_damage = can_deal_damage
 	exp.allow_self_damage = allow_self_damage
 	parent_node.add_child(exp)
+	if status_effect_name != "" and status_effect_dur > 0.0:
+		for p in get_tree().get_nodes_in_group("players"):
+			if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
+				continue
+			if p.has_method("is_alive") and not p.is_alive():
+				continue
+			if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+				continue
+			if (p as Node2D).global_position.distance_to(pos) <= explosion_radius and p.has_method("apply_status"):
+				p.apply_status(status_effect_name, status_effect_dur, shooter_peer_id)
 
 
 func _spawn_impact_flash(pos: Vector2, col: Color) -> void:
@@ -358,6 +538,13 @@ func _spawn_impact_flash(pos: Vector2, col: Color) -> void:
 
 
 func _draw() -> void:
+	if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner):
+		draw_line(Vector2.ZERO, to_local(boomerang_owner.global_position), Color(0.88, 0.72, 0.32), 3.0)
+	elif visual_style == "raven":
+		var flap_y: float = 0.44 - sin(_age * 18.0) * 0.06
+		var r_sz := Vector2(128.0 * 0.44, 128.0 * flap_y)
+		draw_texture_rect(TEX_RAVEN, Rect2(-r_sz * 0.5, r_sz), false)
+		return
 	if visual_style == "bullet":
 		return
 	if visual_style in ["rocket", "homing_rocket"]:
@@ -414,6 +601,15 @@ func _draw() -> void:
 				var side: Vector2 = Vector2.from_angle(ang + 0.45) * 4.5
 				draw_colored_polygon(PackedVector2Array([Vector2.ZERO, side, tip]), bullet_color)
 			draw_circle(Vector2.ZERO, 2.5, Color(0.14, 0.16, 0.22))
+		"big_blade":
+			draw_circle(Vector2.ZERO, 12.0, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.25))
+			draw_arc(Vector2.ZERO, 11.0, 0.0, TAU, 24, Color.WHITE, 2.2)
+			for k in range(6):
+				var ang: float = float(k) * TAU / 6.0
+				var tip: Vector2 = Vector2.from_angle(ang) * 15.0
+				var side: Vector2 = Vector2.from_angle(ang + 0.42) * 8.0
+				draw_colored_polygon(PackedVector2Array([Vector2.ZERO, side, tip]), bullet_color)
+			draw_circle(Vector2.ZERO, 4.0, Color(0.12, 0.14, 0.20))
 		"ghost_wisp":
 			draw_circle(Vector2.ZERO, 12.0, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.28))
 			draw_circle(Vector2.ZERO, 7.5, bullet_color)
@@ -462,6 +658,10 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(17.0, 0.0), Vector2(6.0, -4.5), Vector2(6.0, 4.5)
 			]), bullet_color)
+		"grapple_hook":
+			draw_circle(Vector2(-4.0, 0.0), 4.0, Color(0.55, 0.58, 0.65))
+			draw_polyline(PackedVector2Array([Vector2(-4.0, 0.0), Vector2(12.0, 0.0)]), Color(0.85, 0.88, 0.94), 3.0)
+			draw_polyline(PackedVector2Array([Vector2(4.0, -10.0), Vector2(14.0, 0.0), Vector2(4.0, 10.0)]), Color(0.92, 0.78, 0.35), 3.5)
 		"thrown_hammer":
 			draw_line(Vector2(-11.0, 0.0), Vector2(7.0, 0.0), Color(0.45, 0.28, 0.14), 3.5)
 			draw_rect(Rect2(3.0, -10.0, 10.0, 20.0), bullet_color)
@@ -481,11 +681,18 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(-6.0, -6.0), Vector2(4.0, -7.0), Vector2(6.0, 1.0), Vector2(-3.0, 2.0)
 			]), bullet_color.lightened(0.28))
-		"frag_bomb":
-			draw_circle(Vector2.ZERO, 9.5, Color(0.16, 0.22, 0.18))
-			draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, bullet_color, 2.5)
-			draw_rect(Rect2(-3.0, -12.0, 6.0, 4.0), Color(0.75, 0.78, 0.84))
-			draw_circle(Vector2(2.0, -12.0), 3.0, Color(1.0, 0.65, 0.18))
+		"mummy_head":
+			draw_circle(Vector2.ZERO, 12.5, Color(0.14, 0.12, 0.10))
+			draw_circle(Vector2.ZERO, 10.5, Color(0.84, 0.78, 0.62))
+			draw_line(Vector2(-9.0, -4.0), Vector2(9.0, -4.0), Color(0.95, 0.78, 0.22), 3.0)
+			draw_line(Vector2(-8.0, 5.0), Vector2(8.0, 5.0), Color(0.68, 0.62, 0.48), 2.0)
+			draw_rect(Rect2(-7.0, -1.5, 14.0, 4.5), Color(0.10, 0.09, 0.12))
+			draw_circle(Vector2(-3.2, 0.8), 1.8, Color(1.0, 0.85, 0.22))
+			draw_circle(Vector2(3.2, 0.8), 1.8, Color(1.0, 0.85, 0.22))
+		"grenade", "frag_bomb":
+			draw_circle(Vector2.ZERO, 10.5, Color(0.18, 0.24, 0.20))
+			draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 20, bullet_color, 2.8)
+			draw_circle(Vector2(-3.0, -3.0), 3.0, Color(1.0, 1.0, 1.0, 0.45))
 		"prop_chair":
 			draw_line(Vector2(-16, -28), Vector2(-16, 20), Color(0.55, 0.60, 0.68), 6.0)
 			draw_line(Vector2(-16, -2), Vector2(18, -2), Color(0.55, 0.60, 0.68), 6.0)

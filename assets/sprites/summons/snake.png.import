@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c1lq16epybtw8"
-path="res://.godot/imported/Company.png-dbd710db2479db56955bd2641cc3d801.ctex"
+uid="uid://n6q3if7rdsjf"
+path="res://.godot/imported/snake.png-c0f7c81aa706ef46c91b260a784d4d87.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/Company.png"
-dest_files=["res://.godot/imported/Company.png-dbd710db2479db56955bd2641cc3d801.ctex"]
+source_file="res://assets/sprites/summons/snake.png"
+dest_files=["res://.godot/imported/snake.png-c0f7c81aa706ef46c91b260a784d4d87.ctex"]
 
 [params]
 

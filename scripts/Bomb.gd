@@ -13,6 +13,8 @@ var shooter_rid: RID = RID()
 var weapon_name: String = "Frag Bomb"
 var bomb_color: Color = Color(0.28, 0.92, 0.42)
 var can_deal_damage: bool = true
+var allow_self_damage: bool = true
+var stick_fuse_override: float = 0.0
 
 var _age: float = 0.0
 var _fuse_time: float = 2.0
@@ -152,6 +154,8 @@ func _physics_process(delta: float) -> void:
 				global_position = hit_pos + normal * 4.0
 				velocity = Vector2.ZERO
 				_stuck = true
+				if stick_fuse_override > 0.0:
+					_fuse_time = _age + stick_fuse_override
 				if collider != null and collider is Node2D and collider.is_in_group("players"):
 					_stuck_target = collider as Node2D
 					_stuck_offset = global_position - _stuck_target.global_position
@@ -192,7 +196,7 @@ func _explode() -> void:
 		exp.weapon_name = weapon_name
 		exp.ring_color = bomb_color
 		exp.can_deal_damage = can_deal_damage
-		exp.allow_self_damage = true
+		exp.allow_self_damage = allow_self_damage
 		parent_node.add_child(exp)
 	queue_free()
 

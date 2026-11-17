@@ -10,6 +10,7 @@ var can_deal_damage: bool = false
 var allow_self_damage: bool = false
 var stun_duration: float = 0.0
 var ring_color: Color = Color(1.0, 0.72, 0.25)
+var custom_splash_only: bool = false
 
 var _elapsed: float = 0.0
 var _duration: float = 0.38
@@ -27,6 +28,8 @@ func _ready() -> void:
 	var scale_factor: float = clampf(explosion_radius / 60.0, 0.7, 2.8)
 	_sprite.scale = Vector2(scale_factor, scale_factor)
 	_sprite.frame = 0
+	if custom_splash_only:
+		_sprite.visible = false
 	if _audio != null:
 		if max_damage > 0:
 			_audio.stream = _create_big_blast_stream()
@@ -75,6 +78,9 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, explosion_radius, 0.0, TAU, 40, ring_col, 4.0)
 			draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, Color(1.0, 1.0, 1.0, _ring_alpha * 0.85), 2.5)
 		else:
+			if custom_splash_only:
+				draw_circle(Vector2.ZERO, _ring_radius * 0.85, Color(ring_color.r, ring_color.g, ring_color.b, _ring_alpha * 0.42))
+				draw_circle(Vector2.ZERO, _ring_radius * 0.45, Color(ring_color.lightened(0.35).r, ring_color.lightened(0.35).g, ring_color.lightened(0.35).b, _ring_alpha * 0.65))
 			draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, ring_col, 3.5)
 
 

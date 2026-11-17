@@ -12,17 +12,18 @@ var _loadout_label: Label
 var _transitioning: bool = false
 var _diff_buttons: Array[Button] = []
 var _agent_select_overlay: Control
-var _agent_preview: SoldierPreview
+var _agent_preview_arena: Node2D
 var _agent_kit_title: Label
 var _agent_kit_body: Label
+var _agent_preview_btns: Array[Button] = []
 var _agent_cards: Array[Button] = []
 var _agent_select_for_practice: bool = false
 var _agent_play_btn: Button
 var _test_mode_overlay: Control
 var _test_mode_type_buttons: Array[Button] = []
 var _test_bot_beh_buttons: Array[Button] = []
-var _test_mode_choice: int = 0
-var _test_bot_choice: int = 0
+var _test_mode_choice: int = 2
+var _test_bot_choice: int = 1
 var _map_opt: OptionButton
 var _map_select_overlay: Control
 var _map_preview_tex: TextureRect
@@ -524,27 +525,49 @@ func _build_agent_select_overlay() -> void:
 	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
 	lv.add_child(stage)
 
-	var anchor_wrap := Control.new()
-	stage.add_child(anchor_wrap)
-	var anchor := Control.new()
-	anchor.set_anchors_preset(Control.PRESET_CENTER)
-	anchor_wrap.add_child(anchor)
+	var sv_cont := SubViewportContainer.new()
+	sv_cont.stretch = true
+	sv_cont.custom_minimum_size = Vector2(0, 184)
+	sv_cont.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage.add_child(sv_cont)
 
-	_agent_preview = SoldierPreview.new()
-	_agent_preview.scale = Vector2(1.75, 1.75)
-	anchor.add_child(_agent_preview)
+	var sv := SubViewport.new()
+	sv.world_2d = World2D.new()
+	sv.size = Vector2i(480, 190)
+	sv.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	sv_cont.add_child(sv)
 
-	var details_scroll := ScrollContainer.new()
-	details_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	details_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	lv.add_child(details_scroll)
+	_agent_preview_arena = Node2D.new()
+	_agent_preview_arena.set_script(load("res://scripts/AgentPreviewArena.gd"))
+	sv.add_child(_agent_preview_arena)
 
 	_agent_kit_body = Label.new()
 	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_agent_kit_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_agent_kit_body.add_theme_font_size_override("font_size", 16)
+	_agent_kit_body.custom_minimum_size = Vector2(0, 44)
+	_agent_kit_body.add_theme_font_size_override("font_size", 14)
 	_agent_kit_body.modulate = Color(0.88, 0.96, 1.0)
-	details_scroll.add_child(_agent_kit_body)
+	lv.add_child(_agent_kit_body)
+
+	var ab_grid := GridContainer.new()
+	ab_grid.columns = 2
+	ab_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ab_grid.add_theme_constant_override("h_separation", 8)
+	ab_grid.add_theme_constant_override("v_separation", 8)
+	lv.add_child(ab_grid)
+
+	_agent_preview_btns.clear()
+	for slot_i in range(4):
+		var is_ult: bool = (slot_i == 3)
+		var b_col: Color = Color(1.0, 0.78, 0.24) if is_ult else Color(0.32, 0.78, 1.0)
+		var b_bg: Color = Color(0.24, 0.16, 0.06, 0.95) if is_ult else Color(0.08, 0.16, 0.26, 0.95)
+		var ab_btn := _make_arcade_button("Ability", b_col, 48.0, 14, b_bg)
+		ab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ab_btn.clip_text = true
+		ab_btn.pressed.connect(_trigger_preview_ability.bind(slot_i))
+		ab_grid.add_child(ab_btn)
+		_agent_preview_btns.append(ab_btn)
 
 	var act_row := HBoxContainer.new()
 	act_row.add_theme_constant_override("separation", 8)
@@ -553,6 +576,7 @@ func _build_agent_select_overlay() -> void:
 	_agent_play_btn = _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 46.0, 15, Color(0.09, 0.30, 0.16))
 	_agent_play_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_agent_play_btn.pressed.connect(func():
+		_preview_saved_match_mode = -1
 		NetworkManager.disconnect_network()
 		NetworkManager.match_mode = 2
 		if _agent_select_for_practice:
@@ -568,6 +592,7 @@ func _build_agent_select_overlay() -> void:
 	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 46.0, 15, Color(0.10, 0.22, 0.36))
 	lobby_btn.custom_minimum_size = Vector2(130, 46)
 	lobby_btn.pressed.connect(func():
+		_preview_saved_match_mode = -1
 		NetworkManager.match_mode = 2
 		_close_agent_select()
 		_transition_to(NetworkManager.go_to_lobby)
@@ -622,17 +647,18 @@ func _refresh_agent_select_ui() -> void:
 	var ult: Dictionary = ag["ultimate"]
 	if is_instance_valid(_agent_kit_title):
 		_agent_kit_title.text = "%s — %s" % [str(ag["agent_name"]).to_upper(), str(ag["role"])]
-	if is_instance_valid(_agent_preview):
-		_agent_preview.refresh_from_profile()
+	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("set_agent"):
+		_agent_preview_arena.set_agent(idx)
 	if is_instance_valid(_agent_kit_body):
-		_agent_kit_body.text = (
-			"∞ BASE WEAPON: %s (%d DMG)\n\n" % [str(bw["name"]), int(bw["damage"])]
-			+ "• ABIL 1 — %s (2 Kills):\n  %s\n\n" % [str(abils[0]["name"]), str(abils[0]["desc"])]
-			+ "• ABIL 2 — %s (2 Kills):\n  %s\n\n" % [str(abils[1]["name"]), str(abils[1]["desc"])]
-			+ "• ABIL 3 — %s (2 Kills):\n  %s\n\n" % [str(abils[2]["name"]), str(abils[2]["desc"])]
-			+ "★ ULTIMATE — %s (4 Ult Pts):\n  %s\n\n" % [str(ult["name"]), str(ult["desc"])]
-			+ "Ground weapons auto-pickup as you walk over them — tap THROW!"
-		)
+		_agent_kit_body.text = "∞ BASE WEAPON: %s (%d DMG) — Tap an ability below to preview!" % [str(bw["name"]), int(bw["damage"])]
+	for si in range(_agent_preview_btns.size()):
+		var btn: Button = _agent_preview_btns[si]
+		if not is_instance_valid(btn):
+			continue
+		if si == 3:
+			btn.text = "★ %s" % str(ult["name"])
+		else:
+			btn.text = "%d: %s" % [si + 1, str(abils[si]["name"])]
 	for i in range(_agent_cards.size()):
 		var is_sel: bool = (i == idx)
 		var ac: Color = ag["accent"] as Color
@@ -643,10 +669,42 @@ func _refresh_agent_select_ui() -> void:
 		_agent_cards[i].add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 8))
 
 
+func _trigger_preview_ability(slot_i: int) -> void:
+	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	var ab: Dictionary = AgentData.get_ability_slot(idx, slot_i)
+	if is_instance_valid(_agent_kit_body):
+		var prefix: String = "★ ULT" if slot_i == 3 else ("ABIL %d" % (slot_i + 1))
+		_agent_kit_body.text = "%s — %s: %s" % [prefix, str(ab["name"]), str(ab["desc"])]
+	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("cast_slot"):
+		_agent_preview_arena.cast_slot(slot_i)
+
+
 func _make_agent_icon(arch_idx: int) -> Texture2D:
+	if arch_idx == 23:
+		var j_abs: String = ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png")
+		var j_img: Image = null
+		if ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png"):
+			var jt: Texture2D = load("res://assets/sprites/characters/jackson_sheet.png") as Texture2D
+			if jt != null:
+				j_img = jt.get_image()
+		elif FileAccess.file_exists(j_abs):
+			j_img = Image.new()
+			if j_img.load(j_abs) != OK:
+				j_img = null
+		if j_img != null and j_img.get_width() >= 768:
+			var j_crop: Image = j_img.get_region(Rect2i(0, 0, 96, 56))
+			if j_crop.get_format() != Image.FORMAT_RGBA8:
+				j_crop.convert(Image.FORMAT_RGBA8)
+			var j_used: Rect2i = j_crop.get_used_rect()
+			if j_used.size.x > 0 and j_used.size.y > 0:
+				var j_trim: Image = j_crop.get_region(j_used)
+				var j_sc: float = 42.0 / float(maxi(j_used.size.x, j_used.size.y))
+				j_trim.resize(maxi(1, int(round(float(j_used.size.x) * j_sc))), maxi(1, int(round(float(j_used.size.y) * j_sc))), Image.INTERPOLATE_BILINEAR)
+				return ImageTexture.create_from_image(j_trim)
 	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
 	var parts: Dictionary = arch.get("parts", {})
-	var s_idx: int = clampi(int(parts.get("head", arch_idx)), 0, 25)
+	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
+	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
 	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
 	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
 	if skin_tex == null:
@@ -658,9 +716,13 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	if base_img.get_format() != Image.FORMAT_RGBA8:
 		base_img.convert(Image.FORMAT_RGBA8)
 	if head_tex != null:
-		var head_img: Image = head_tex.get_image().get_region(crop)
+		var h_fw: int = maxi(1, head_tex.get_width() / 8)
+		var h_fh: int = mini(head_tex.get_height(), int(float(head_tex.get_height()) * 0.72))
+		var head_img: Image = head_tex.get_image().get_region(Rect2i(0, 0, h_fw, h_fh))
 		if head_img.get_format() != Image.FORMAT_RGBA8:
 			head_img.convert(Image.FORMAT_RGBA8)
+		if h_fw != fw or h_fh != fh:
+			head_img.resize(fw, fh, Image.INTERPOLATE_BILINEAR)
 		base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
 	var used: Rect2i = base_img.get_used_rect()
 	if used.size.x <= 0 or used.size.y <= 0:
@@ -676,7 +738,12 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	return ImageTexture.create_from_image(sq)
 
 
+var _preview_saved_match_mode: int = -1
+
+
 func _open_agent_select(for_practice: bool = false) -> void:
+	_preview_saved_match_mode = NetworkManager.match_mode
+	NetworkManager.match_mode = 2
 	_agent_select_for_practice = for_practice
 	if is_instance_valid(_agent_play_btn):
 		_agent_play_btn.text = "▶ START PRACTICE (AGENT)" if for_practice else "▶ PLAY AGENT CLASH"
@@ -687,6 +754,9 @@ func _open_agent_select(for_practice: bool = false) -> void:
 
 
 func _close_agent_select() -> void:
+	if _preview_saved_match_mode >= 0:
+		NetworkManager.match_mode = _preview_saved_match_mode
+		_preview_saved_match_mode = -1
 	if is_instance_valid(_agent_select_overlay):
 		_agent_select_overlay.visible = false
 

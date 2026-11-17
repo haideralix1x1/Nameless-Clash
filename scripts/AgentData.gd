@@ -291,9 +291,9 @@ const AGENTS: Array[Dictionary] = [
 				"name": "Freeze Shot",
 				"kind": "freeze_shot",
 				"damage": 20,
-				"duration": 3.0,
+				"duration": 2.0,
 				"color": Color(0.48, 0.92, 1.0),
-				"desc": "Fire an ice shot that freezes the enemy solid for 3s."
+				"desc": "Fire an ice shot that freezes the enemy solid for 2s."
 			},
 			{
 				"name": "Slippery Iceball",
@@ -321,63 +321,7 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Automatically freeze and shatter enemies in close range."
 		}
 	},
-	# 5: Leonidas // Golden Spartan
-	{
-		"id": 5,
-		"agent_name": "Leonidas",
-		"title": "Golden Spartan",
-		"role": "Arena Champion",
-		"accent": Color(1.0, 0.80, 0.22),
-		"base_weapon": {
-			"name": "Olympian War Spear",
-			"style": "spear",
-			"damage": 25,
-			"cooldown": 0.35,
-			"range": 122.0,
-			"color": Color(1.0, 0.82, 0.28),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Spartan Spear Volley",
-				"kind": "spear_throw",
-				"shots": 2,
-				"cooldown": 7.0,
-				"damage": 28,
-				"stun": 1.6,
-				"color": Color(1.0, 0.84, 0.24),
-				"desc": "Hurl a piercing Olympian war spear along your aim line."
-			},
-			{
-				"name": "Phalanx Bronze Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
-				"damage": 0,
-				"wall_hp": 250,
-				"duration": 5.8,
-				"color": Color(0.92, 0.72, 0.22),
-				"desc": "Conjure a bronze phalanx shield wall."
-			},
-			{
-				"name": "Golden Shield Bash",
-				"kind": "dash_stun",
-				"cooldown": 5.5,
-				"damage": 44,
-				"color": Color(1.0, 0.78, 0.18),
-				"desc": "Dash forward and unleash a Stun Bomb impact in a circle."
-			}
-		],
-		"ultimate": {
-			"name": "Wrath of Olympus",
-			"kind": "ult_giant_sword",
-			"cooldown": 22.0,
-			"damage": 64,
-			"stun": 1.5,
-			"color": Color(1.0, 0.86, 0.20),
-			"desc": "Summon giant Olympian solar blades that stun and cleave foes."
-		}
-	},
-	# 6: Warlord // Viking Berserker
+	# 5: Warlord // Viking Berserker
 	{
 		"id": 6,
 		"agent_name": "Warlord",
@@ -422,10 +366,10 @@ const AGENTS: Array[Dictionary] = [
 		"ultimate": {
 			"name": "Earthquake Sphere",
 			"kind": "ult_earth_quake_zone",
-			"damage": 20,
+			"damage": 170,
 			"duration": 5.0,
 			"color": Color(0.78, 0.52, 0.24),
-			"desc": "Blast an earth sphere that shakes enemy screens for 5s and deals 20%/s."
+			"desc": "Blast an earth sphere that shakes enemy screens for 5s and kills in 0.6s inside."
 		}
 	},
 	# 7: Draken // Vampire
@@ -512,10 +456,10 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Spinning Blade",
 				"kind": "spinning_blade",
-				"damage": 35,
+				"damage": 50,
 				"duration": 4.0,
 				"color": Color(0.68, 0.44, 0.98),
-				"desc": "Throw a slow spinning blade that vanishes after 4s."
+				"desc": "Throw a huge slow spinning blade (50% damage) that vanishes after 4s."
 			}
 		],
 		"ultimate": {
@@ -1025,10 +969,10 @@ const AGENTS: Array[Dictionary] = [
 		"ultimate": {
 			"name": "Inferno Ring",
 			"kind": "ult_inferno_ring",
-			"damage": 100,
+			"damage": 170,
 			"duration": 2.0,
 			"color": Color(1.0, 0.28, 0.06),
-			"desc": "Spawn full-circle fire over nearby enemies dealing 100% over 2s."
+			"desc": "Spawn full-circle fire over nearby enemies dealing heavy damage (170 DPS) over 2s."
 		}
 	},
 	# 19: Prism // Crystal Golem

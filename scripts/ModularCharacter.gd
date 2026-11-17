@@ -6,7 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 25
+const MAX_PART_INDEX := 27
 
 const ANIM_DEFS: Dictionary = {
 	"idle": {"frames": [0, 1], "fps": 3.5, "loop": true},
@@ -29,6 +29,7 @@ var _current_anim: String = "idle"
 var _manual_sync_mode: bool = false
 var _manual_frame: int = 0
 var _flip_h: bool = false
+var _custom_full_sheet: bool = false
 
 var _base_colors: Dictionary = {
 	"shirt": Color.WHITE,
@@ -130,6 +131,25 @@ func apply_loadout(config: Dictionary) -> void:
 	var hands_path := str(config.get("hands_texture",
 		"res://assets/sprites/modular/hands_%d.png" % hands_id))
 
+	if arch_idx == 23 and (ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png") or FileAccess.file_exists(ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png"))):
+		_custom_full_sheet = true
+		torso_path = "res://assets/sprites/characters/jackson_sheet.png"
+		_anim_head.visible = false
+		_sprite_gear.visible = false
+		_sprite_back.visible = false
+		_sprite_hands.visible = false
+		_anim_legs.visible = true
+		_anim_torso.visible = true
+		_anim_torso.scale = Vector2(0.88, 0.88)
+	else:
+		_custom_full_sheet = false
+		_anim_head.visible = true
+		_sprite_gear.visible = true
+		_sprite_back.visible = true
+		_sprite_hands.visible = true
+		_anim_legs.visible = true
+		_anim_torso.scale = Vector2.ONE
+
 	_apply_animated_strip(_anim_head, head_path)
 	_apply_animated_strip(_anim_torso, torso_path)
 	_apply_animated_strip(_anim_legs, legs_path)
@@ -170,12 +190,24 @@ func apply_layer_colors(team_tint: Color = Color.WHITE, team_blend: float = 0.0)
 		helmet = helmet.lerp(team_tint, blend)
 		gear = gear.lerp(team_tint, blend * 0.65)
 
+	if _custom_full_sheet:
+		_anim_torso.modulate = Color.WHITE.lerp(team_tint, blend * 0.45) if blend > 0.0 else Color.WHITE
+		_anim_legs.modulate = Color(1.0, 1.0, 1.0, 0.0)
+		return
 	_anim_torso.modulate = shirt
 	_anim_legs.modulate = pants
 	_anim_head.modulate = skin
 	_sprite_hands.modulate = skin
 	_sprite_gear.modulate = helmet
 	_sprite_back.modulate = gear
+
+
+func set_headless(headless: bool) -> void:
+	_ensure_layers()
+	if _custom_full_sheet:
+		return
+	_anim_head.visible = not headless
+	_sprite_gear.visible = not headless
 
 
 func play_state(anim_name: String, flip_h: bool = false) -> void:
@@ -251,9 +283,15 @@ func _load_texture(path: String) -> Texture2D:
 		return null
 	if _tex_cache.has(path):
 		return _tex_cache[path] as Texture2D
-	if not ResourceLoader.exists(path):
-		return null
-	var tex := load(path) as Texture2D
+	var tex: Texture2D = null
+	if ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	else:
+		var abs_p: String = ProjectSettings.globalize_path(path)
+		if FileAccess.file_exists(abs_p):
+			var img := Image.new()
+			if img.load(abs_p) == OK:
+				tex = ImageTexture.create_from_image(img)
 	if tex != null:
 		_tex_cache[path] = tex
 	return tex

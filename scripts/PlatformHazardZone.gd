@@ -10,9 +10,12 @@ var time_left: float = 5.0
 var radius: float = 120.0
 var dps: int = 20
 var _tick_accum: float = 0.0
+var _left_span: float = 120.0
+var _right_span: float = 120.0
 
 
 func _ready() -> void:
+	z_index = 8
 	if has_meta("is_lava"):
 		zone_kind = "lava_platform" if bool(get_meta("is_lava")) else "ice_platform"
 		shooter_id = int(get_meta("shooter_id"))
@@ -23,7 +26,39 @@ func _ready() -> void:
 		time_left = float(get_meta("time_left"))
 		radius = 135.0
 		dps = 10 if zone_kind == "lava_platform" else 0
+	if zone_kind in ["ice_platform", "lava_platform"]:
+		_snap_to_platform_bounds()
 	queue_redraw()
+
+
+func _snap_to_platform_bounds() -> void:
+	var space := get_world_2d().direct_space_state
+	if space == null:
+		return
+	var center_ray := PhysicsRayQueryParameters2D.create(global_position + Vector2(0.0, -24.0), global_position + Vector2(0.0, 36.0), 1)
+	var center_hit := space.intersect_ray(center_ray)
+	if not center_hit.is_empty():
+		global_position.y = (center_hit["position"] as Vector2).y
+	_left_span = 0.0
+	_right_span = 0.0
+	for step in range(1, 10):
+		var dx: float = float(step) * 16.0
+		if dx > radius:
+			break
+		var lr := PhysicsRayQueryParameters2D.create(global_position + Vector2(-dx, -14.0), global_position + Vector2(-dx, 18.0), 1)
+		if space.intersect_ray(lr).is_empty():
+			break
+		_left_span = dx
+	for step in range(1, 10):
+		var dx: float = float(step) * 16.0
+		if dx > radius:
+			break
+		var rr := PhysicsRayQueryParameters2D.create(global_position + Vector2(dx, -14.0), global_position + Vector2(dx, 18.0), 1)
+		if space.intersect_ray(rr).is_empty():
+			break
+		_right_span = dx
+	_left_span = maxf(24.0, _left_span)
+	_right_span = maxf(24.0, _right_span)
 
 
 func _process(delta: float) -> void:
@@ -33,7 +68,8 @@ func _process(delta: float) -> void:
 		return
 	_tick_accum += delta
 	queue_redraw()
-	if _tick_accum < 0.25:
+	var interval: float = 0.08 if zone_kind == "ice_platform" else 0.25
+	if _tick_accum < interval:
 		return
 	_tick_accum = 0.0
 	if not can_deal:
@@ -47,13 +83,15 @@ func _process(delta: float) -> void:
 			continue
 		if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
 			continue
+		var px: float = (p as Node2D).global_position.x
+		var py: float = (p as Node2D).global_position.y
 		var dist: float = (p as Node2D).global_position.distance_to(global_position)
 		if zone_kind == "ice_platform":
-			if absf((p as Node2D).global_position.x - global_position.x) <= radius and absf((p as Node2D).global_position.y - global_position.y) <= 64.0:
+			if px >= global_position.x - _left_span - 12.0 and px <= global_position.x + _right_span + 12.0 and absf(py - global_position.y) <= 58.0:
 				if p.has_method("apply_status"):
-					p.apply_status("slippery", 0.4)
+					p.apply_status("slippery", 0.35)
 		elif zone_kind == "lava_platform":
-			if absf((p as Node2D).global_position.x - global_position.x) <= radius and absf((p as Node2D).global_position.y - global_position.y) <= 64.0:
+			if px >= global_position.x - _left_span - 12.0 and px <= global_position.x + _right_span + 12.0 and absf(py - global_position.y) <= 58.0:
 				if p.has_method("apply_hit"):
 					p.apply_hit(maxi(1, int(round(float(dps) * 0.25))), shooter_id, weapon_name, shooter_name, Vector2.ZERO)
 		elif dist <= radius:
@@ -67,11 +105,17 @@ func _draw() -> void:
 	var alpha: float = clampf(time_left, 0.25, 1.0)
 	match zone_kind:
 		"ice_platform":
-			draw_rect(Rect2(-radius, -10.0, radius * 2.0, 18.0), Color(0.55, 0.92, 1.0, 0.72 * alpha))
-			draw_rect(Rect2(-radius, -10.0, radius * 2.0, 18.0), Color(0.92, 0.99, 1.0, 0.90 * alpha), false, 2.0)
+			var w: float = _left_span + _right_span
+			draw_rect(Rect2(-_left_span, -10.0, w, 18.0), Color(0.32, 0.82, 1.0, 0.58 * alpha))
+			draw_rect(Rect2(-_left_span, -10.0, w, 18.0), Color(0.85, 0.98, 1.0, 0.92 * alpha), false, 2.5)
+			var x_cur: float = -_left_span + 10.0
+			while x_cur < _right_span - 14.0:
+				draw_line(Vector2(x_cur, -7.0), Vector2(x_cur + 10.0, 5.0), Color(1.0, 1.0, 1.0, 0.65 * alpha), 2.5)
+				x_cur += 26.0
 		"lava_platform":
-			draw_rect(Rect2(-radius, -10.0, radius * 2.0, 18.0), Color(1.0, 0.36, 0.08, 0.78 * alpha))
-			draw_rect(Rect2(-radius, -10.0, radius * 2.0, 18.0), Color(1.0, 0.82, 0.20, 0.90 * alpha), false, 2.0)
+			var lw: float = _left_span + _right_span
+			draw_rect(Rect2(-_left_span, -6.0, lw, 14.0), Color(1.0, 0.36, 0.08, 0.80 * alpha))
+			draw_rect(Rect2(-_left_span, -6.0, lw, 14.0), Color(1.0, 0.82, 0.20, 0.92 * alpha), false, 2.0)
 		"frost_gas":
 			draw_circle(Vector2.ZERO, radius, Color(0.84, 0.96, 1.0, 0.30 * alpha))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 28, Color(0.75, 0.95, 1.0, 0.75 * alpha), 3.0)

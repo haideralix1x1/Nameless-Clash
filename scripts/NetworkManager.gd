@@ -77,11 +77,11 @@ var match_mode: int = 0         # 0 = Free-For-All, 1 = Red vs Blue
 var selected_map_id: int = 0    # 0 = Bunker Base, 1 = Factory Ruins, 2 = Desert Outpost
 var test_mode_enabled: bool = false
 var test_bot_behavior: int = 0   # 0 = Still, 1 = Move, 2 = Fight
-var test_bot_count: int = 1      # 1..MAX_BOTS in Test/Practice Mode
+var test_bot_count: int = 6      # 1..MAX_BOTS in Test/Practice Mode
 
 # Custom Game Rules / Mutators
 var unlimited_jetpack: bool = false
-var unlimited_abilities_practice: bool = false
+var unlimited_abilities_practice: bool = true
 var gravity_scale: float = 1.0
 var only_pistols: bool = false
 var allow_snipers: bool = true

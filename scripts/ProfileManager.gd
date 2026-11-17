@@ -36,9 +36,9 @@ const ARCHETYPES: Array[Dictionary] = [
 		"callsign": "Tiny Taz",
 		"name": "Tiny Taz (Casper Ghost)",
 		"desc": "Playful spectral phantom who pushes foes back, silences abilities, spawns decoys, and turns invisible.",
-		"part_id": 14,
-		"shirt": Color(0.82, 0.96, 1.0), "pants": Color(0.82, 0.96, 1.0),
-		"skin": Color(0.88, 0.98, 1.0), "helmet": Color(0.72, 0.94, 1.0), "gear": Color(0.65, 0.90, 1.0),
+		"part_id": 27,
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{
@@ -49,15 +49,6 @@ const ARCHETYPES: Array[Dictionary] = [
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 3
-	},
-	{
-		"callsign": "Leonidas",
-		"name": "Leonidas (Golden Spartan)",
-		"desc": "Ancient Greek champion clad in golden bronze cuirass, crimson plume, and billowing cape.",
-		"part_id": 5,
-		"shirt": Color.WHITE, "pants": Color.WHITE,
-		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 2
 	},
 	{
 		"callsign": "Warlord",
@@ -72,9 +63,9 @@ const ARCHETYPES: Array[Dictionary] = [
 		"callsign": "Draken",
 		"name": "Draken (Vampire)",
 		"desc": "Crimson nocturnal lord commanding homing bats, blood spears, damage reduction, and bat-form ambushes.",
-		"part_id": 24,
-		"shirt": Color(0.95, 0.25, 0.35), "pants": Color(0.35, 0.12, 0.20),
-		"skin": Color(0.95, 0.88, 0.92), "helmet": Color(0.85, 0.18, 0.30), "gear": Color(0.95, 0.22, 0.35),
+		"part_id": 26,
+		"shirt": Color(0.75, 0.14, 0.22), "pants": Color(0.22, 0.14, 0.22),
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color(0.65, 0.12, 0.22),
 		"weapon": 4
 	},
 	{
@@ -233,7 +224,7 @@ const RAIL_MOD_NAMES: Array[String] = ["Iron Sights", "Suppressor", "Tactical Sc
 
 const ARCHETYPE_ROLES: Array[String] = [
 	"Infantry Trooper", "Field Adventurer", "Outback Marksman", "Casper Phantom",
-	"Tactical Breacher", "Arena Champion", "Northern Raider", "Vampire Lord",
+	"Tactical Breacher", "Northern Raider", "Vampire Lord",
 	"Shadow Assassin", "Undead Brawler", "Cursed Warrior", "Spectral Phantom",
 	"Tomb Guardian", "Heavy Automaton", "Bio Specialist", "Feline Striker",
 	"Blade Hero", "Ogre Warlord", "Lava Colossus", "Quartz Elemental",

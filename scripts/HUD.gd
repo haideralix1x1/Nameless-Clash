@@ -37,8 +37,15 @@ var _hp_label: Label
 var _fuel_bar: ProgressBar
 var _fuel_label: Label
 var _weapon_icon: TextureRect
+var _agent_portrait: TextureRect
+var _agent_hat_overlay: TextureRect
+var _target_portrait: TextureRect
+var _target_hat_overlay: TextureRect
+var _secondary_weapon_icon: TextureRect
+var _bomb_hud_label: Label
 var _weapon_name_label: Label
 var _ammo_label: Label
+var _target_refresh_accum: float = 0.0
 var _dual_badge: Label
 var _net_status_label: Label
 var _map_mode_label: Label
@@ -131,6 +138,11 @@ func _process(delta: float) -> void:
 		_tick_chat_toasts(delta)
 	_push_input_to_player()
 	_update_scope_overlay()
+	if NetworkManager.is_agent_clash_mode():
+		_target_refresh_accum += delta
+		if _target_refresh_accum >= 0.12:
+			_target_refresh_accum = 0.0
+			_refresh_top_info_pill()
 	if is_instance_valid(_flashbang_overlay):
 		var fb_t: float = float(local_player.get("flashbang_timer")) if local_player != null else 0.0
 		_flashbang_overlay.visible = fb_t > 0.01
@@ -248,14 +260,10 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_throw):
 		_btn_throw.visible = is_agent
 	if is_agent and local_player != null:
-		var ag: Dictionary = AgentData.get_agent(int(local_player.get("archetype_id")))
-		var bw: Dictionary = ag["base_weapon"]
-		_weapon_name_label.text = "%s (%s)" % [str(bw["name"]), str(ag["agent_name"])]
-		_ammo_label.text = "∞ BASE WEAPON"
-		_ammo_label.modulate = Color(0.45, 0.96, 1.0)
-		_dual_badge.visible = false
+		_refresh_top_info_pill()
 	elif is_instance_valid(_stun_banner):
 		_stun_banner.visible = false
+		_refresh_top_info_pill()
 
 
 func _clamp_control_pos(center_px: Vector2, ctrl_size: Vector2, vp_size: Vector2) -> Vector2:
@@ -801,6 +809,23 @@ func _build_ui() -> void:
 	_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	w_row.add_child(_weapon_icon)
 
+	var p_atlas := AtlasTexture.new()
+	p_atlas.region = Rect2(0, 0, 128, 128)
+	_agent_portrait = TextureRect.new()
+	_agent_portrait.texture = p_atlas
+	_agent_portrait.custom_minimum_size = Vector2(40, 40)
+	_agent_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_agent_portrait.clip_contents = true
+	_agent_portrait.visible = false
+	var hat_atlas := AtlasTexture.new()
+	hat_atlas.region = Rect2(0, 0, 128, 128)
+	_agent_hat_overlay = TextureRect.new()
+	_agent_hat_overlay.texture = hat_atlas
+	_agent_hat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_agent_hat_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_agent_portrait.add_child(_agent_hat_overlay)
+	w_row.add_child(_agent_portrait)
+
 	var w_info := VBoxContainer.new()
 	w_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	w_info.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -830,6 +855,41 @@ func _build_ui() -> void:
 	_dual_badge.modulate = Color(0.25, 0.95, 1.0)
 	_dual_badge.visible = false
 	w_row.add_child(_dual_badge)
+
+	var sec_atlas := AtlasTexture.new()
+	sec_atlas.atlas = WEAPONS_TEX
+	sec_atlas.region = Rect2(0, 0, 64, 32)
+	_secondary_weapon_icon = TextureRect.new()
+	_secondary_weapon_icon.texture = sec_atlas
+	_secondary_weapon_icon.custom_minimum_size = Vector2(34, 18)
+	_secondary_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_secondary_weapon_icon.modulate = Color(0.85, 0.90, 0.96, 0.82)
+	_secondary_weapon_icon.visible = false
+	w_row.add_child(_secondary_weapon_icon)
+
+	_bomb_hud_label = Label.new()
+	_bomb_hud_label.text = "💣 3"
+	_bomb_hud_label.add_theme_font_size_override("font_size", 14)
+	_bomb_hud_label.modulate = Color(1.0, 0.72, 0.35)
+	_bomb_hud_label.visible = false
+	w_row.add_child(_bomb_hud_label)
+
+	var tp_atlas := AtlasTexture.new()
+	tp_atlas.region = Rect2(0, 0, 128, 128)
+	_target_portrait = TextureRect.new()
+	_target_portrait.texture = tp_atlas
+	_target_portrait.custom_minimum_size = Vector2(36, 36)
+	_target_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_target_portrait.clip_contents = true
+	_target_portrait.visible = false
+	var th_atlas := AtlasTexture.new()
+	th_atlas.region = Rect2(0, 0, 128, 128)
+	_target_hat_overlay = TextureRect.new()
+	_target_hat_overlay.texture = th_atlas
+	_target_hat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_target_hat_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_target_portrait.add_child(_target_hat_overlay)
+	w_row.add_child(_target_portrait)
 
 	var right_spacer := Control.new()
 	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1273,8 +1333,7 @@ func _on_fuel_changed(current: float, maximum: float) -> void:
 
 func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 	if NetworkManager.is_agent_clash_mode():
-		_ammo_label.text = "∞ BASE WEAPON"
-		_ammo_label.modulate = Color(0.45, 0.96, 1.0)
+		_refresh_top_info_pill()
 		return
 	if is_reloading:
 		if _active_weapon != null and _active_weapon.single_shell_reload:
@@ -1293,10 +1352,7 @@ func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 	_active_weapon = weapon_data
 	if NetworkManager.is_agent_clash_mode() and local_player != null:
-		var ag: Dictionary = AgentData.get_agent(int(local_player.get("archetype_id")))
-		var bw: Dictionary = ag["base_weapon"]
-		_weapon_name_label.text = "%s (%s)" % [str(bw["name"]), str(ag["agent_name"])]
-		_dual_badge.visible = false
+		_refresh_top_info_pill()
 		return
 	_weapon_name_label.text = weapon_data.display_name
 	_dual_badge.visible = dual_wield and weapon_data.supports_dual_wield
@@ -1304,6 +1360,92 @@ func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 	var skin_row: int = local_player.weapon_skin_id if local_player != null else 0
 	if atlas != null:
 		atlas.region = Rect2(weapon_data.sprite_frame * 64, skin_row * 32, 64, 32)
+	_refresh_top_info_pill()
+
+
+func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
+	if not is_instance_valid(rect):
+		return
+	var tex: Texture2D = load(tex_path) as Texture2D
+	var at: AtlasTexture = rect.texture as AtlasTexture
+	if at == null or tex == null:
+		return
+	at.atlas = tex
+	at.region = Rect2(0, 0, maxi(1, int(tex.get_width() / 8)), maxi(1, tex.get_height()))
+
+
+func _refresh_top_info_pill() -> void:
+	var is_agent: bool = NetworkManager.is_agent_clash_mode()
+	if is_instance_valid(_weapon_icon):
+		_weapon_icon.visible = not is_agent
+	if is_instance_valid(_agent_portrait):
+		_agent_portrait.visible = is_agent
+	if is_instance_valid(_secondary_weapon_icon):
+		_secondary_weapon_icon.visible = not is_agent
+	if is_instance_valid(_bomb_hud_label):
+		_bomb_hud_label.visible = (not is_agent) and NetworkManager.allow_explosives
+
+	if local_player == null:
+		return
+
+	if is_agent:
+		var arch_id: int = int(local_player.get("archetype_id"))
+		var ag: Dictionary = AgentData.get_agent(arch_id)
+		var part_id: int = ProfileManager.get_archetype_part_id(arch_id)
+		_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
+		_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
+		if is_instance_valid(_weapon_name_label):
+			_weapon_name_label.text = str(ag["agent_name"]).to_upper()
+		if is_instance_valid(_dual_badge):
+			_dual_badge.visible = false
+		if is_instance_valid(_ammo_label):
+			var best_enemy: Node2D = null
+			var best_dist: float = 1e9
+			var my_id: int = int(local_player.get("peer_id"))
+			var my_team: int = int(local_player.get("team_id"))
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or int(p.get("peer_id")) == my_id:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == my_team:
+					continue
+				if float(p.get("invis_timer")) > 0.0:
+					continue
+				var d: float = (local_player as Node2D).global_position.distance_to((p as Node2D).global_position)
+				if d < best_dist:
+					best_dist = d
+					best_enemy = p as Node2D
+			if best_enemy != null:
+				var t_name: String = str(best_enemy.get("player_name"))
+				_ammo_label.text = "🎯 %s (%dm)" % [t_name, int(round(best_dist / 16.0))]
+				_ammo_label.modulate = Color(1.0, 0.72, 0.35) if best_dist <= 460.0 else Color(0.45, 0.96, 1.0)
+				if is_instance_valid(_target_portrait):
+					var e_arch: int = int(best_enemy.get("archetype_id"))
+					var e_part: int = ProfileManager.get_archetype_part_id(e_arch)
+					_target_portrait.visible = true
+					_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
+					_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
+			else:
+				_ammo_label.text = "🎯 NO TARGET"
+				_ammo_label.modulate = Color(0.65, 0.75, 0.85)
+				if is_instance_valid(_target_portrait):
+					_target_portrait.visible = false
+	else:
+		if is_instance_valid(_target_portrait):
+			_target_portrait.visible = false
+		var cur_id: int = int(local_player.get("current_weapon_id"))
+		var sec_id: int = int(local_player.get("secondary_weapon_id"))
+		var prim_id: int = int(local_player.get("_equipped_primary_id"))
+		var other_id: int = sec_id if cur_id != sec_id else prim_id
+		var skin_row: int = int(local_player.get("weapon_skin_id"))
+		if is_instance_valid(_secondary_weapon_icon):
+			var s_atlas: AtlasTexture = _secondary_weapon_icon.texture as AtlasTexture
+			if s_atlas != null:
+				var other_w: WeaponData = WeaponData.get_weapon(other_id, skin_row, 0)
+				s_atlas.region = Rect2(other_w.sprite_frame * 64, skin_row * 32, 64, 32)
+		if is_instance_valid(_bomb_hud_label):
+			_bomb_hud_label.text = "💣 %d" % maxi(0, int(local_player.get("bomb_count")))
 
 
 func _on_player_died(seconds_left: float) -> void:
@@ -1529,10 +1671,7 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 	if not NetworkManager.is_agent_clash_mode():
 		return
 	var arch_id: int = int(local_player.get("archetype_id")) if local_player != null else ProfileManager.archetype_id
-	var ag_info: Dictionary = AgentData.get_agent(arch_id)
-	var bw_info: Dictionary = ag_info["base_weapon"]
-	if is_instance_valid(_weapon_name_label):
-		_weapon_name_label.text = "%s (%s)" % [str(bw_info["name"]), str(ag_info["agent_name"])]
+	_refresh_top_info_pill()
 	var keys: Array[String] = ["1:", "2:", "3:", "★"]
 	var btns: Array[Button] = [_btn_ability_1, _btn_ability_2, _btn_ability_3, _btn_ult]
 	var kill_prog: int = int(local_player.get("ability_kill_progress")) if local_player != null else 0
@@ -1609,6 +1748,8 @@ func _on_bombs_changed(count: int, bomb_type: String) -> void:
 	var label_type: String = "FRAG" if bomb_type.is_empty() else bomb_type.to_upper()
 	_btn_bomb.text = "%s\nx%d" % [label_type, maxi(0, count)]
 	_btn_bomb.visible = (not NetworkManager.is_agent_clash_mode()) and NetworkManager.allow_explosives
+	if is_instance_valid(_bomb_hud_label):
+		_bomb_hud_label.text = "💣 %d" % maxi(0, count)
 	_btn_bomb.modulate = Color.WHITE if count > 0 else Color(0.55, 0.58, 0.65)
 
 
