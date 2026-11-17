@@ -68,10 +68,10 @@ const THROWABLE_ITEMS: Array[Dictionary] = [
 ]
 
 const AGENTS: Array[Dictionary] = [
-	# 0: Rex Vance // The Soldier
+	# 0: Contra // The Soldier
 	{
 		"id": 0,
-		"agent_name": "Rex Vance",
+		"agent_name": "Contra",
 		"title": "The Soldier",
 		"role": "Frontline Vanguard",
 		"accent": Color(0.45, 0.82, 0.38),
@@ -88,267 +88,237 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "M4A1 Rifle Burst",
 				"kind": "gun_burst",
-				"cooldown": 6.0,
-				"damage": 14,
 				"shots": 6,
-				"color": Color(1.0, 0.86, 0.32),
-				"desc": "Draw an M4A1 and fire a 6-round rapid rifle burst."
+				"damage": 12,
+				"color": Color(0.95, 0.85, 0.35),
+				"desc": "Fire a rapid 6-round M4A1 burst."
 			},
 			{
-				"name": "Concussion Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 20,
-				"stun": 1.6,
-				"color": Color(0.35, 0.90, 1.0),
-				"desc": "Throw a tactical concussion Stun Bomb stunning enemies in its circle 1.6s."
+				"name": "Rapid Impact Grenade",
+				"kind": "impact_grenade",
+				"damage": 55,
+				"stun": 0.5,
+				"color": Color(0.95, 0.48, 0.18),
+				"desc": "Throw a grenade that blasts immediately on impact."
 			},
 			{
 				"name": "Steel Bunker Wall",
 				"kind": "wall",
-				"cooldown": 9.0,
 				"damage": 0,
-				"wall_hp": 240,
-				"duration": 6.0,
-				"color": Color(0.45, 0.68, 0.48),
-				"desc": "Deploy a steel barricade that blocks movement and shots."
+				"wall_hp": 260,
+				"duration": 5.5,
+				"color": Color(0.55, 0.68, 0.58),
+				"desc": "Deploy a steel bunker barrier wall."
 			}
 		],
 		"ultimate": {
-			"name": "Valkyrie Minigun Barrage",
-			"kind": "ult_gun_storm",
-			"cooldown": 22.0,
-			"damage": 16,
-			"shots": 14,
-			"stun": 0.4,
-			"color": Color(1.0, 0.72, 0.22),
-			"desc": "Unleash a 14-round heavy minigun storm across your aim arc."
+			"name": "Target-Follow Bazooka",
+			"kind": "ult_homing_bazooka",
+			"damage": 100,
+			"color": Color(1.0, 0.35, 0.15),
+			"desc": "Fire a target-tracking bazooka missile that 1-shots on hit."
 		}
 	},
-	# 1: Atlas Jones // The Explorer
+	# 1: Mike Jones // The Explorer
 	{
 		"id": 1,
-		"agent_name": "Atlas Jones",
+		"agent_name": "Mike Jones",
 		"title": "The Explorer",
-		"role": "Agile Scout",
-		"accent": Color(0.86, 0.68, 0.38),
+		"role": "Field Adventurer",
+		"accent": Color(0.86, 0.66, 0.34),
 		"base_weapon": {
 			"name": "Jungle Machete",
 			"style": "sword",
-			"damage": 23,
+			"damage": 24,
 			"cooldown": 0.32,
-			"range": 100.0,
-			"color": Color(0.92, 0.84, 0.58),
+			"range": 102.0,
+			"color": Color(0.92, 0.82, 0.48),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Whip Sprint Dash",
-				"kind": "dash_speed",
-				"cooldown": 5.5,
-				"damage": 18,
-				"duration": 4.0,
-				"speed_mult": 1.75,
-				"color": Color(1.0, 0.84, 0.36),
-				"desc": "Dash forward with a whip strike and gain 4s speed boost."
+				"name": "Grapple Hook",
+				"kind": "hook_drag",
+				"damage": 20,
+				"color": Color(0.88, 0.72, 0.32),
+				"desc": "Hook an enemy player and drag them straight to you."
 			},
 			{
-				"name": "Temple Stone Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
+				"name": "Flash Bird",
+				"kind": "flash_bird",
+				"damage": 15,
+				"duration": 3.0,
+				"color": Color(1.0, 0.96, 0.75),
+				"desc": "Spawn a homing bird that blinds the hit enemy's screen white for 3s."
+			},
+			{
+				"name": "Gradual Self Heal",
+				"kind": "gradual_heal",
 				"damage": 0,
-				"wall_hp": 220,
-				"duration": 5.5,
-				"color": Color(0.76, 0.64, 0.42),
-				"desc": "Raise an ancient stone pillar blocking enemies and bullets."
-			},
-			{
-				"name": "Flare Gun Fireball",
-				"kind": "fireball",
-				"cooldown": 6.5,
-				"damage": 38,
-				"color": Color(1.0, 0.44, 0.16),
-				"desc": "Shoot a blazing explosive flare fireball."
+				"duration": 4.0,
+				"color": Color(0.32, 0.96, 0.52),
+				"desc": "Gradually regenerate health back up to 100%."
 			}
 		],
 		"ultimate": {
-			"name": "Relic Earthquake Slam",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 58,
-			"stun": 2.0,
-			"color": Color(1.0, 0.74, 0.25),
-			"desc": "Shatter the arena floor, blasting and stunning nearby foes 2.0s."
+			"name": "Winged Lion",
+			"kind": "ult_winged_lion",
+			"damage": 100,
+			"duration": 4.0,
+			"color": Color(1.0, 0.78, 0.22),
+			"desc": "Summon a winged lion for 4s that chases nearby enemies and kills on attack."
 		}
 	},
-	# 2: Cole Cassidy // The Outlaw
+	# 2: Bruski // The Outlaw
 	{
 		"id": 2,
-		"agent_name": "Cole Cassidy",
+		"agent_name": "Bruski",
 		"title": "The Outlaw",
-		"role": "Gunslinger Duelist",
-		"accent": Color(0.95, 0.42, 0.24),
+		"role": "Outback Marksman",
+		"accent": Color(0.92, 0.42, 0.24),
 		"base_weapon": {
 			"name": "Frontier Hunting Bow",
 			"style": "bow",
-			"damage": 22,
-			"cooldown": 0.38,
-			"range": 640.0,
-			"color": Color(0.96, 0.74, 0.36),
+			"damage": 24,
+			"cooldown": 0.36,
+			"range": 260.0,
+			"color": Color(0.96, 0.65, 0.32),
 			"ranged": true
 		},
 		"abilities": [
 			{
-				"name": "Peacekeeper Fan",
-				"kind": "gun_burst",
-				"cooldown": 6.0,
-				"damage": 16,
-				"shots": 6,
-				"color": Color(1.0, 0.62, 0.22),
-				"desc": "Fan 6 revolver shots rapidly along your aim line."
+				"name": "Dual Shotguns",
+				"kind": "dual_shotguns",
+				"damage": 25,
+				"shots": 5,
+				"duration": 4.0,
+				"color": Color(1.0, 0.55, 0.22),
+				"desc": "Equip dual shotguns for 4s (up to 5 blasts)."
 			},
 			{
-				"name": "Flashbang Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 22,
-				"stun": 1.6,
-				"color": Color(1.0, 0.95, 0.55),
-				"desc": "Throw a saloon Flashbang Stun Bomb stunning enemies in its circle 1.6s."
+				"name": "Sticky Bomb",
+				"kind": "sticky_bomb",
+				"damage": 100,
+				"color": Color(1.0, 0.32, 0.18),
+				"desc": "Throw a sticky bomb that blasts for 100% damage."
 			},
 			{
-				"name": "Dynamite Keg Bomb",
-				"kind": "lava_bomb",
-				"cooldown": 7.5,
-				"damage": 12,
-				"duration": 3.5,
-				"speed_mult": 1.7,
-				"stun": 1.6,
-				"radius": 110.0,
-				"color": Color(0.95, 0.52, 0.28),
-				"desc": "Throw a lit frontier dynamite bomb that blasts and stuns enemies in its circle 1.6s."
+				"name": "Chainsaw Blade",
+				"kind": "bouncing_chainsaw",
+				"damage": 100,
+				"duration": 5.0,
+				"color": Color(0.88, 0.88, 0.94),
+				"desc": "Throw a wall-bouncing chainsaw blade (5s) that instant-kills on hit."
 			}
 		],
 		"ultimate": {
-			"name": "High Noon Deadeye",
-			"kind": "ult_gun_storm",
-			"cooldown": 22.0,
-			"damage": 22,
-			"shots": 12,
-			"stun": 0.8,
-			"color": Color(1.0, 0.32, 0.18),
-			"desc": "Unleash 12 high-caliber Deadeye rounds that stagger foes."
+			"name": "Self Blast",
+			"kind": "ult_self_blast",
+			"damage": 100,
+			"color": Color(1.0, 0.28, 0.12),
+			"desc": "Unleash a massive blast around yourself that kills nearby enemies."
 		}
 	},
-	# 3: Jax Striker // Camo Commando
+	# 3: Tiny Taz // Casper Ghost
 	{
 		"id": 3,
-		"agent_name": "Jax Striker",
-		"title": "Camo Commando",
-		"role": "Jungle Raider",
-		"accent": Color(0.32, 0.88, 0.45),
+		"agent_name": "Tiny Taz",
+		"title": "Casper Ghost",
+		"role": "Casper Phantom",
+		"accent": Color(0.68, 0.94, 1.0),
 		"base_weapon": {
-			"name": "Survival Battle Axe",
-			"style": "axe",
-			"damage": 26,
-			"cooldown": 0.38,
-			"range": 106.0,
-			"color": Color(0.55, 0.92, 0.48),
+			"name": "Spectral Touch",
+			"style": "sword",
+			"damage": 22,
+			"cooldown": 0.33,
+			"range": 104.0,
+			"color": Color(0.75, 0.96, 1.0),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Guerrilla Turbo Sprint",
-				"kind": "speed",
-				"cooldown": 6.5,
+				"name": "Spectral Push Circle",
+				"kind": "push_circle",
+				"damage": 20,
+				"stun": 1.0,
+				"color": Color(0.65, 0.95, 1.0),
+				"desc": "Expand a huge circle that pushes enemies back and stuns 1s."
+			},
+			{
+				"name": "Ability-Lock Smoke",
+				"kind": "ability_lock_smoke",
+				"damage": 10,
+				"duration": 4.0,
+				"color": Color(0.92, 0.96, 1.0),
+				"desc": "Throw white smoke that locks hit enemies' ability buttons for 4s."
+			},
+			{
+				"name": "Ghost Clones",
+				"kind": "ghost_clones",
 				"damage": 0,
-				"duration": 4.2,
-				"speed_mult": 1.85,
-				"color": Color(0.35, 1.0, 0.55),
-				"desc": "Boost movement and attack speed massively + heal 15 HP."
-			},
-			{
-				"name": "Breacher Buckshot",
-				"kind": "shotgun_blast",
-				"cooldown": 6.0,
-				"damage": 14,
-				"shots": 6,
-				"color": Color(0.65, 1.0, 0.35),
-				"desc": "Blast a wide close-range 6-pellet commando shotgun spread."
-			},
-			{
-				"name": "Jungle Snare Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 22,
-				"stun": 1.8,
-				"color": Color(0.32, 0.95, 0.45),
-				"desc": "Throw a camouflaged Snare Stun Bomb stunning enemies in its circle 1.8s."
+				"duration": 4.0,
+				"color": Color(0.78, 0.96, 1.0),
+				"desc": "Create 2 decoy clones for 4s that vanish in 1 hit."
 			}
 		],
 		"ultimate": {
-			"name": "Napalm Fireball Volley",
-			"kind": "ult_firestorm",
-			"cooldown": 22.0,
-			"damage": 38,
-			"color": Color(1.0, 0.46, 0.14),
-			"desc": "Rain a spread of 6 explosive napalm fireballs."
+			"name": "Phantom Stealth",
+			"kind": "ult_ghost_stealth",
+			"damage": 0,
+			"duration": 7.0,
+			"color": Color(0.55, 0.95, 1.0),
+			"desc": "Turn invisible & invincible for 7s while still able to attack."
 		}
 	},
-	# 4: Rook Frost // Spec-Ops Goggles
+	# 4: Rook Frost // Spec-Ops
 	{
 		"id": 4,
 		"agent_name": "Rook Frost",
-		"title": "Star Tank",
-		"role": "SWAT Breacher",
-		"accent": Color(0.38, 0.78, 1.0),
+		"title": "Spec-Ops",
+		"role": "Tactical Breacher",
+		"accent": Color(0.45, 0.85, 1.0),
 		"base_weapon": {
 			"name": "Shock Tonfa Blade",
 			"style": "sword",
 			"damage": 23,
 			"cooldown": 0.33,
-			"range": 102.0,
-			"color": Color(0.45, 0.84, 1.0),
+			"range": 100.0,
+			"color": Color(0.52, 0.88, 1.0),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Ballistic Riot Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
-				"damage": 0,
-				"wall_hp": 260,
-				"duration": 6.0,
-				"color": Color(0.32, 0.68, 1.0),
-				"desc": "Drop a fortified heavy riot barrier wall."
-			},
-			{
-				"name": "Cryo-Shock Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
+				"name": "Freeze Shot",
+				"kind": "freeze_shot",
 				"damage": 20,
-				"stun": 1.9,
-				"color": Color(0.32, 0.96, 1.0),
-				"desc": "Throw a Cryo-Shock Stun Bomb freezing enemies in its circle 1.9s."
+				"duration": 3.0,
+				"color": Color(0.48, 0.92, 1.0),
+				"desc": "Fire an ice shot that freezes the enemy solid for 3s."
 			},
 			{
-				"name": "Star-Breacher Shotgun",
-				"kind": "shotgun_blast",
-				"cooldown": 6.5,
-				"damage": 13,
-				"shots": 6,
-				"color": Color(0.85, 0.94, 1.0),
-				"desc": "Fire a heavy 6-pellet close-range tank spread."
+				"name": "Slippery Iceball",
+				"kind": "ice_platform",
+				"damage": 15,
+				"duration": 5.0,
+				"color": Color(0.68, 0.95, 1.0),
+				"desc": "Throw an iceball that turns the hit platform slippery for 5s."
+			},
+			{
+				"name": "Frost Gas Cloud",
+				"kind": "frost_gas",
+				"damage": 20,
+				"duration": 5.0,
+				"color": Color(0.82, 0.96, 1.0),
+				"desc": "Spawn white frost smoke that deals 20% damage/sec."
 			}
 		],
 		"ultimate": {
-			"name": "Cryo-Lockdown Nova",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 56,
-			"stun": 2.3,
-			"color": Color(0.36, 0.92, 1.0),
-			"desc": "Freeze nearby opponents solid for 2.3s with heavy shock damage."
+			"name": "Cryo Shatter",
+			"kind": "ult_cryo_shatter",
+			"damage": 100,
+			"duration": 3.0,
+			"color": Color(0.40, 0.88, 1.0),
+			"desc": "Automatically freeze and shatter enemies in close range."
 		}
 	},
 	# 5: Leonidas // Golden Spartan
@@ -407,1017 +377,762 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Summon giant Olympian solar blades that stun and cleave foes."
 		}
 	},
-	# 6: Maximus // Roman Centurion
+	# 6: Warlord // Viking Berserker
 	{
 		"id": 6,
-		"agent_name": "Maximus",
-		"title": "Roman Centurion",
-		"role": "Legion Officer",
-		"accent": Color(0.88, 0.28, 0.28),
+		"agent_name": "Warlord",
+		"title": "Viking Berserker",
+		"role": "Northern Raider",
+		"accent": Color(0.95, 0.54, 0.18),
 		"base_weapon": {
-			"name": "Imperial Gladius",
+			"name": "Nordic Great-Axe",
+			"style": "axe",
+			"damage": 26,
+			"cooldown": 0.36,
+			"range": 110.0,
+			"color": Color(0.88, 0.92, 0.98),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Boar Charge",
+				"kind": "boar_ride",
+				"damage": 30,
+				"duration": 4.0,
+				"color": Color(0.92, 0.58, 0.22),
+				"desc": "Ride a war boar; deal 30% damage and launch foes on contact."
+			},
+			{
+				"name": "Boomerang Axe",
+				"kind": "boomerang_axe",
+				"damage": 50,
+				"color": Color(0.85, 0.92, 1.0),
+				"desc": "Spawn a distant axe that flies back to you, dealing 50% damage."
+			},
+			{
+				"name": "Barbarian Squad",
+				"kind": "barbarian_squad",
+				"damage": 25,
+				"shots": 3,
+				"duration": 6.0,
+				"color": Color(0.95, 0.45, 0.18),
+				"desc": "Spawn 3 physics barbarians that march forward and attack enemies."
+			}
+		],
+		"ultimate": {
+			"name": "Earthquake Sphere",
+			"kind": "ult_earth_quake_zone",
+			"damage": 20,
+			"duration": 5.0,
+			"color": Color(0.78, 0.52, 0.24),
+			"desc": "Blast an earth sphere that shakes enemy screens for 5s and deals 20%/s."
+		}
+	},
+	# 7: Draken // Vampire
+	{
+		"id": 7,
+		"agent_name": "Draken",
+		"title": "Vampire",
+		"role": "Vampire Lord",
+		"accent": Color(0.92, 0.18, 0.32),
+		"base_weapon": {
+			"name": "Crimson Fangs",
 			"style": "sword",
 			"damage": 24,
 			"cooldown": 0.33,
 			"range": 106.0,
-			"color": Color(0.92, 0.88, 0.96),
+			"color": Color(0.95, 0.22, 0.35),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Legion Scutum Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
+				"name": "Vampire Bats",
+				"kind": "bat_swarm",
+				"damage": 25,
+				"shots": 3,
+				"color": Color(0.72, 0.14, 0.32),
+				"desc": "Spawn 3 vampire bats that follow nearby enemies."
+			},
+			{
+				"name": "Blood Armor",
+				"kind": "damage_shield_50",
 				"damage": 0,
-				"wall_hp": 250,
-				"duration": 5.8,
-				"color": Color(0.84, 0.28, 0.28),
-				"desc": "Form a crimson legion shield barricade."
+				"duration": 5.0,
+				"color": Color(0.88, 0.16, 0.28),
+				"desc": "Take 50% less damage for 5 seconds."
 			},
 			{
-				"name": "Iron Pilum Javelin",
-				"kind": "spear_throw",
-				"shots": 2,
-				"cooldown": 6.0,
-				"damage": 18,
-				"duration": 3.8,
-				"speed_mult": 1.75,
-				"color": Color(1.0, 0.48, 0.34),
-				"desc": "Throw a heavy armor-piercing Roman war javelin."
-			},
-			{
-				"name": "Legion Net Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 26,
-				"stun": 1.5,
-				"color": Color(1.0, 0.72, 0.32),
-				"desc": "Throw a weighted Roman net Stun Bomb stunning enemies in its circle 1.7s."
+				"name": "Blood Lance",
+				"kind": "blood_beam",
+				"damage": 80,
+				"color": Color(0.98, 0.14, 0.22),
+				"desc": "Launch a straight blood bolt forward for 80% damage."
 			}
 		],
 		"ultimate": {
-			"name": "Siege Fireball Volley",
-			"kind": "ult_firestorm",
-			"cooldown": 22.0,
-			"damage": 40,
-			"color": Color(1.0, 0.38, 0.16),
-			"desc": "Call down 6 blazing siege catapult fireballs."
+			"name": "Bat Execution",
+			"kind": "ult_bat_execute",
+			"damage": 100,
+			"color": Color(0.95, 0.10, 0.24),
+			"desc": "Transform into a bat, strike the enemy in front for instant death, and revert."
 		}
 	},
-	# 7: Ragnar // Viking Berserker
-	{
-		"id": 7,
-		"agent_name": "Ragnar",
-		"title": "Viking Berserker",
-		"role": "Northern Raider",
-		"accent": Color(0.95, 0.56, 0.18),
-		"base_weapon": {
-			"name": "Nordic Great-Axe",
-			"style": "axe",
-			"damage": 28,
-			"cooldown": 0.40,
-			"range": 112.0,
-			"color": Color(0.82, 0.90, 1.0),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Nordic Throwing Axes",
-				"kind": "axe_volley",
-				"shots": 2,
-				"cooldown": 6.0,
-				"damage": 24,
-				"duration": 4.2,
-				"speed_mult": 1.85,
-				"color": Color(1.0, 0.45, 0.18),
-				"desc": "Hurl a twin volley of spinning Nordic battle axes."
-			},
-			{
-				"name": "Berserker Bloodlust",
-				"kind": "speed",
-				"cooldown": 8.0,
-				"damage": 28,
-				"stun": 1.7,
-				"color": Color(0.45, 0.84, 1.0),
-				"desc": "Enter a berserk frenzy with huge speed boost + 15 HP."
-			},
-			{
-				"name": "Mjolnir Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.5,
-				"damage": 22,
-				"wall_hp": 230,
-				"duration": 5.5,
-				"stun": 1.8,
-				"radius": 175.0,
-				"color": Color(0.48, 0.88, 1.0),
-				"desc": "Throw a crackling thunder Stun Bomb stunning enemies in its circle 1.8s."
-			}
-		],
-		"ultimate": {
-			"name": "Thor Mjolnir Storm",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 62,
-			"stun": 2.0,
-			"color": Color(0.42, 0.88, 1.0),
-			"desc": "Bring down thunder that shocks and stuns all nearby foes 2.0s."
-		}
-	},
-	# 8: Galahad // Crusader Knight
+	# 8: Yagami // Shadow Ninja
 	{
 		"id": 8,
-		"agent_name": "Galahad",
-		"title": "Crusader Knight",
-		"role": "Templar Paladin",
-		"accent": Color(0.92, 0.95, 1.0),
-		"base_weapon": {
-			"name": "Templar Greatsword",
-			"style": "greatsword",
-			"damage": 29,
-			"cooldown": 0.42,
-			"range": 124.0,
-			"color": Color(0.94, 0.96, 1.0),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Excalibur Giant Cleave",
-				"kind": "cleave",
-				"cooldown": 5.5,
-				"damage": 48,
-				"color": Color(1.0, 0.92, 0.45),
-				"desc": "Swing an enormous radiant greatsword energy wave."
-			},
-			{
-				"name": "Holy Aegis Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
-				"damage": 0,
-				"wall_hp": 270,
-				"duration": 6.0,
-				"color": Color(0.95, 0.88, 0.55),
-				"desc": "Create a sanctified golden shield wall."
-			},
-			{
-				"name": "Judgment Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 26,
-				"stun": 1.7,
-				"color": Color(1.0, 0.94, 0.52),
-				"desc": "Throw a consecrated light Stun Bomb stunning enemies in its circle 1.7s."
-			}
-		],
-		"ultimate": {
-			"name": "Grand Crusade Greatsword",
-			"kind": "ult_giant_sword",
-			"cooldown": 22.0,
-			"damage": 68,
-			"stun": 1.0,
-			"color": Color(1.0, 0.94, 0.42),
-			"desc": "Send 3 colossus Excalibur blades tearing across the map."
-		}
-	},
-	# 9: King Arthur // Royal King
-	{
-		"id": 9,
-		"agent_name": "King Arthur",
-		"title": "Royal King",
-		"role": "High Sovereign",
-		"accent": Color(1.0, 0.78, 0.24),
-		"base_weapon": {
-			"name": "Caliburn Broadsword",
-			"style": "greatsword",
-			"damage": 27,
-			"cooldown": 0.39,
-			"range": 118.0,
-			"color": Color(1.0, 0.85, 0.32),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Royal Decree Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 26,
-				"stun": 1.7,
-				"color": Color(1.0, 0.86, 0.28),
-				"desc": "Throw a gilded Royal Decree Stun Bomb stunning enemies in its circle 1.8s."
-			},
-			{
-				"name": "Royal Chariot Dash",
-				"kind": "dash_speed",
-				"cooldown": 5.5,
-				"damage": 24,
-				"speed_mult": 1.75,
-				"duration": 3.8,
-				"color": Color(0.86, 0.28, 0.32),
-				"desc": "Surge forward in a royal blitz charge with speed boost."
-			},
-			{
-				"name": "Royal Musket Volley",
-				"kind": "gun_burst",
-				"cooldown": 6.5,
-				"damage": 15,
-				"shots": 6,
-				"color": Color(1.0, 0.82, 0.35),
-				"desc": "Fire a rapid 6-round royal flintlock volley."
-			}
-		],
-		"ultimate": {
-			"name": "Sovereign Solar Flare",
-			"kind": "ult_firestorm",
-			"cooldown": 22.0,
-			"damage": 40,
-			"color": Color(1.0, 0.65, 0.16),
-			"desc": "Launch a crown salvo of 6 blazing solar fireballs."
-		}
-	},
-	# 10: Blackbeard // Pirate Buccaneer
-	{
-		"id": 10,
-		"agent_name": "Blackbeard",
-		"title": "Barrel Pirate",
-		"role": "Sea Buccaneer",
-		"accent": Color(0.88, 0.32, 0.32),
-		"base_weapon": {
-			"name": "Corsair Cutlass",
-			"style": "sword",
-			"damage": 24,
-			"cooldown": 0.32,
-			"range": 106.0,
-			"color": Color(0.86, 0.90, 0.96),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Blunderbuss Cannon",
-				"kind": "shotgun_blast",
-				"cooldown": 6.0,
-				"damage": 16,
-				"shots": 5,
-				"color": Color(1.0, 0.70, 0.28),
-				"desc": "Blast a 6-shot pirate blunderbuss cannon spread."
-			},
-			{
-				"name": "Grapple Teleport",
-				"kind": "teleport",
-				"cooldown": 7.0,
-				"damage": 24,
-				"color": Color(0.95, 0.56, 0.24),
-				"desc": "Hook-teleport up to 260px along your aim angle."
-			},
-			{
-				"name": "Powder Keg Mortar",
-				"kind": "lava_bomb",
-				"cooldown": 7.5,
-				"damage": 42,
-				"stun": 1.6,
-				"radius": 110.0,
-				"color": Color(1.0, 0.42, 0.14),
-				"desc": "Throw an ignited barrel powder keg bomb that explodes and stuns foes in its circle 1.6s."
-			}
-		],
-		"ultimate": {
-			"name": "Galleon Broadside Salvo",
-			"kind": "ult_firestorm",
-			"cooldown": 22.0,
-			"damage": 42,
-			"color": Color(1.0, 0.36, 0.12),
-			"desc": "Bombard the arena with a 6-shot pirate cannonball barrage."
-		}
-	},
-	# 11: Kenshin // Shadow Ninja
-	{
-		"id": 11,
-		"agent_name": "Kenshin",
+		"agent_name": "Yagami",
 		"title": "Shadow Ninja",
-		"role": "Silent Assassin",
-		"accent": Color(0.68, 0.36, 1.0),
+		"role": "Shadow Assassin",
+		"accent": Color(0.76, 0.44, 1.0),
 		"base_weapon": {
 			"name": "Muramasa Katana",
 			"style": "sword",
-			"damage": 24,
-			"cooldown": 0.28,
+			"damage": 23,
+			"cooldown": 0.30,
 			"range": 108.0,
-			"color": Color(0.76, 0.48, 1.0),
+			"color": Color(0.82, 0.56, 1.0),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Shadow Teleport",
-				"kind": "teleport",
-				"cooldown": 6.0,
-				"damage": 28,
-				"color": Color(0.68, 0.36, 1.0),
-				"desc": "Blink instantly behind or onto foes, slashing at arrival."
-			},
-			{
-				"name": "Triple Shadow Shurikens",
+				"name": "Triple Knives",
 				"kind": "shuriken_fan",
 				"shots": 3,
-				"cooldown": 5.5,
-				"damage": 42,
-				"color": Color(0.62, 0.84, 1.0),
-				"desc": "Throw a 3-star fan of razor ninja shurikens."
+				"damage": 20,
+				"color": Color(0.84, 0.72, 1.0),
+				"desc": "Throw 3 ninja knives (20 damage per knife)."
 			},
 			{
-				"name": "Smoke Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.0,
-				"damage": 24,
-				"stun": 1.6,
-				"color": Color(0.74, 0.48, 1.0),
-				"desc": "Throw a ninja Smoke Stun Bomb immobilizing enemies in its circle 1.7s."
+				"name": "Flying Kick",
+				"kind": "jump_kick",
+				"damage": 50,
+				"color": Color(0.72, 0.36, 1.0),
+				"desc": "Leap to a nearby enemy and deliver a 50% damage flying kick."
+			},
+			{
+				"name": "Spinning Blade",
+				"kind": "spinning_blade",
+				"damage": 35,
+				"duration": 4.0,
+				"color": Color(0.68, 0.44, 0.98),
+				"desc": "Throw a slow spinning blade that vanishes after 4s."
 			}
 		],
 		"ultimate": {
-			"name": "Dragonblade Omnislash",
-			"kind": "ult_blink_slash",
-			"cooldown": 22.0,
-			"damage": 66,
-			"stun": 1.1,
-			"color": Color(0.74, 0.34, 1.0),
-			"desc": "Phantom-teleport strike with massive cursed katana waves."
+			"name": "Shadow Execution",
+			"kind": "ult_jump_execute",
+			"damage": 100,
+			"color": Color(0.88, 0.34, 1.0),
+			"desc": "Leap to a nearby enemy and execute them instantly."
 		}
 	},
-	# 12: Rotjaw // Brain Zombie
+	# 9: Dead Buddy // Brain Zombie
 	{
-		"id": 12,
-		"agent_name": "Rotjaw",
+		"id": 9,
+		"agent_name": "Dead Buddy",
 		"title": "Brain Zombie",
 		"role": "Undead Brawler",
-		"accent": Color(0.45, 0.92, 0.28),
+		"accent": Color(0.46, 0.92, 0.28),
 		"base_weapon": {
 			"name": "Infected Mutant Claws",
-			"style": "claws",
+			"style": "axe",
 			"damage": 25,
-			"cooldown": 0.32,
-			"range": 96.0,
-			"color": Color(0.58, 0.95, 0.34),
+			"cooldown": 0.35,
+			"range": 100.0,
+			"color": Color(0.55, 0.96, 0.35),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Psychic Brain Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 24,
-				"stun": 1.9,
-				"color": Color(1.0, 0.48, 0.74),
-				"desc": "Throw a radioactive Brain Stun Bomb stunning enemies in its circle 1.9s."
-			},
-			{
-				"name": "Rabid Sprint",
-				"kind": "speed",
-				"cooldown": 6.0,
-				"damage": 0,
+				"name": "Poison Vomit",
+				"kind": "poison_vomit",
+				"damage": 30,
 				"duration": 4.0,
-				"speed_mult": 1.85,
-				"color": Color(0.55, 0.95, 0.32),
-				"desc": "Frenzy forward at terrifying undead speed + regenerate 15 HP."
+				"color": Color(0.45, 0.95, 0.28),
+				"desc": "Hurl toxic vomit that poisons hit enemies."
 			},
 			{
-				"name": "Bile Acid Mortar",
-				"kind": "lava_bomb",
-				"cooldown": 7.5,
-				"damage": 38,
-				"stun": 1.6,
-				"radius": 110.0,
-				"color": Color(0.52, 0.96, 0.24),
-				"desc": "Lob a corrosive undead bile bomb that explodes and stuns enemies in an acid circle 1.6s."
+				"name": "Slow-Mo Jelly Ball",
+				"kind": "jelly_slowmo",
+				"damage": 15,
+				"duration": 4.0,
+				"color": Color(0.95, 0.45, 0.78),
+				"desc": "Throw a jelly ball that slows hit enemies in its radius for 4s."
+			},
+			{
+				"name": "Zombie Dog",
+				"kind": "zombie_dog",
+				"damage": 35,
+				"duration": 5.0,
+				"color": Color(0.58, 0.88, 0.32),
+				"desc": "Spawn a physics zombie dog for 5s that runs forward and attacks."
 			}
 		],
 		"ultimate": {
-			"name": "Doomsday Plague Eruption",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 60,
-			"stun": 1.8,
-			"color": Color(0.48, 0.96, 0.28),
-			"desc": "Erupt a toxic shockwave dealing heavy damage and 1.8s stun."
+			"name": "Undying Rage",
+			"kind": "ult_deathless_2x",
+			"damage": 0,
+			"duration": 10.0,
+			"color": Color(0.55, 1.0, 0.24),
+			"desc": "Become deathless for 10s with 2x base attack damage."
 		}
 	},
-	# 13: Marrow // Skull Skeleton
+	# 10: Nothing // Skull Skeleton
 	{
-		"id": 13,
-		"agent_name": "Marrow",
+		"id": 10,
+		"agent_name": "Nothing",
 		"title": "Skull Skeleton",
 		"role": "Cursed Warrior",
-		"accent": Color(0.88, 0.90, 0.95),
+		"accent": Color(0.88, 0.90, 0.96),
 		"base_weapon": {
-			"name": "Cursed Bone Bow",
-			"style": "bow",
-			"damage": 22,
-			"cooldown": 0.37,
-			"range": 660.0,
-			"color": Color(0.88, 0.92, 1.0),
+			"name": "Cursed Bone Scimitar",
+			"style": "sword",
+			"damage": 24,
+			"cooldown": 0.34,
+			"range": 104.0,
+			"color": Color(0.92, 0.92, 0.98),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Boomerang Sword",
+				"kind": "boomerang_sword",
+				"damage": 45,
+				"color": Color(0.92, 0.94, 1.0),
+				"desc": "Throw a cursed sword forward that boomerangs back to you."
+			},
+			{
+				"name": "Bomb Eagle",
+				"kind": "bomb_eagle",
+				"damage": 65,
+				"duration": 5.0,
+				"color": Color(0.95, 0.78, 0.35),
+				"desc": "Spawn a bomb eagle (5s) that finds nearby enemies and drops a bomb."
+			},
+			{
+				"name": "Fiery Hand Burn",
+				"kind": "fiery_hand_beam",
+				"damage": 45,
+				"duration": 1.0,
+				"color": Color(1.0, 0.45, 0.14),
+				"desc": "Straighten hands and shoot a fiery burn beam along aim direction."
+			}
+		],
+		"ultimate": {
+			"name": "Time Freeze",
+			"kind": "ult_time_slow",
+			"damage": 0,
+			"duration": 4.0,
+			"color": Color(0.75, 0.88, 1.0),
+			"desc": "Slow nearby enemies to 0.3x speed in a large radius for 4s."
+		}
+	},
+	# 11: Wraith // Spooky Ghost
+	{
+		"id": 11,
+		"agent_name": "Wraith",
+		"title": "Spooky Ghost",
+		"role": "Spectral Phantom",
+		"accent": Color(0.64, 0.94, 1.0),
+		"base_weapon": {
+			"name": "Reaper Soul Scythe",
+			"style": "axe",
+			"damage": 24,
+			"cooldown": 0.34,
+			"range": 114.0,
+			"color": Color(0.72, 0.96, 1.0),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Spectral Invincibility",
+				"kind": "invincible_self",
+				"damage": 0,
+				"duration": 3.0,
+				"color": Color(0.68, 0.96, 1.0),
+				"desc": "Become invincible for 3 seconds."
+			},
+			{
+				"name": "Touch Teleport",
+				"kind": "touch_teleport",
+				"damage": 0,
+				"color": Color(0.55, 0.92, 1.0),
+				"desc": "Teleport to the last spot touched on the map/arena."
+			},
+			{
+				"name": "Banshee Scream",
+				"kind": "scream_wave",
+				"damage": 25,
+				"stun": 1.5,
+				"color": Color(0.78, 0.98, 1.0),
+				"desc": "Release a scream wave that knocks enemies back and stuns them."
+			}
+		],
+		"ultimate": {
+			"name": "Soul Harvest",
+			"kind": "ult_soul_drag",
+			"damage": 100,
+			"color": Color(0.45, 0.95, 1.0),
+			"desc": "Drag a nearby enemy close and rip their soul for instant death."
+		}
+	},
+	# 12: Mummy // Ancient Mummy
+	{
+		"id": 12,
+		"agent_name": "Mummy",
+		"title": "Ancient Mummy",
+		"role": "Tomb Guardian",
+		"accent": Color(0.95, 0.78, 0.32),
+		"base_weapon": {
+			"name": "Pharaoh Khopesh",
+			"style": "sword",
+			"damage": 24,
+			"cooldown": 0.34,
+			"range": 104.0,
+			"color": Color(1.0, 0.84, 0.38),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Headless Throw",
+				"kind": "headless_throw",
+				"damage": 50,
+				"color": Color(0.98, 0.82, 0.36),
+				"desc": "Throw your own head forward along aim; it boomerangs back."
+			},
+			{
+				"name": "Shadow Mummy",
+				"kind": "shadow_mummy",
+				"damage": 30,
+				"duration": 5.0,
+				"color": Color(0.85, 0.65, 0.25),
+				"desc": "Spawn an unkillable mummy behind a nearby enemy (30% dmg/hit, 5s)."
+			},
+			{
+				"name": "Relic Magnet",
+				"kind": "throwable_magnet",
+				"damage": 0,
+				"duration": 5.0,
+				"color": Color(1.0, 0.88, 0.42),
+				"desc": "Magnetize and pull nearby throwables toward you for 5s."
+			}
+		],
+		"ultimate": {
+			"name": "Death Kiss",
+			"kind": "ult_death_kiss",
+			"damage": 100,
+			"color": Color(0.95, 0.38, 0.82),
+			"desc": "Throw a Death Kiss grenade that creates a huge circle and kills all inside."
+		}
+	},
+	# 13: Jack-47 // Cyber Robot
+	{
+		"id": 13,
+		"agent_name": "Jack-47",
+		"title": "Cyber Robot",
+		"role": "Heavy Automaton",
+		"accent": Color(0.32, 0.84, 1.0),
+		"base_weapon": {
+			"name": "Plasma Riot Rifle",
+			"style": "gun",
+			"damage": 20,
+			"cooldown": 0.28,
+			"range": 380.0,
+			"color": Color(0.42, 0.88, 1.0),
 			"ranged": true
 		},
 		"abilities": [
 			{
-				"name": "Ribcage Bone Wall",
-				"kind": "wall",
-				"cooldown": 8.0,
+				"name": "Auto Machinegun",
+				"kind": "auto_machinegun",
+				"damage": 12,
+				"duration": 5.0,
+				"color": Color(0.35, 0.86, 1.0),
+				"desc": "Fire an automatic machinegun for 5 seconds."
+			},
+			{
+				"name": "Deploy Turret",
+				"kind": "deploy_turret",
+				"damage": 10,
+				"duration": 5.0,
+				"color": Color(0.48, 0.92, 1.0),
+				"desc": "Deploy a destructible turret for 5s (10%/shot, 1 shot/sec)."
+			},
+			{
+				"name": "Energy Shield",
+				"kind": "equip_shield",
 				"damage": 0,
-				"wall_hp": 230,
-				"duration": 5.8,
-				"color": Color(0.88, 0.88, 0.94),
-				"desc": "Raise a fortress wall of cursed skeleton bones."
-			},
-			{
-				"name": "Cursed Bone Axes",
-				"kind": "axe_volley",
-				"shots": 2,
-				"cooldown": 6.0,
-				"damage": 40,
-				"color": Color(0.95, 0.38, 0.22),
-				"desc": "Hurl twin cursed spinning skeletal executioner axes."
-			},
-			{
-				"name": "Crypt Shadow Teleport",
-				"kind": "teleport",
-				"cooldown": 7.0,
-				"damage": 22,
-				"color": Color(0.66, 0.72, 0.96),
-				"desc": "Reassemble instantaneously through shadows up to 260px."
+				"wall_hp": 100,
+				"duration": 6.0,
+				"color": Color(0.35, 0.85, 1.0),
+				"desc": "Equip a destructible personal energy shield."
 			}
 		],
 		"ultimate": {
-			"name": "Catacomb Skull Storm",
-			"kind": "ult_firestorm",
-			"cooldown": 22.0,
-			"damage": 40,
-			"color": Color(0.96, 0.34, 0.28),
-			"desc": "Unleash 6 exploding hellfire skulls across the battlefield."
+			"name": "Arm Fireball Barrage",
+			"kind": "ult_arm_fireballs",
+			"damage": 35,
+			"shots": 5,
+			"color": Color(1.0, 0.45, 0.20),
+			"desc": "Launch 5 fireball shots from both robotic arms."
 		}
 	},
-	# 14: Wraith // Spooky Ghost
+	# 14: Viper-X // Bio-Hazard Cyborg
 	{
 		"id": 14,
-		"agent_name": "Wraith",
-		"title": "Azure Flame Mage",
-		"role": "Spectral Phantom",
-		"accent": Color(0.70, 0.92, 1.0),
-		"base_weapon": {
-			"name": "Grim Reaper Scythe",
-			"style": "scythe",
-			"damage": 27,
-			"cooldown": 0.38,
-			"range": 124.0,
-			"color": Color(0.70, 0.94, 1.0),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Azure Spectral Wisps",
-				"kind": "ghost_wisps",
-				"shots": 3,
-				"cooldown": 5.5,
-				"damage": 25,
-				"color": Color(0.75, 0.94, 1.0),
-				"desc": "Unleash 3 homing azure flame wisps that track enemies."
-			},
-			{
-				"name": "Banshee Stun Wail",
-				"kind": "stun_aoe",
-				"cooldown": 8.0,
-				"damage": 24,
-				"stun": 1.8,
-				"color": Color(0.64, 0.90, 1.0),
-				"desc": "Release a spectral shriek freezing nearby foes for 1.8s."
-			},
-			{
-				"name": "Banshee Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 6.5,
-				"damage": 22,
-				"duration": 4.2,
-				"speed_mult": 1.85,
-				"stun": 1.8,
-				"radius": 175.0,
-				"color": Color(0.82, 0.96, 1.0),
-				"desc": "Throw a chilling azure Stun Bomb stunning enemies in its circle 1.8s."
-			}
-		],
-		"ultimate": {
-			"name": "Soul Harvest Vortex",
-			"kind": "ult_blink_slash",
-			"cooldown": 22.0,
-			"damage": 66,
-			"stun": 1.2,
-			"color": Color(0.60, 0.92, 1.0),
-			"desc": "Blink forward and reap everything with giant ghostly scythes."
-		}
-	},
-	# 15: Imhotep // Ancient Mummy
-	{
-		"id": 15,
-		"agent_name": "Imhotep",
-		"title": "Ancient Mummy",
-		"role": "Tomb Guardian",
-		"accent": Color(0.95, 0.78, 0.34),
-		"base_weapon": {
-			"name": "Pharaoh Khopesh Sword",
-			"style": "sword",
-			"damage": 24,
-			"cooldown": 0.34,
-			"range": 106.0,
-			"color": Color(0.95, 0.80, 0.32),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Mummy Wrap Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 22,
-				"stun": 2.0,
-				"color": Color(0.96, 0.88, 0.62),
-				"desc": "Throw a cursed Scarab Stun Bomb stunning enemies in its circle 2.0s."
-			},
-			{
-				"name": "Sandstone Obelisk Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
-				"damage": 0,
-				"wall_hp": 250,
-				"duration": 6.0,
-				"color": Color(0.90, 0.76, 0.44),
-				"desc": "Erect a desert sandstone obelisk wall."
-			},
-			{
-				"name": "Solar Scarab Fan",
-				"kind": "flame_wave",
-				"shots": 3,
-				"cooldown": 6.5,
-				"damage": 40,
-				"color": Color(1.0, 0.54, 0.16),
-				"desc": "Throw a blazing 3-orb desert sun-fire fan."
-			}
-		],
-		"ultimate": {
-			"name": "Curse of the Pharaoh",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 60,
-			"stun": 2.1,
-			"color": Color(1.0, 0.78, 0.24),
-			"desc": "Unleash an ancient tomb curse locking nearby foes 2.1s."
-		}
-	},
-	# 16: Aegis-7 // Cyber Robot
-	{
-		"id": 16,
-		"agent_name": "Aegis-7",
-		"title": "Cube Mech Robot",
-		"role": "Heavy Automaton",
-		"accent": Color(0.32, 0.94, 1.0),
-		"base_weapon": {
-			"name": "Plasma Greatsword",
-			"style": "greatsword",
-			"damage": 27,
-			"cooldown": 0.38,
-			"range": 120.0,
-			"color": Color(0.32, 0.94, 1.0),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Laser Gatling Burst",
-				"kind": "gun_burst",
-				"cooldown": 6.0,
-				"damage": 14,
-				"shots": 6,
-				"color": Color(0.28, 0.96, 1.0),
-				"desc": "Deploy arm-mounted laser cannons firing 6 plasma bolts."
-			},
-			{
-				"name": "Quantum Thruster Blink",
-				"kind": "teleport",
-				"cooldown": 6.5,
-				"damage": 22,
-				"color": Color(0.38, 0.94, 1.0),
-				"desc": "Quantum warp through space up to 260px."
-			},
-			{
-				"name": "Cryo-Shard Interceptor",
-				"kind": "ice_shards",
-				"shots": 4,
-				"cooldown": 8.5,
-				"damage": 14,
-				"wall_hp": 260,
-				"duration": 6.0,
-				"color": Color(0.28, 0.88, 1.0),
-				"desc": "Fire a 4-shard high-velocity holographic crystal spread."
-			}
-		],
-		"ultimate": {
-			"name": "Omega Orbital Cannon",
-			"kind": "ult_gun_storm",
-			"cooldown": 22.0,
-			"damage": 18,
-			"shots": 14,
-			"stun": 1.2,
-			"color": Color(0.32, 0.98, 1.0),
-			"desc": "Overload reactors with 14 staggering plasma laser blasts."
-		}
-	},
-	# 17: Viper-X // Bio-Hazard Cyborg
-	{
-		"id": 17,
 		"agent_name": "Viper-X",
 		"title": "Bio-Hazard Cyborg",
 		"role": "Bio Specialist",
-		"accent": Color(0.26, 0.96, 0.56),
+		"accent": Color(0.28, 0.96, 0.42),
 		"base_weapon": {
-			"name": "Venom Twin Daggers",
-			"style": "daggers",
-			"damage": 21,
-			"cooldown": 0.26,
-			"range": 94.0,
-			"color": Color(0.32, 0.98, 0.56),
+			"name": "Venom Injector Spear",
+			"style": "spear",
+			"damage": 23,
+			"cooldown": 0.34,
+			"range": 115.0,
+			"color": Color(0.36, 0.98, 0.48),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Chem-Flame Spray",
-				"kind": "flame_wave",
+				"name": "Poison Shot",
+				"kind": "poison_shot",
+				"damage": 30,
+				"duration": 4.0,
+				"color": Color(0.32, 0.96, 0.42),
+				"desc": "Fire a toxic venom shot that poisons the hit target."
+			},
+			{
+				"name": "Poison Gas",
+				"kind": "poison_gas",
+				"damage": 15,
+				"duration": 5.0,
+				"color": Color(0.42, 0.94, 0.32),
+				"desc": "Release a toxic gas cloud that poisons enemies inside."
+			},
+			{
+				"name": "Triple Snakes",
+				"kind": "snake_trio",
+				"damage": 20,
 				"shots": 3,
-				"cooldown": 6.0,
-				"damage": 40,
-				"color": Color(0.32, 0.96, 0.44),
-				"desc": "Launch a 3-stream pressurized toxic plasma fireball fan."
-			},
-			{
-				"name": "Bio-Containment Wall",
-				"kind": "wall",
-				"cooldown": 8.5,
-				"damage": 0,
-				"wall_hp": 240,
-				"duration": 5.8,
-				"color": Color(0.26, 0.88, 0.48),
-				"desc": "Deploy a bio-containment forcefield wall."
-			},
-			{
-				"name": "Overclock Speed Surge",
-				"kind": "speed",
-				"cooldown": 6.0,
-				"damage": 0,
-				"duration": 4.2,
-				"speed_mult": 1.85,
-				"color": Color(0.40, 1.0, 0.65),
-				"desc": "Inject adrenaline booster for hyper movement speed."
+				"duration": 5.0,
+				"color": Color(0.38, 0.95, 0.38),
+				"desc": "Spawn 3 small physics snakes one-by-one (20 dmg each)."
 			}
 		],
 		"ultimate": {
-			"name": "Neurotoxin Supernova",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 62,
-			"stun": 2.0,
-			"color": Color(0.28, 0.98, 0.52),
-			"desc": "Detonate a massive bio-cloud paralyzing nearby foes 2.0s."
+			"name": "Apex Viper",
+			"kind": "ult_giant_snake",
+			"damage": 100,
+			"duration": 4.0,
+			"color": Color(0.22, 1.0, 0.38),
+			"desc": "Spawn a giant viper (4s) that chases enemies and kills in 1 hit."
 		}
 	},
-	# 18: Nyx // Shadow Cat
+	# 15: Nyx // Shadow Cat
 	{
-		"id": 18,
+		"id": 15,
 		"agent_name": "Nyx",
 		"title": "Shadow Cat",
 		"role": "Feline Striker",
-		"accent": Color(1.0, 0.78, 0.28),
+		"accent": Color(0.98, 0.52, 0.88),
 		"base_weapon": {
-			"name": "Nightstalker Claws",
-			"style": "claws",
+			"name": "Panther Twin Claws",
+			"style": "sword",
 			"damage": 22,
-			"cooldown": 0.25,
-			"range": 96.0,
-			"color": Color(1.0, 0.82, 0.34),
+			"cooldown": 0.28,
+			"range": 102.0,
+			"color": Color(0.98, 0.62, 0.92),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Shadow Pounce Blink",
-				"kind": "teleport",
-				"cooldown": 5.5,
-				"damage": 24,
-				"color": Color(0.65, 0.45, 0.98),
-				"desc": "Teleport-pounce onto distant ledges or behind enemies."
-			},
-			{
-				"name": "Nine-Lives Hyper Speed",
+				"name": "Feline Haste",
 				"kind": "speed",
-				"cooldown": 6.0,
 				"damage": 0,
+				"duration": 5.0,
 				"speed_mult": 1.85,
-				"duration": 4.2,
-				"color": Color(1.0, 0.84, 0.32),
-				"desc": "Dash at blinding feline speed + heal 15 HP."
+				"color": Color(0.98, 0.56, 0.92),
+				"desc": "Boost movement speed dramatically for 5 seconds."
 			},
 			{
-				"name": "Golden Bell Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 22,
-				"stun": 1.6,
-				"color": Color(1.0, 0.88, 0.30),
-				"desc": "Throw a sonic Golden Bell Stun Bomb stunning enemies in its circle 1.6s."
+				"name": "Eagle Zoomout",
+				"kind": "zoom_out_4x",
+				"damage": 0,
+				"duration": 5.0,
+				"color": Color(0.75, 0.68, 1.0),
+				"desc": "Zoom camera out 4x for 5 seconds for full arena vision."
+			},
+			{
+				"name": "Shadow Dash",
+				"kind": "dash_speed",
+				"damage": 25,
+				"duration": 1.5,
+				"speed_mult": 1.75,
+				"color": Color(0.98, 0.48, 0.88),
+				"desc": "Fast dash towards your current aim direction."
 			}
 		],
 		"ultimate": {
-			"name": "Midnight Panther Flurry",
-			"kind": "ult_blink_slash",
-			"cooldown": 22.0,
-			"damage": 64,
-			"stun": 1.2,
-			"color": Color(1.0, 0.78, 0.26),
-			"desc": "Blink-slash with giant golden crescent claw waves."
+			"name": "Electric Laser Gun",
+			"kind": "ult_electric_laser",
+			"damage": 50,
+			"duration": 10.0,
+			"color": Color(0.45, 0.92, 1.0),
+			"desc": "Fire an electric laser gun for 10s (50% damage per second on touch)."
 		}
 	},
-	# 19: Ryu // Dragon Hero
+	# 16: Akuza // Dragon Hero
 	{
-		"id": 19,
-		"agent_name": "Ryu",
+		"id": 16,
+		"agent_name": "Akuza",
 		"title": "Dragon Hero",
 		"role": "Blade Hero",
-		"accent": Color(0.28, 0.94, 0.68),
+		"accent": Color(0.24, 0.94, 0.64),
 		"base_weapon": {
-			"name": "Dragonbuster Big Sword",
-			"style": "greatsword",
-			"damage": 28,
-			"cooldown": 0.36,
-			"range": 126.0,
-			"color": Color(0.32, 0.96, 0.72),
+			"name": "Dragon-Fang Saber",
+			"style": "sword",
+			"damage": 24,
+			"cooldown": 0.32,
+			"range": 108.0,
+			"color": Color(0.35, 0.98, 0.68),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Dragon Breath Fan",
-				"kind": "flame_wave",
-				"shots": 3,
-				"cooldown": 5.5,
-				"damage": 42,
+				"name": "Stun Bomb",
+				"kind": "stun_bomb",
+				"damage": 25,
+				"stun": 2.0,
+				"color": Color(0.98, 0.85, 0.25),
+				"desc": "Throw a stun bomb that stuns enemies in its blast circle."
+			},
+			{
+				"name": "Twin Fireballs",
+				"kind": "twin_fireballs",
+				"damage": 40,
+				"shots": 2,
 				"color": Color(1.0, 0.48, 0.16),
-				"desc": "Breathe a 3-fireball fan of searing emerald dragon flames."
+				"desc": "Throw 2 slow fireballs in sequence (40% damage each)."
 			},
 			{
-				"name": "Giant Blade Wave",
-				"kind": "cleave",
-				"cooldown": 5.5,
-				"damage": 48,
-				"color": Color(0.34, 0.98, 0.76),
-				"desc": "Slash with your big sword to fire a massive emerald wave."
-			},
-			{
-				"name": "Sky-Dragon Dash",
-				"kind": "dash_speed",
-				"cooldown": 6.0,
-				"damage": 20,
-				"duration": 4.0,
-				"speed_mult": 1.8,
-				"color": Color(0.45, 0.96, 0.72),
-				"desc": "Launch forward at dragon speed with a sword rush."
+				"name": "Dragon Flame Laser",
+				"kind": "dragon_laser",
+				"damage": 50,
+				"duration": 2.0,
+				"color": Color(1.0, 0.36, 0.12),
+				"desc": "Project a thick straight fire laser along aim for 2s (50%/sec)."
 			}
 		],
 		"ultimate": {
-			"name": "Bahamut Mega-Flare",
-			"kind": "ult_giant_sword",
-			"cooldown": 22.0,
-			"damage": 70,
-			"stun": 1.2,
-			"color": Color(0.32, 1.0, 0.72),
-			"desc": "Unleash 3 titanic dragon-fire greatsword beams."
+			"name": "Dragon Strike",
+			"kind": "ult_dragon_strike",
+			"damage": 100,
+			"color": Color(0.28, 1.0, 0.62),
+			"desc": "Summon a Dragon attack on nearby enemies for an instant kill."
 		}
 	},
-	# 20: Grom // Fierce Orc
+	# 17: Mirror Ogre // Fierce Orc
 	{
-		"id": 20,
-		"agent_name": "Grom",
+		"id": 17,
+		"agent_name": "Mirror Ogre",
 		"title": "Fierce Orc",
 		"role": "Ogre Warlord",
-		"accent": Color(0.78, 0.42, 0.96),
+		"accent": Color(0.76, 0.42, 0.96),
 		"base_weapon": {
-			"name": "Bloodtusk Giant Cleaver",
+			"name": "Orc Skull Crusher",
 			"style": "axe",
-			"damage": 30,
-			"cooldown": 0.42,
-			"range": 116.0,
-			"color": Color(0.90, 0.45, 0.98),
+			"damage": 26,
+			"cooldown": 0.36,
+			"range": 108.0,
+			"color": Color(0.84, 0.56, 1.0),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Warlord Throwing Axes",
-				"kind": "axe_volley",
-				"shots": 2,
-				"cooldown": 7.5,
-				"damage": 26,
-				"stun": 1.8,
-				"color": Color(0.84, 0.42, 1.0),
-				"desc": "Heave twin brutal spinning warlord throwing axes."
+				"name": "Banish Teleport",
+				"kind": "banish_enemy",
+				"damage": 10,
+				"color": Color(0.78, 0.45, 1.0),
+				"desc": "Teleport a nearby enemy to a random far spot on the map."
 			},
 			{
-				"name": "Skullcrusher Big Slash",
-				"kind": "cleave",
-				"cooldown": 5.5,
-				"damage": 50,
-				"color": Color(0.94, 0.36, 0.48),
-				"desc": "Heave a gigantic warlord cleaver shockwave."
+				"name": "Position Swap",
+				"kind": "swap_enemy",
+				"damage": 10,
+				"color": Color(0.65, 0.85, 1.0),
+				"desc": "Swap positions with the enemy fighting in front or behind you."
 			},
 			{
-				"name": "Warcry Shock Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 8.5,
-				"damage": 24,
-				"wall_hp": 260,
-				"duration": 6.0,
-				"stun": 1.8,
-				"radius": 175.0,
-				"color": Color(0.68, 0.42, 0.85),
-				"desc": "Throw a concussive shock Stun Bomb stunning enemies in its circle 1.8s."
+				"name": "Slow Rotating Axe",
+				"kind": "slow_spin_axe",
+				"damage": 45,
+				"duration": 5.0,
+				"color": Color(0.92, 0.68, 0.98),
+				"desc": "Throw a slow rotating axe that vanishes after 5 seconds."
 			}
 		],
 		"ultimate": {
-			"name": "Bloodlust Titan Slam",
-			"kind": "ult_giant_sword",
-			"cooldown": 22.0,
-			"damage": 68,
-			"stun": 1.5,
-			"color": Color(0.95, 0.34, 0.48),
-			"desc": "Hurl 3 colossal warlord cleaver waves that stun foes."
+			"name": "Mirror Clone",
+			"kind": "ult_mirror_clone",
+			"damage": 0,
+			"duration": 5.0,
+			"color": Color(0.82, 0.52, 1.0),
+			"desc": "Create a mirror clone of a nearby enemy (5s); damage to clone hits them."
 		}
 	},
-	# 21: Ignis // Magma Golem
+	# 18: Ignis // Magma Golem
 	{
-		"id": 21,
+		"id": 18,
 		"agent_name": "Ignis",
-		"title": "Crimson Flame Mage",
+		"title": "Magma Golem",
 		"role": "Lava Colossus",
-		"accent": Color(1.0, 0.44, 0.14),
+		"accent": Color(1.0, 0.42, 0.14),
 		"base_weapon": {
 			"name": "Volcanic Magma Hammer",
-			"style": "hammer",
-			"damage": 30,
-			"cooldown": 0.44,
-			"range": 114.0,
-			"color": Color(1.0, 0.48, 0.14),
+			"style": "axe",
+			"damage": 26,
+			"cooldown": 0.36,
+			"range": 108.0,
+			"color": Color(1.0, 0.52, 0.18),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Molten Magma Fireball",
-				"kind": "fireball",
-				"cooldown": 5.5,
-				"damage": 44,
-				"color": Color(1.0, 0.38, 0.12),
-				"desc": "Hurl a molten magma fireball that detonates in a fiery blast."
-			},
-			{
-				"name": "Scorching Flame Throw",
+				"name": "Triple Fire Shot",
 				"kind": "flame_wave",
 				"shots": 3,
-				"cooldown": 6.5,
-				"damage": 26,
-				"wall_hp": 280,
-				"duration": 6.0,
-				"color": Color(0.95, 0.42, 0.16),
-				"desc": "Throw a 3-fireball scorching flame fan across your aim."
+				"damage": 25,
+				"color": Color(1.0, 0.46, 0.14),
+				"desc": "Shoot 3 blazing fire shots along your aim."
 			},
 			{
-				"name": "Lava Geyser Stun Bomb",
-				"kind": "lava_bomb",
-				"cooldown": 7.5,
-				"damage": 28,
-				"stun": 1.8,
-				"color": Color(1.0, 0.58, 0.18),
-				"desc": "Throw a molten Lava Stun Bomb blasting and stunning enemies in its circle 1.6s."
+				"name": "Lava Platform",
+				"kind": "lava_platform",
+				"damage": 10,
+				"duration": 6.0,
+				"color": Color(1.0, 0.32, 0.08),
+				"desc": "Throw a fireball that sets a platform on fire (10% damage/sec)."
+			},
+			{
+				"name": "Rolling Magma Boulder",
+				"kind": "rolling_fireball",
+				"damage": 55,
+				"color": Color(1.0, 0.56, 0.16),
+				"desc": "Spawn a huge physics fireball that rolls forward."
 			}
 		],
 		"ultimate": {
-			"name": "Krakatoa Volcano Cataclysm",
-			"kind": "ult_firestorm",
-			"shots": 9,
-			"cooldown": 22.0,
-			"damage": 44,
-			"color": Color(1.0, 0.32, 0.08),
-			"desc": "Erupt 9 blazing magma fireballs raining destruction across the arena."
+			"name": "Inferno Ring",
+			"kind": "ult_inferno_ring",
+			"damage": 100,
+			"duration": 2.0,
+			"color": Color(1.0, 0.28, 0.06),
+			"desc": "Spawn full-circle fire over nearby enemies dealing 100% over 2s."
 		}
 	},
-	# 22: Prism // Crystal Golem
+	# 19: Prism // Crystal Golem
 	{
-		"id": 22,
+		"id": 19,
 		"agent_name": "Prism",
 		"title": "Crystal Golem",
 		"role": "Quartz Elemental",
-		"accent": Color(1.0, 0.56, 0.88),
+		"accent": Color(0.98, 0.44, 0.82),
 		"base_weapon": {
-			"name": "Diamond Crystal Lance",
-			"style": "spear",
-			"damage": 26,
-			"cooldown": 0.36,
-			"range": 122.0,
-			"color": Color(1.0, 0.60, 0.88),
+			"name": "Quartz Geode Mace",
+			"style": "axe",
+			"damage": 25,
+			"cooldown": 0.35,
+			"range": 106.0,
+			"color": Color(1.0, 0.58, 0.88),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Prismatic Shard Volley",
-				"kind": "ice_shards",
-				"shots": 4,
-				"cooldown": 8.0,
-				"damage": 14,
-				"wall_hp": 260,
-				"duration": 6.0,
-				"color": Color(1.0, 0.58, 0.86),
-				"desc": "Shoot a dazzling 4-bolt crystalline prism spread."
+				"name": "Meteor Boulder",
+				"kind": "meteor_boulder",
+				"damage": 60,
+				"color": Color(0.96, 0.52, 0.84),
+				"desc": "Throw a huge meteor stone larger than yourself for 60% damage."
 			},
 			{
-				"name": "Light-Beam Teleport",
-				"kind": "teleport",
-				"cooldown": 6.5,
-				"damage": 24,
-				"color": Color(1.0, 0.70, 0.94),
-				"desc": "Refract into pure light and teleport up to 260px."
+				"name": "Piercing Crystal Shot",
+				"kind": "piercing_crystal",
+				"damage": 40,
+				"color": Color(0.98, 0.65, 0.92),
+				"desc": "Fire a slow crystal shot that pierces players until hitting a wall."
 			},
 			{
-				"name": "Prism Flash Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 24,
-				"stun": 1.8,
-				"color": Color(1.0, 0.64, 0.94),
-				"desc": "Throw a blinding quartz Stun Bomb stunning enemies in its circle 1.8s."
+				"name": "Mini Prisms",
+				"kind": "mini_prisms",
+				"damage": 30,
+				"shots": 3,
+				"duration": 5.0,
+				"color": Color(1.0, 0.48, 0.86),
+				"desc": "Spawn mini prisms that chase nearby enemies for 5s."
 			}
 		],
 		"ultimate": {
-			"name": "Crystal Shatterstorm",
-			"kind": "ult_gun_storm",
-			"cooldown": 22.0,
-			"damage": 18,
-			"shots": 14,
-			"stun": 0.7,
-			"color": Color(1.0, 0.56, 0.88),
-			"desc": "Unleash 14 high-velocity prismatic shard beams."
+			"name": "Crystal Crush Walls",
+			"kind": "ult_crush_walls",
+			"damage": 100,
+			"color": Color(1.0, 0.36, 0.80),
+			"desc": "Spawn 2 giant crystal walls forward that smash enemies between them."
 		}
 	},
-	# 23: Zenyu // Tribal Monk
+	# 20: Afera // Tribal Monk
 	{
-		"id": 23,
-		"agent_name": "Zenyu",
+		"id": 20,
+		"agent_name": "Afera",
 		"title": "Tribal Monk",
 		"role": "Martial Master",
-		"accent": Color(0.98, 0.42, 0.28),
+		"accent": Color(1.0, 0.66, 0.24),
 		"base_weapon": {
-			"name": "Grandmaster Bo-Staff",
-			"style": "staff",
-			"damage": 25,
-			"cooldown": 0.31,
-			"range": 120.0,
-			"color": Color(0.95, 0.68, 0.36),
+			"name": "Iron-Shod Bo Staff",
+			"style": "spear",
+			"damage": 24,
+			"cooldown": 0.32,
+			"range": 116.0,
+			"color": Color(1.0, 0.74, 0.34),
 			"ranged": false
 		},
 		"abilities": [
 			{
-				"name": "Chi Spirit Fireball",
-				"kind": "fireball",
-				"cooldown": 5.5,
-				"damage": 40,
-				"color": Color(1.0, 0.56, 0.18),
-				"desc": "Focus inner chi into a blazing explosive fireball."
+				"name": "Twin Spears",
+				"kind": "spear_throw",
+				"shots": 2,
+				"damage": 30,
+				"color": Color(1.0, 0.72, 0.28),
+				"desc": "Throw 2 tribal spears along your aim direction."
 			},
 			{
-				"name": "Dim-Mak Stun Bomb",
-				"kind": "stun_bomb",
-				"cooldown": 7.5,
-				"damage": 24,
-				"stun": 2.0,
-				"color": Color(1.0, 0.84, 0.28),
-				"desc": "Throw a chi-charged Stun Bomb stunning enemies in its circle 2.0s."
+				"name": "Long Spear Thrust",
+				"kind": "long_spear",
+				"damage": 45,
+				"color": Color(1.0, 0.62, 0.22),
+				"desc": "Strike enemies at extended range with a long spear."
 			},
 			{
-				"name": "Wind-Step Teleport",
-				"kind": "teleport",
-				"cooldown": 6.0,
-				"damage": 24,
-				"color": Color(0.45, 0.94, 0.88),
-				"desc": "Instantaneously step across the wind up to 260px."
+				"name": "Bee Swarm",
+				"kind": "bee_swarm",
+				"damage": 15,
+				"shots": 5,
+				"duration": 7.0,
+				"color": Color(1.0, 0.86, 0.20),
+				"desc": "Throw a hive that spawns 5 roaming bees for 7s."
 			}
 		],
 		"ultimate": {
-			"name": "Thousand-Palm Nirvana",
-			"kind": "ult_stun_nova",
-			"cooldown": 22.0,
-			"damage": 64,
-			"stun": 2.0,
-			"color": Color(1.0, 0.78, 0.24),
-			"desc": "Radiate golden enlightenment blasting and stunning foes 2.0s."
+			"name": "Spear Impale",
+			"kind": "ult_spear_jump",
+			"damage": 100,
+			"color": Color(1.0, 0.52, 0.14),
+			"desc": "Jump forward and stab a nearby enemy for instant death."
 		}
 	},
-	# 24: Raven // Shadow Corvus
+	# 21: Raven // Shadow Corvus
 	{
-		"id": 24,
+		"id": 21,
 		"agent_name": "Raven",
 		"title": "Shadow Corvus",
 		"role": "Dark Mystic",
@@ -1464,13 +1179,14 @@ const AGENTS: Array[Dictionary] = [
 			"kind": "ult_backstab_tp",
 			"cooldown": 18.0,
 			"damage": 0,
+			"duration": 3.0,
 			"color": Color(0.62, 0.24, 0.95),
-			"desc": "Teleport directly behind the nearest enemy."
+			"desc": "Teleport behind the nearest enemy at a safe distance and turn invisible for 3s."
 		}
 	},
-	# 25: Ray Lina // Young Elf
+	# 22: Ray Lina // Young Elf
 	{
-		"id": 25,
+		"id": 22,
 		"agent_name": "Ray Lina",
 		"title": "Young Elf",
 		"role": "Adaptive Prodigy",
@@ -1518,8 +1234,61 @@ const AGENTS: Array[Dictionary] = [
 			"color": Color(0.38, 0.96, 0.64),
 			"desc": "Randomly rolled ultimate; steals victim's ultimate on kill."
 		}
+	},
+	# 23: Jackson // Heavyweight Boxer
+	{
+		"id": 23,
+		"agent_name": "Jackson",
+		"title": "Heavyweight Boxer",
+		"role": "Heavyweight Boxer",
+		"accent": Color(0.92, 0.22, 0.24),
+		"base_weapon": {
+			"name": "Championship Boxing Gloves",
+			"style": "sword",
+			"damage": 25,
+			"cooldown": 0.30,
+			"range": 102.0,
+			"color": Color(0.95, 0.25, 0.25),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Huge Boxy Punch",
+				"kind": "boxer_huge_punch",
+				"damage": 50,
+				"stun": 0.8,
+				"color": Color(0.96, 0.26, 0.22),
+				"desc": "Unleash a huge boxing punch that knocks enemies back and stuns."
+			},
+			{
+				"name": "Running Spear",
+				"kind": "running_spear",
+				"damage": 45,
+				"color": Color(0.98, 0.62, 0.18),
+				"desc": "Charge forward like a running spear along your aim direction."
+			},
+			{
+				"name": "Sky Smash Punch",
+				"kind": "sky_smash_punch",
+				"damage": 60,
+				"stun": 1.0,
+				"color": Color(0.95, 0.22, 0.28),
+				"desc": "Drop a giant fist from above onto a nearby enemy and smash them."
+			}
+		],
+		"ultimate": {
+			"name": "Knockout Flurry",
+			"kind": "ult_boxer_flurry",
+			"damage": 100,
+			"color": Color(1.0, 0.18, 0.18),
+			"desc": "Rush to a nearby enemy and beat them down with rapid punches till death."
+		}
 	}
 ]
+static func is_ray_lina(arch_id: int) -> bool:
+	return str(get_agent(arch_id).get("agent_name", "")) == "Ray Lina"
+
+
 static func get_agent(arch_id: int) -> Dictionary:
 	return AGENTS[clampi(arch_id, 0, AGENTS.size() - 1)]
 

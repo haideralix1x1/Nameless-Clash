@@ -45,13 +45,6 @@ func _draw_shoe(img: Image, pos: Vector2, angle: float) -> void:
 
 func _draw_frame(img: Image, f: int) -> void:
 	var ox: float = float(f * FW)
-	var ink := Color(0.08, 0.09, 0.12, 1.0)
-	var skin := Color(0.95, 0.74, 0.60, 1.0)
-	var shirt := Color(0.32, 0.56, 0.34, 1.0)
-	var pants := Color(0.24, 0.32, 0.24, 1.0)
-	var helmet := Color(0.36, 0.50, 0.30, 1.0)
-	var boot := Color(0.42, 0.24, 0.12, 1.0)
-
 	var bend: float = 0.0
 	var lift_leg: float = 0.0
 	var shoe_off: float = 0.0
@@ -59,48 +52,24 @@ func _draw_frame(img: Image, f: int) -> void:
 	if f <= 4:
 		bend = float(f) / 4.0
 		lift_leg = sin(bend * PI * 0.65) * 10.0
-		shoe_off = maxf(0.0, float(f - 2) * 3.5)
+		shoe_off = maxf(0.0, float(f - 2) * 4.0)
 	else:
 		arm_throw = float(f - 4) / 3.0
 
-	var hip := Vector2(ox + 48.0, 62.0 + bend * 4.0)
-	var torso_top := hip + Vector2(bend * 9.0 - arm_throw * 4.0, -20.0 + bend * 5.0)
-	var head_c := torso_top + Vector2(bend * 4.0, -14.0)
-
-	# Standing leg (left)
-	_line(img, hip + Vector2(-4, 0), Vector2(ox + 42.0, 82.0), 4.8, ink)
-	_line(img, hip + Vector2(-4, 0), Vector2(ox + 42.0, 82.0), 3.4, pants)
-	_dot(img, ox + 43.0, 84.0, 4.5, boot)
-
-	# Lifted leg (right) - pulling shoe off in frames 0..4
-	var foot_pos := Vector2(ox + 56.0 + bend * 4.0, 80.0 - lift_leg)
-	_line(img, hip + Vector2(4, 0), foot_pos, 4.8, ink)
-	_line(img, hip + Vector2(4, 0), foot_pos, 3.4, pants)
-	if f < 4:
-		_draw_shoe(img, foot_pos + Vector2(shoe_off, shoe_off * 0.4), -0.25 * bend)
-	else:
-		_dot(img, foot_pos.x, foot_pos.y, 3.2, Color(0.88, 0.88, 0.92))  # bare sock!
-
-	# Torso
-	_line(img, hip, torso_top, 11.0, ink)
-	_line(img, hip, torso_top, 9.2, shirt)
-
-	# Head + helmet
-	_dot(img, head_c.x, head_c.y, 12.0, ink)
-	_dot(img, head_c.x, head_c.y, 10.2, skin)
-	_dot(img, head_c.x, head_c.y - 5.0, 10.8, ink)
-	_dot(img, head_c.x, head_c.y - 5.0, 9.0, helmet)
-	_dot(img, head_c.x + 5.0, head_c.y - 1.0, 2.0, ink)
-
-	# Reaching / throwing arm + shoe in hand
-	var hand_pos: Vector2
+	# Draw ONLY the shoe overlay (no hardcoded soldier body!) so the player's actual character stays visible
+	var foot_pos := Vector2(ox + 56.0 + bend * 4.0, 78.0 - lift_leg)
 	if f <= 4:
-		hand_pos = torso_top.lerp(foot_pos + Vector2(shoe_off, 2.0), clampf(0.35 + bend * 0.65, 0.0, 1.0))
+		var shoe_pos := foot_pos + Vector2(shoe_off, -shoe_off * 0.8)
+		_draw_shoe(img, shoe_pos, -0.35 * bend)
+		if f >= 2:
+			# Small white sock peek on the lifted foot as the shoe comes off
+			_dot(img, foot_pos.x - 1.0, foot_pos.y + 1.0, 2.8, Color(0.92, 0.94, 0.98, 0.95))
 	else:
+		var torso_top := Vector2(ox + 50.0, 42.0)
 		var ang: float = lerpf(-2.1, 0.25, arm_throw)
-		hand_pos = torso_top + Vector2.from_angle(ang) * 18.0
+		var hand_pos := torso_top + Vector2.from_angle(ang) * 18.0
 		if f < 7:
 			_draw_shoe(img, hand_pos, ang + 0.5)
-	_line(img, torso_top + Vector2(3, 3), hand_pos, 4.2, ink)
-	_line(img, torso_top + Vector2(3, 3), hand_pos, 2.8, skin)
-	_dot(img, hand_pos.x, hand_pos.y, 3.8, skin)
+		else:
+			# Release speed lines on final frame
+			_line(img, hand_pos - Vector2(8, 2), hand_pos + Vector2(6, -2), 1.4, Color(1.0, 0.92, 0.65, 0.85))

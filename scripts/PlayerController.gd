@@ -121,8 +121,11 @@ const SHOE_COOLDOWN_SEC: float = 5.0
 const SHOE_WINDUP_SEC: float = 1.0
 
 # Agent Clash Mode state
-var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var ability_cooldowns: Array[float] = [0.0, 0.0, 0.0, 1.0]
 var ability_max_cooldowns: Array[float] = [6.0, 8.0, 8.5, 22.0]
+var ability_kill_progress: int = 0
+var _next_unlock_slot: int = 0
+var ult_points: int = 0
 var held_throwable_id: int = -1
 var held_throwables: Array[int] = []
 var shoe_cooldown_timer: float = 0.0
@@ -137,8 +140,43 @@ var thrown_by_team: int = -1
 var thrown_flight_timer: float = 0.0
 var _thrown_flight_elapsed: float = 0.0
 var stun_timer: float = 0.0
+var invis_timer: float = 0.0
 var speed_boost_timer: float = 0.0
 var speed_boost_mult: float = 1.0
+var control_lock_timer: float = 0.0
+var freeze_timer: float = 0.0
+var ability_lock_timer: float = 0.0
+var flashbang_timer: float = 0.0
+var invincible_timer: float = 0.0
+var damage_reduction_timer: float = 0.0
+var slow_mo_timer: float = 0.0
+var deathless_timer: float = 0.0
+var zoom_out_timer: float = 0.0
+var gradual_heal_timer: float = 0.0
+var _gradual_heal_accum: float = 0.0
+var boar_ride_timer: float = 0.0
+var _boar_hit_cooldowns: Dictionary = {}
+var dual_shotgun_timer: float = 0.0
+var dual_shotgun_shots: int = 0
+var auto_mg_timer: float = 0.0
+var _auto_mg_accum: float = 0.0
+var electric_laser_timer: float = 0.0
+var _electric_laser_accum: float = 0.0
+var personal_shield_hp: int = 0
+var personal_shield_timer: float = 0.0
+var slippery_timer: float = 0.0
+var earth_shake_timer: float = 0.0
+var poison_dot_timer: float = 0.0
+var _poison_dot_accum: float = 0.0
+var _poison_attacker_id: int = 0
+var _poison_attacker_name: String = ""
+var last_world_tap_pos: Vector2 = Vector2.ZERO
+var has_world_tap: bool = false
+var _laser_visual_timer: float = 0.0
+var _laser_visual_angle: float = 0.0
+var _laser_visual_color: Color = Color.ORANGE
+var _laser_visual_width: float = 22.0
+var _laser_visual_len: float = 520.0
 var _melee_swing_timer: float = 0.0
 var _agent_weapon_node: Node2D = null
 var _agent_hud_sync_accum: float = 0.0
@@ -239,8 +277,15 @@ func _ready() -> void:
 
 
 func _init_agent_kit() -> void:
-	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
-	if archetype_id == 25:
+	ability_kill_progress = 0
+	_next_unlock_slot = 0
+	if NetworkManager.is_unlimited_abilities_active():
+		ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+		ult_points = 4
+	else:
+		ability_cooldowns = [0.0, 0.0, 0.0, 1.0]
+		ult_points = 0
+	if AgentData.is_ray_lina(archetype_id):
 		_roll_ray_lina_random_kit()
 	else:
 		custom_ability_slots.clear()
@@ -248,10 +293,10 @@ func _init_agent_kit() -> void:
 		var abils: Array = ag["abilities"]
 		var ult: Dictionary = ag["ultimate"]
 		ability_max_cooldowns = [
-			float(abils[0]["cooldown"]),
-			float(abils[1]["cooldown"]),
-			float(abils[2]["cooldown"]),
-			float(ult["cooldown"])
+			float(abils[0].get("cooldown", 6.0)),
+			float(abils[1].get("cooldown", 6.0)),
+			float(abils[2].get("cooldown", 6.0)),
+			float(ult.get("cooldown", 18.0))
 		]
 	if _agent_weapon_node == null and is_instance_valid(_weapon_pivot):
 		var vis := AgentWeaponVisual.new()
@@ -272,30 +317,71 @@ func get_active_ability_slot(slot_idx: int) -> Dictionary:
 
 func _roll_ray_lina_random_kit() -> void:
 	custom_ability_slots.clear()
-	var pool_count: int = mini(25, AgentData.AGENTS.size() - 1)
+	var valid_ids: Array[int] = []
+	for idx in range(AgentData.AGENTS.size()):
+		if not AgentData.is_ray_lina(idx):
+			valid_ids.append(idx)
+	if valid_ids.is_empty():
+		valid_ids.append(0)
 	for slot_i in range(3):
-		var src_ag: Dictionary = AgentData.get_agent(randi() % pool_count)
+		var src_ag: Dictionary = AgentData.get_agent(valid_ids[randi() % valid_ids.size()])
 		var src_ab: Dictionary = (src_ag["abilities"][slot_i] as Dictionary).duplicate(true)
 		custom_ability_slots.append(src_ab)
-	var ult_ag: Dictionary = AgentData.get_agent(randi() % pool_count)
+	var ult_ag: Dictionary = AgentData.get_agent(valid_ids[randi() % valid_ids.size()])
 	custom_ability_slots.append((ult_ag["ultimate"] as Dictionary).duplicate(true))
 	ability_max_cooldowns = [
-		float(custom_ability_slots[0]["cooldown"]),
-		float(custom_ability_slots[1]["cooldown"]),
-		float(custom_ability_slots[2]["cooldown"]),
-		float(custom_ability_slots[3]["cooldown"])
+		float(custom_ability_slots[0].get("cooldown", 6.0)),
+		float(custom_ability_slots[1].get("cooldown", 6.0)),
+		float(custom_ability_slots[2].get("cooldown", 6.0)),
+		float(custom_ability_slots[3].get("cooldown", 18.0))
 	]
 
 
+func _grant_ability_or_ult_reward() -> void:
+	for offset in range(3):
+		var candidate: int = (_next_unlock_slot + offset) % 3
+		if ability_cooldowns[candidate] > 0.0:
+			ability_cooldowns[candidate] = 0.0
+			_next_unlock_slot = (candidate + 1) % 3
+			return
+	ult_points = mini(4, ult_points + 1)
+	if ult_points >= 4:
+		ability_cooldowns[3] = 0.0
+
+
+func can_collect_ult_point() -> bool:
+	return NetworkManager.is_agent_clash_mode() and not is_dead and ult_points < 4
+
+
+func collect_ult_point() -> void:
+	if not can_collect_ult_point():
+		return
+	ult_points = mini(4, ult_points + 1)
+	if ult_points >= 4:
+		ability_cooldowns[3] = 0.0
+	_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 1.2)
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+
 func _on_kill_scored(killer_id: int, victim_id: int) -> void:
-	if archetype_id != 25 or killer_id != peer_id or victim_id == peer_id:
+	if killer_id != peer_id or victim_id == peer_id:
+		return
+	if NetworkManager.is_agent_clash_mode():
+		ability_kill_progress += 1
+		if ability_kill_progress >= 2:
+			ability_kill_progress = 0
+			_grant_ability_or_ult_reward()
+		if is_local_human:
+			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+	if not AgentData.is_ray_lina(archetype_id):
 		return
 	var victim_arch: int = -1
 	for p in get_tree().get_nodes_in_group("players"):
 		if is_instance_valid(p) and int(p.get("peer_id")) == victim_id:
 			victim_arch = int(p.get("archetype_id"))
 			break
-	if victim_arch < 0 or victim_arch == 25:
+	if victim_arch < 0 or AgentData.is_ray_lina(victim_arch):
 		return
 	var ag: Dictionary = AgentData.get_agent(victim_arch)
 	custom_ability_slots = [
@@ -304,12 +390,12 @@ func _on_kill_scored(killer_id: int, victim_id: int) -> void:
 		(ag["abilities"][2] as Dictionary).duplicate(true),
 		(ag["ultimate"] as Dictionary).duplicate(true)
 	]
-	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	ability_cooldowns = [0.0, 0.0, 0.0, 0.0 if ult_points >= 4 else 1.0]
 	ability_max_cooldowns = [
-		float(custom_ability_slots[0]["cooldown"]),
-		float(custom_ability_slots[1]["cooldown"]),
-		float(custom_ability_slots[2]["cooldown"]),
-		float(custom_ability_slots[3]["cooldown"])
+		float(custom_ability_slots[0].get("cooldown", 6.0)),
+		float(custom_ability_slots[1].get("cooldown", 6.0)),
+		float(custom_ability_slots[2].get("cooldown", 6.0)),
+		float(custom_ability_slots[3].get("cooldown", 18.0))
 	]
 	if is_local_human:
 		agent_abilities_changed.emit()
@@ -340,6 +426,26 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 
 func _apply_modular_textures() -> void:
 	if not is_node_ready() or _modular_rig == null:
+		return
+	if NetworkManager.is_agent_clash_mode():
+		var ag_id: int = clampi(archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
+		var arch: Dictionary = ProfileManager.ARCHETYPES[ag_id]
+		var parts: Dictionary = arch.get("parts", {})
+		var base_part: int = ProfileManager.get_archetype_part_id(ag_id)
+		_modular_rig.apply_loadout({
+			"archetype": ag_id,
+			"skin_id": int(parts.get("skin", base_part)),
+			"head_id": int(parts.get("head", base_part)),
+			"torso_id": int(parts.get("torso", base_part)),
+			"legs_id": int(parts.get("legs", base_part)),
+			"hands_id": int(parts.get("hands", base_part)),
+			"accessories_id": int(parts.get("acc", base_part)),
+			"shirt_color": arch.get("shirt", Color.WHITE),
+			"pants_color": arch.get("pants", Color.WHITE),
+			"skin_color": arch.get("skin", Color.WHITE),
+			"helmet_color": arch.get("helmet", Color.WHITE),
+			"gear_color": arch.get("gear", Color.WHITE),
+		})
 		return
 	_modular_rig.apply_loadout({
 		"archetype": archetype_id,
@@ -394,12 +500,42 @@ func _physics_process(delta: float) -> void:
 		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
 	if reverse_controls_timer > 0.0:
 		reverse_controls_timer = maxf(0.0, reverse_controls_timer - delta)
+	if invis_timer > 0.0:
+		invis_timer = maxf(0.0, invis_timer - delta)
+	if control_lock_timer > 0.0:
+		control_lock_timer = maxf(0.0, control_lock_timer - delta)
+	if freeze_timer > 0.0:
+		freeze_timer = maxf(0.0, freeze_timer - delta)
+	if ability_lock_timer > 0.0:
+		ability_lock_timer = maxf(0.0, ability_lock_timer - delta)
+	if flashbang_timer > 0.0:
+		flashbang_timer = maxf(0.0, flashbang_timer - delta)
+	if invincible_timer > 0.0:
+		invincible_timer = maxf(0.0, invincible_timer - delta)
+	if damage_reduction_timer > 0.0:
+		damage_reduction_timer = maxf(0.0, damage_reduction_timer - delta)
+	if slow_mo_timer > 0.0:
+		slow_mo_timer = maxf(0.0, slow_mo_timer - delta)
+	if deathless_timer > 0.0:
+		deathless_timer = maxf(0.0, deathless_timer - delta)
+	if zoom_out_timer > 0.0:
+		zoom_out_timer = maxf(0.0, zoom_out_timer - delta)
+	if slippery_timer > 0.0:
+		slippery_timer = maxf(0.0, slippery_timer - delta)
+	if earth_shake_timer > 0.0:
+		earth_shake_timer = maxf(0.0, earth_shake_timer - delta)
+		if is_local_human:
+			add_screen_shake(2.6)
+	if _laser_visual_timer > 0.0:
+		_laser_visual_timer = maxf(0.0, _laser_visual_timer - delta)
+		queue_redraw()
 
 	if _shake_amount > 0.0:
 		_shake_amount = maxf(0.0, _shake_amount - delta * 18.0)
 	if is_local_human and is_instance_valid(_camera):
 		var s: float = _shake_amount * SettingsManager.screen_shake_intensity
-		var target_off: Vector2 = Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO
+		var base_off := Vector2(0.0, 24.0)
+		var target_off: Vector2 = base_off + (Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO)
 		_camera.offset = _camera.offset.lerp(target_off, 0.45)
 		var target_zoom_val: float = get_target_camera_zoom()
 		var target_zoom := Vector2(target_zoom_val, target_zoom_val)
@@ -456,9 +592,6 @@ func _process_alive(delta: float) -> void:
 				_throw_item_local(DEFAULT_SHOE_ITEM_ID, safe_m, aim_angle)
 
 	if NetworkManager.is_agent_clash_mode():
-		for i in range(4):
-			if ability_cooldowns[i] > 0.0:
-				ability_cooldowns[i] = maxf(0.0, ability_cooldowns[i] - delta)
 		if stun_timer > 0.0:
 			stun_timer = maxf(0.0, stun_timer - delta)
 		if _grab_cooldown > 0.0:
@@ -467,6 +600,7 @@ func _process_alive(delta: float) -> void:
 			speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
 			if speed_boost_timer <= 0.0:
 				speed_boost_mult = 1.0
+		_tick_agent_buffs_and_dots(delta)
 		_agent_hud_sync_accum += delta
 		if is_local_human and _agent_hud_sync_accum >= 0.08:
 			_agent_hud_sync_accum = 0.0
@@ -484,6 +618,18 @@ func _process_alive(delta: float) -> void:
 				global_position = carrier.global_position + Vector2(0.0, -48.0)
 				velocity = Vector2.ZERO
 				is_jetpacking = false
+				var want_punch: bool = false
+				if is_local_human:
+					want_punch = Input.is_action_pressed("fire") or virtual_fire
+				elif is_bot:
+					want_punch = true
+				if want_punch and _fire_cooldown <= 0.0 and stun_timer <= 0.0:
+					_fire_cooldown = 0.75 if is_bot else 0.42
+					_melee_swing_timer = 0.22
+					if carrier.has_method("apply_hit"):
+						carrier.apply_hit(18, peer_id, "Escape Punch", player_name, Vector2(0.0, -40.0))
+					_spawn_vfx_burst(carrier.global_position + Vector2(0.0, -18.0), 32.0, Color(1.0, 0.82, 0.28))
+					_play_local_sfx("res://assets/audio/hit.wav", -2.0, 1.15)
 				return
 
 		if grabbed_player_id != 0:
@@ -535,7 +681,7 @@ func _process_alive(delta: float) -> void:
 	var want_jet: bool = false
 	var want_fire: bool = false
 
-	var is_stunned: bool = NetworkManager.is_agent_clash_mode() and stun_timer > 0.0
+	var is_stunned: bool = NetworkManager.is_agent_clash_mode() and (stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0)
 
 	if is_bot:
 		var bot_cmd: Dictionary = _compute_bot_input(delta)
@@ -568,9 +714,17 @@ func _process_alive(delta: float) -> void:
 		var hold_jump_midair: bool = Input.is_action_pressed("jump") and not is_on_floor() and velocity.y > -60.0
 		want_jet = Input.is_action_pressed("jetpack") or hold_jump_midair or virtual_jetpack or (stick_y < -0.45)
 
+		var is_mobile_touch: bool = OS.has_feature("mobile") or OS.get_name() == "Android"
 		if virtual_aim.length() > 0.15:
 			var aim_vec := Vector2(virtual_aim.x, -virtual_aim.y if SettingsManager.invert_y_axis else virtual_aim.y)
 			aim_angle = aim_vec.angle()
+		elif is_mobile_touch:
+			if move_dir > 0.05:
+				aim_angle = 0.0
+			elif move_dir < -0.05:
+				aim_angle = PI
+			else:
+				aim_angle = 0.0 if facing_right else PI
 		else:
 			var mouse_delta: Vector2 = get_global_mouse_position() - _weapon_pivot.global_position
 			if SettingsManager.invert_y_axis:
@@ -587,7 +741,7 @@ func _process_alive(delta: float) -> void:
 			want_crouch = tmp_j
 			aim_angle = wrapf(aim_angle + PI, -PI, PI)
 
-		want_fire = virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui)
+		want_fire = virtual_fire if is_mobile_touch else (virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui))
 
 		if NetworkManager.is_agent_clash_mode():
 			if Input.is_action_just_pressed("ability_1"):
@@ -625,17 +779,25 @@ func _process_alive(delta: float) -> void:
 	var speed_mult: float = 1.0 if NetworkManager.is_agent_clash_mode() else (_weapon.move_speed_multiplier if _weapon != null else 1.0)
 	if NetworkManager.is_agent_clash_mode() and speed_boost_timer > 0.0:
 		speed_mult *= speed_boost_mult
+	if boar_ride_timer > 0.0:
+		speed_mult *= 1.68
+	if slow_mo_timer > 0.0:
+		speed_mult *= 0.30
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		speed_mult *= (0.72 if bot_diff == 0 else (0.86 if bot_diff == 1 else 1.0))
 	var target_speed: float = (CROUCH_SPEED if is_crouching else MOVE_SPEED) * speed_mult * move_dir
 	var accel: float = GROUND_ACCEL if is_on_floor() else AIR_ACCEL
+	var fric: float = FRICTION if is_on_floor() else AIR_ACCEL * 0.45
+	if slippery_timer > 0.0 and is_on_floor():
+		accel *= 0.25
+		fric *= 0.08
 	if is_stunned:
 		velocity.x = move_toward(velocity.x, 0.0, FRICTION * 2.5 * delta)
 	elif absf(move_dir) > 0.05:
 		velocity.x = move_toward(velocity.x, target_speed, accel * delta)
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, (FRICTION if is_on_floor() else AIR_ACCEL * 0.45) * delta)
+		velocity.x = move_toward(velocity.x, 0.0, fric * delta)
 
 	if want_jump:
 		if is_on_floor():
@@ -704,6 +866,8 @@ func _apply_auto_aim_assist(raw_angle: float) -> float:
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
 		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		if float(node.get("invis_timer")) > 0.0:
 			continue
 		var delta_v: Vector2 = node.global_position - _weapon_pivot.global_position
 		if delta_v.length() > 700.0:
@@ -986,6 +1150,8 @@ func get_max_zoom_level() -> int:
 
 
 func get_target_camera_zoom() -> float:
+	if zoom_out_timer > 0.0:
+		return 0.28
 	if NetworkManager.is_agent_clash_mode() or is_dead or _weapon == null:
 		return 1.05
 	var lvl: int = clampi(current_zoom_level, 1, get_max_zoom_level())
@@ -1132,6 +1298,20 @@ func request_damage_rpc(dmg: int, attacker_id: int, weapon_name: String, attacke
 func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, attacker_name: String, knockback: Vector2) -> void:
 	if is_dead or spawn_invuln_timer > 0.0:
 		return
+	if NetworkManager.is_agent_clash_mode():
+		if attacker_id == peer_id:
+			return
+		if invincible_timer > 0.0 or (invis_timer > 0.0 and str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Tiny Taz"):
+			return
+		if personal_shield_hp > 0 and personal_shield_timer > 0.0:
+			var absorbed: int = mini(personal_shield_hp, dmg)
+			personal_shield_hp -= absorbed
+			dmg -= absorbed
+			if dmg <= 0:
+				_play_local_sfx("res://assets/audio/hit.wav", -5.0, 1.5)
+				return
+		if damage_reduction_timer > 0.0:
+			dmg = maxi(1, int(round(float(dmg) * 0.5)))
 	_hit_flash_timer = 0.12
 	_play_local_sfx("res://assets/audio/hit.wav", -3.0)
 	if SettingsManager.enhanced_visuals:
@@ -1145,7 +1325,10 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 		return
 
 	velocity += knockback
-	health = maxi(0, health - dmg)
+	if deathless_timer > 0.0:
+		health = maxi(1, health - dmg)
+	else:
+		health = maxi(0, health - dmg)
 	if is_local_human:
 		health_changed.emit(health, max_health)
 
@@ -1160,8 +1343,29 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	is_jetpacking = false
 	is_reloading = false
 	stun_timer = 0.0
+	invis_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	control_lock_timer = 0.0
+	freeze_timer = 0.0
+	ability_lock_timer = 0.0
+	flashbang_timer = 0.0
+	invincible_timer = 0.0
+	damage_reduction_timer = 0.0
+	slow_mo_timer = 0.0
+	deathless_timer = 0.0
+	zoom_out_timer = 0.0
+	gradual_heal_timer = 0.0
+	boar_ride_timer = 0.0
+	dual_shotgun_timer = 0.0
+	dual_shotgun_shots = 0
+	auto_mg_timer = 0.0
+	electric_laser_timer = 0.0
+	personal_shield_hp = 0
+	personal_shield_timer = 0.0
+	slippery_timer = 0.0
+	earth_shake_timer = 0.0
+	poison_dot_timer = 0.0
 	_release_grab_state()
 	_respawn_timer = RESPAWN_TIME
 	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name)
@@ -1183,6 +1387,8 @@ func announce_death_rpc() -> void:
 func _on_death_visuals() -> void:
 	is_dead = true
 	_weapon_pivot.visible = false
+	if is_instance_valid(_modular_rig):
+		_modular_rig.stop_shoe_throw()
 	_jetpack_particles.emitting = false
 	var parent_node: Node = get_parent()
 	if parent_node != null:
@@ -1205,14 +1411,39 @@ func _respawn_self() -> void:
 	is_dead = false
 	is_reloading = false
 	stun_timer = 0.0
+	invis_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	control_lock_timer = 0.0
+	freeze_timer = 0.0
+	ability_lock_timer = 0.0
+	flashbang_timer = 0.0
+	invincible_timer = 0.0
+	damage_reduction_timer = 0.0
+	slow_mo_timer = 0.0
+	deathless_timer = 0.0
+	zoom_out_timer = 0.0
+	gradual_heal_timer = 0.0
+	boar_ride_timer = 0.0
+	dual_shotgun_timer = 0.0
+	dual_shotgun_shots = 0
+	auto_mg_timer = 0.0
+	electric_laser_timer = 0.0
+	personal_shield_hp = 0
+	personal_shield_timer = 0.0
+	slippery_timer = 0.0
+	earth_shake_timer = 0.0
+	poison_dot_timer = 0.0
 	held_throwable_id = -1
 	held_throwables.clear()
 	shoe_cooldown_timer = 0.0
 	_shoe_windup_timer = 0.0
 	_release_grab_state()
-	ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	if NetworkManager.is_unlimited_abilities_active():
+		ult_points = 4
+		ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	else:
+		ability_cooldowns[3] = 0.0 if ult_points >= 4 else 1.0
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
 	current_ammo = _weapon.mag_size
 	spawn_invuln_timer = SPAWN_INVULN_SEC
@@ -1278,7 +1509,14 @@ func _update_visual_state(delta: float) -> void:
 	else:
 		_modular_rig.modulate = Color.WHITE
 
-	_weapon_pivot.visible = not is_dead
+	if invis_timer > 0.0 and not is_dead:
+		var invis_alpha: float = 0.28 if is_local_human else 0.0
+		_modular_rig.modulate.a = invis_alpha
+		_weapon_pivot.visible = is_local_human
+		_weapon_pivot.modulate.a = invis_alpha
+	else:
+		_weapon_pivot.visible = not is_dead
+		_weapon_pivot.modulate.a = 1.0
 	_weapon_pivot.position.y = 9.0 if is_crouching else 6.0
 	var swing_offset: float = 0.0
 	if NetworkManager.is_agent_clash_mode() and _melee_swing_timer > 0.0:
@@ -1312,7 +1550,7 @@ func _apply_team_visuals() -> void:
 
 
 func _update_overhead_ui() -> void:
-	_overhead_ui.visible = not is_dead
+	_overhead_ui.visible = (not is_dead) and (invis_timer <= 0.0 or is_local_human)
 	_name_label.visible = SettingsManager.show_callsigns
 	if NetworkManager.is_agent_clash_mode() and carried_by_peer_id != 0:
 		_name_label.text = "✋ GRABBED!"
@@ -1357,7 +1595,7 @@ func _emit_ammo() -> void:
 
 func _play_local_sfx(path: String, volume_db_offset: float = 0.0, pitch_override: float = 0.0) -> void:
 	var stream: AudioStream = load(path) as AudioStream
-	if stream != null:
+	if stream != null and is_instance_valid(_audio_sfx):
 		_audio_sfx.stream = stream
 		_audio_sfx.volume_db = volume_db_offset
 		_audio_sfx.pitch_scale = pitch_override if pitch_override > 0.0 else randf_range(0.94, 1.06)
@@ -1411,6 +1649,8 @@ func _compute_bot_input(delta: float) -> Dictionary:
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
 		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		if float(node.get("invis_timer")) > 0.0:
 			continue
 		var d: float = global_position.distance_to(node.global_position)
 		if d < nearest_dist:
@@ -1547,17 +1787,29 @@ func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 
 
-func gain_ult_charge(seconds_reduced: float) -> void:
-	if NetworkManager.is_agent_clash_mode():
-		ability_cooldowns[3] = maxf(0.0, ability_cooldowns[3] - seconds_reduced)
+func gain_ult_charge(_seconds_reduced: float) -> void:
+	pass
 
 
 func _fire_agent_base_weapon() -> void:
+	if dual_shotgun_timer > 0.0 and dual_shotgun_shots > 0:
+		dual_shotgun_shots -= 1
+		if dual_shotgun_shots <= 0:
+			dual_shotgun_timer = 0.0
+		_fire_cooldown = 0.28
+		_melee_swing_timer = 0.20
+		_fire_anim_timer = 0.16
+		var safe_ds: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+		_cast_gun_burst(safe_ds, aim_angle, 25, 6, 16.0, Color(1.0, 0.55, 0.22), "Dual Shotguns", 0.0, 960.0, _is_controlled_locally(), 0.04)
+		_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0)
+		return
 	var ag: Dictionary = AgentData.get_agent(archetype_id)
 	var bw: Dictionary = ag["base_weapon"]
 	var cd: float = float(bw["cooldown"])
 	if speed_boost_timer > 0.0:
 		cd *= 0.72
+	if slow_mo_timer > 0.0:
+		cd *= 1.65
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		cd *= (1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0))
@@ -1565,7 +1817,7 @@ func _fire_agent_base_weapon() -> void:
 	_melee_swing_timer = 0.22
 	_fire_anim_timer = 0.16
 
-	var dmg: int = int(bw["damage"])
+	var dmg: int = int(bw["damage"]) * (2 if deathless_timer > 0.0 else 1)
 	var col: Color = bw["color"] as Color
 	var w_label: String = str(bw["name"])
 	if bool(bw["ranged"]):
@@ -1601,11 +1853,20 @@ func spawn_slash_vfx_rpc(origin: Vector2, angle: float, col: Color) -> void:
 
 
 func use_agent_ability(slot_idx: int) -> void:
-	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0:
+	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0 or ability_lock_timer > 0.0:
 		return
 	if slot_idx < 0 or slot_idx > 3 or ability_cooldowns[slot_idx] > 0.0:
 		return
-	ability_cooldowns[slot_idx] = ability_max_cooldowns[slot_idx]
+	if NetworkManager.is_unlimited_abilities_active():
+		ult_points = 4
+		ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
+	elif slot_idx == 3:
+		if ult_points < 4:
+			return
+		ult_points = 0
+		ability_cooldowns[3] = 1.0
+	else:
+		ability_cooldowns[slot_idx] = 1.0
 	if is_local_human:
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	if NetworkManager.is_network_active():
@@ -1732,6 +1993,448 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_cast_backstab_teleport(cast_pos, dmg, col, ab_name, local_auth)
 			add_screen_shake(2.0)
 			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.3)
+		"impact_grenade":
+			_cast_multi_proj(origin, cast_angle, dmg, 1, 0.0, "grenade", col, ab_name, stun_dur, 880.0, 26.0, false, local_auth, 1.6, 1.4, true, 145.0)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.15)
+		"ult_homing_bazooka":
+			var bz := _spawn_custom_bullet(origin, cast_angle, 820.0, dmg, "fireball", col, ab_name, 0.0, 0.0, true, 2.5, local_auth)
+			if bz != null:
+				bz.is_explosive = true
+				bz.explosion_radius = 165.0
+				bz.homing_turn_rate = 6.5
+			add_screen_shake(2.5)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -1.0, 0.85)
+		"hook_drag":
+			var hk := _spawn_custom_bullet(origin, cast_angle, 1180.0, dmg, "thrown_spear", col, ab_name, 0.3, 0.0, false, 1.1, local_auth)
+			if hk != null:
+				hk.on_hit_effect_kind = "hook_drag"
+				hk.boomerang_owner = self
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 1.2)
+		"flash_bird":
+			_spawn_summon("flash_bird", origin, dmg, 5.0, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.4)
+		"gradual_heal":
+			gradual_heal_timer = float(ab.get("duration", 4.0))
+			_gradual_heal_accum = 0.0
+			_spawn_vfx_burst(cast_pos, 72.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.1)
+		"ult_winged_lion":
+			_spawn_summon("winged_lion", origin, dmg, float(ab.get("duration", 4.0)), col, ab_name, local_auth)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.1)
+		"dual_shotguns":
+			dual_shotgun_timer = float(ab.get("duration", 4.0))
+			dual_shotgun_shots = int(ab.get("shots", 5))
+			_spawn_vfx_burst(cast_pos, 55.0, col)
+			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -2.0, 1.25)
+		"sticky_bomb":
+			_cast_multi_proj(origin, cast_angle, dmg, 1, 0.0, "grenade", col, ab_name, 0.4, 820.0, 22.0, false, local_auth, 1.8, 1.3, true, 165.0)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.2)
+		"bouncing_chainsaw":
+			var cs := _spawn_custom_bullet(origin, cast_angle, 760.0, dmg, "shuriken", col, ab_name, 0.0, 0.0, false, float(ab.get("duration", 5.0)), local_auth)
+			if cs != null:
+				cs.wall_bounces_left = 10
+				cs.spin_speed = 24.0
+				cs.radius_scale = 1.45
+			_play_local_sfx("res://assets/audio/shoot_smg.wav", -2.0, 0.75)
+		"ult_self_blast":
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(cast_pos) <= 270.0 and p.has_method("apply_hit"):
+							p.apply_hit(dmg, peer_id, ab_name, player_name, ((p as Node2D).global_position - cast_pos).normalized() * 600.0)
+			_spawn_vfx_burst(cast_pos, 270.0, col)
+			add_screen_shake(2.8)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
+		"push_circle", "scream_wave":
+			var rad: float = 240.0 if kind == "push_circle" else 220.0
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(cast_pos) <= rad and p.has_method("apply_hit"):
+							var push_d: Vector2 = ((p as Node2D).global_position - cast_pos).normalized()
+							if push_d.length_squared() < 0.01:
+								push_d = Vector2.from_angle(cast_angle)
+							p.apply_hit(dmg, peer_id, ab_name, player_name, push_d * 780.0 + Vector2(0.0, -220.0))
+							if stun_dur > 0.0 and p.has_method("apply_stun"):
+								p.apply_stun(stun_dur, peer_id)
+			_spawn_vfx_burst(cast_pos, rad, col)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.35)
+		"ability_lock_smoke":
+			var sm := _spawn_custom_bullet(origin, cast_angle, 860.0, dmg, "smoke_orb", col, ab_name, 0.0, 0.0, false, 1.3, local_auth)
+			if sm != null:
+				sm.status_effect_name = "ability_lock"
+				sm.status_effect_dur = float(ab.get("duration", 4.0))
+				sm.on_hit_effect_kind = "ability_lock_aoe"
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.2)
+		"ghost_clones":
+			var dur_c: float = float(ab.get("duration", 4.0))
+			_spawn_summon("ghost_clone", cast_pos + Vector2(-46, 0), 0, dur_c, col, ab_name, local_auth, -1.0)
+			_spawn_summon("ghost_clone", cast_pos + Vector2(46, 0), 0, dur_c, col, ab_name, local_auth, 1.0)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.25)
+		"ult_ghost_stealth":
+			invis_timer = float(ab.get("duration", 7.0))
+			invincible_timer = float(ab.get("duration", 7.0))
+			_spawn_vfx_burst(cast_pos, 90.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.85)
+		"freeze_shot":
+			var fz := _spawn_custom_bullet(origin, cast_angle, 1020.0, dmg, "ice_shard", col, ab_name, 0.0, 0.0, false, 1.4, local_auth)
+			if fz != null:
+				fz.status_effect_name = "freeze"
+				fz.status_effect_dur = float(ab.get("duration", 3.0))
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.35)
+		"ice_platform":
+			var ib := _spawn_custom_bullet(origin, cast_angle, 880.0, dmg, "ice_shard", col, ab_name, 0.0, 18.0, false, 1.4, local_auth)
+			if ib != null:
+				ib.on_hit_effect_kind = "ice_platform"
+				ib.status_effect_dur = float(ab.get("duration", 5.0))
+				ib.radius_scale = 1.4
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.1)
+		"frost_gas", "poison_gas":
+			_spawn_hazard_zone(kind, cast_pos, float(ab.get("duration", 5.0)), 145.0, dmg, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.3)
+		"ult_cryo_shatter":
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(cast_pos) <= 230.0:
+							if p.has_method("apply_status"):
+								p.apply_status("freeze", 1.2)
+							if p.has_method("apply_hit"):
+								p.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+			_spawn_vfx_burst(cast_pos, 230.0, col)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.25)
+		"boar_ride":
+			boar_ride_timer = float(ab.get("duration", 4.0))
+			_boar_hit_cooldowns.clear()
+			_spawn_vfx_burst(cast_pos, 75.0, col)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.75)
+		"boomerang_axe":
+			var spawn_p: Vector2 = cast_pos + Vector2.from_angle(cast_angle) * 320.0
+			var bax := _spawn_custom_bullet(spawn_p, cast_angle + PI, 760.0, dmg, "thrown_axe", col, ab_name, 0.0, 0.0, false, 1.4, local_auth)
+			if bax != null:
+				bax.boomerang_owner = self
+				bax.boomerang_return_time = 0.01
+				bax.spin_speed = 18.0
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.85)
+		"barbarian_squad":
+			for bi in range(3):
+				_spawn_summon("barbarian", origin + Vector2(float(bi - 1) * 26.0, -8.0), dmg, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.8)
+		"ult_earth_quake_zone":
+			var tgt_ez: Node2D = _find_nearest_enemy_player(cast_pos, 900.0)
+			var ez_pos: Vector2 = tgt_ez.global_position if tgt_ez != null else (cast_pos + Vector2.from_angle(cast_angle) * 200.0)
+			_spawn_hazard_zone("earth_quake_zone", ez_pos, float(ab.get("duration", 5.0)), 155.0, dmg, ab_name, local_auth)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.75)
+		"bat_swarm":
+			for bati in range(3):
+				_spawn_summon("bat", origin + Vector2(0.0, (float(bati) - 1.0) * 24.0), dmg, 5.0, col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.35)
+		"damage_shield_50":
+			damage_reduction_timer = float(ab.get("duration", 5.0))
+			_spawn_vfx_burst(cast_pos, 68.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.9)
+		"blood_beam":
+			_cast_beam_attack(origin, cast_angle, 540.0, 26.0, dmg, col, ab_name, 0.35, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 0.9)
+		"ult_bat_execute":
+			control_lock_timer = 1.2
+			var tgt_be: Node2D = _find_nearest_enemy_player(cast_pos, 420.0)
+			if tgt_be != null:
+				global_position = tgt_be.global_position + Vector2(-36.0 if facing_right else 36.0, 0.0)
+				if local_auth and tgt_be.has_method("apply_hit"):
+					tgt_be.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+				_spawn_vfx_burst(tgt_be.global_position, 90.0, col)
+			else:
+				_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 140.0, 80.0, col)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.2)
+		"jump_kick":
+			control_lock_timer = 0.65
+			var tgt_jk: Node2D = _find_nearest_enemy_player(cast_pos, 420.0)
+			if tgt_jk != null:
+				global_position = tgt_jk.global_position + Vector2(-34.0 if global_position.x < tgt_jk.global_position.x else 34.0, -8.0)
+				if local_auth and tgt_jk.has_method("apply_hit"):
+					tgt_jk.apply_hit(dmg, peer_id, ab_name, player_name, Vector2(280.0 * (1.0 if facing_right else -1.0), -180.0))
+			else:
+				velocity += Vector2.from_angle(cast_angle) * 650.0
+			_spawn_vfx_burst(global_position, 70.0, col)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 1.25)
+		"spinning_blade", "slow_spin_axe":
+			var sb := _spawn_custom_bullet(origin, cast_angle, 380.0, dmg, "shuriken" if kind == "spinning_blade" else "thrown_axe", col, ab_name, 0.0, 0.0, false, float(ab.get("duration", 4.0)), local_auth)
+			if sb != null:
+				sb.spin_speed = 16.0
+				sb.radius_scale = 1.45
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.9)
+		"ult_jump_execute", "ult_spear_jump":
+			control_lock_timer = 1.2
+			var tgt_je: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
+			if tgt_je != null:
+				global_position = tgt_je.global_position + Vector2(-34.0 if global_position.x < tgt_je.global_position.x else 34.0, -4.0)
+				if local_auth and tgt_je.has_method("apply_hit"):
+					tgt_je.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+				_spawn_vfx_burst(tgt_je.global_position, 100.0, col)
+			else:
+				velocity += Vector2.from_angle(cast_angle) * 680.0
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.2)
+		"poison_vomit", "poison_shot":
+			var pv := _spawn_custom_bullet(origin, cast_angle, 920.0, dmg, "smoke_orb", col, ab_name, 0.0, 8.0 if kind == "poison_vomit" else 0.0, false, 1.4, local_auth)
+			if pv != null:
+				pv.status_effect_name = "poison"
+				pv.status_effect_dur = float(ab.get("duration", 4.0))
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 0.95)
+		"jelly_slowmo":
+			var jb := _spawn_custom_bullet(origin, cast_angle, 820.0, dmg, "grenade", col, ab_name, 0.0, 16.0, false, 1.4, local_auth)
+			if jb != null:
+				jb.status_effect_dur = float(ab.get("duration", 4.0))
+				jb.on_hit_effect_kind = "jelly_aoe"
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.2)
+		"zombie_dog":
+			_spawn_summon("zombie_dog", origin, dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.85)
+		"ult_deathless_2x":
+			deathless_timer = float(ab.get("duration", 10.0))
+			_spawn_vfx_burst(cast_pos, 95.0, col)
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.8)
+		"boomerang_sword", "headless_throw":
+			var bs := _spawn_custom_bullet(origin, cast_angle, 840.0, dmg, "thrown_spear" if kind == "boomerang_sword" else "grenade", col, ab_name, 0.0, 0.0, false, 1.8, local_auth)
+			if bs != null:
+				bs.boomerang_owner = self
+				bs.boomerang_return_time = 0.42
+				bs.spin_speed = 18.0
+			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 1.1)
+		"bomb_eagle":
+			_spawn_summon("bomb_eagle", cast_pos + Vector2(0, -40), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.1)
+		"fiery_hand_beam":
+			_cast_beam_attack(origin, cast_angle, 560.0, 26.0, dmg, col, ab_name, 0.55, local_auth)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.2)
+		"ult_time_slow":
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(cast_pos) <= 440.0 and p.has_method("apply_status"):
+							p.apply_status("slow_mo", float(ab.get("duration", 4.0)))
+			_spawn_vfx_burst(cast_pos, 440.0, col)
+			add_screen_shake(1.8)
+			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 0.55)
+		"invincible_self":
+			invincible_timer = float(ab.get("duration", 3.0))
+			_spawn_vfx_burst(cast_pos, 70.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.15)
+		"touch_teleport":
+			var tp_pos: Vector2 = last_world_tap_pos if (not is_bot and has_world_tap) else (cast_pos + Vector2.from_angle(cast_angle) * 260.0)
+			tp_pos = Vector2(clampf(tp_pos.x, 80.0, 2200.0), clampf(tp_pos.y, 80.0, 1180.0))
+			_spawn_vfx_burst(cast_pos, 55.0, col)
+			global_position = tp_pos
+			velocity = Vector2.ZERO
+			_spawn_vfx_burst(tp_pos, 65.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 1.45)
+		"ult_soul_drag":
+			control_lock_timer = 1.3
+			var tgt_sd: Node2D = _find_nearest_enemy_player(cast_pos, 340.0)
+			if tgt_sd != null:
+				tgt_sd.global_position = cast_pos + Vector2(34.0 * (1.0 if facing_right else -1.0), 0.0)
+				if local_auth and tgt_sd.has_method("apply_hit"):
+					tgt_sd.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+				_spawn_vfx_burst(tgt_sd.global_position, 110.0, col)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+		"shadow_mummy":
+			var tgt_sm: Node2D = _find_nearest_enemy_player(cast_pos, 850.0)
+			var sm_pos: Vector2 = (tgt_sm.global_position + Vector2(-44.0, 0.0)) if tgt_sm != null else origin
+			_spawn_summon("shadow_mummy", sm_pos, dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.75)
+		"throwable_magnet":
+			if local_auth:
+				var scene_root: Node = get_tree().current_scene if get_tree().current_scene != null else get_parent()
+				if scene_root != null:
+					var pickups := scene_root.find_children("*", "Area2D", true, false)
+					for pk in pickups:
+						if is_instance_valid(pk) and (pk as Node2D).global_position.distance_to(cast_pos) <= 520.0:
+							if pk.has_method("_on_crate_body_entered") or "item_id" in pk:
+								(pk as Node2D).global_position = (pk as Node2D).global_position.lerp(cast_pos, 0.75)
+			_spawn_vfx_burst(cast_pos, 260.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
+		"ult_death_kiss":
+			var dk := _spawn_custom_bullet(origin, cast_angle, 780.0, dmg, "grenade", col, ab_name, 0.0, 18.0, false, 1.4, local_auth)
+			if dk != null:
+				dk.on_hit_effect_kind = "death_kiss"
+				dk.radius_scale = 1.5
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.1)
+		"auto_machinegun":
+			auto_mg_timer = float(ab.get("duration", 5.0))
+			_auto_mg_accum = 0.0
+			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -2.0)
+		"deploy_turret":
+			var tur := _spawn_summon("turret", cast_pos + Vector2(36.0 * (1.0 if facing_right else -1.0), 4.0), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			if tur != null:
+				tur.hp = 60
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.9)
+		"equip_shield":
+			personal_shield_hp = int(ab.get("wall_hp", 100))
+			personal_shield_timer = float(ab.get("duration", 6.0))
+			_spawn_vfx_burst(cast_pos, 60.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.0)
+		"ult_arm_fireballs":
+			_cast_fireballs(origin, cast_angle, dmg, 0.0, col, ab_name, int(ab.get("shots", 5)), local_auth, "fireball")
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.0)
+		"snake_trio":
+			for si in range(3):
+				_spawn_summon("small_snake", origin + Vector2(float(si) * 20.0 * (1.0 if facing_right else -1.0), 0.0), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.2)
+		"ult_giant_snake":
+			_spawn_summon("giant_snake", origin, dmg, float(ab.get("duration", 4.0)), col, ab_name, local_auth)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.0)
+		"zoom_out_4x":
+			zoom_out_timer = float(ab.get("duration", 5.0))
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
+		"ult_electric_laser":
+			electric_laser_timer = float(ab.get("duration", 10.0))
+			_electric_laser_accum = 0.0
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.2)
+		"twin_fireballs":
+			_cast_fireballs(origin, cast_angle, dmg, 0.0, col, ab_name, 2, local_auth, "fireball")
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 0.95)
+		"dragon_laser":
+			_cast_beam_attack(origin, cast_angle, 580.0, 34.0, dmg * 2, col, ab_name, float(ab.get("duration", 2.0)), local_auth)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.1)
+		"ult_dragon_strike":
+			control_lock_timer = 1.2
+			var tgt_ds: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
+			var ds_pos: Vector2 = tgt_ds.global_position if tgt_ds != null else (cast_pos + Vector2.from_angle(cast_angle) * 220.0)
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(ds_pos) <= 185.0 and p.has_method("apply_hit"):
+							p.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+			_spawn_vfx_burst(ds_pos, 185.0, col)
+			add_screen_shake(2.6)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+		"banish_enemy":
+			var tgt_bn: Node2D = _find_nearest_enemy_player(cast_pos, 380.0)
+			if tgt_bn != null:
+				var rx: float = 350.0 if cast_pos.x > 1100.0 else 1850.0
+				tgt_bn.global_position = Vector2(rx, 460.0)
+				_spawn_vfx_burst(tgt_bn.global_position, 80.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.8)
+		"swap_enemy":
+			var tgt_sw: Node2D = _find_nearest_enemy_player(cast_pos, 420.0)
+			if tgt_sw != null and absf(tgt_sw.global_position.y - cast_pos.y) <= 110.0:
+				var tmp_p: Vector2 = global_position
+				global_position = tgt_sw.global_position
+				tgt_sw.global_position = tmp_p
+				_spawn_vfx_burst(global_position, 70.0, col)
+				_spawn_vfx_burst(tgt_sw.global_position, 70.0, col)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.25)
+		"ult_mirror_clone":
+			var tgt_mc: Node2D = _find_nearest_enemy_player(cast_pos, 520.0)
+			var mc := _spawn_summon("mirror_clone", (tgt_mc.global_position + Vector2(46, 0)) if tgt_mc != null else origin, 0, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			if mc != null:
+				mc.linked_target = tgt_mc
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.0)
+		"lava_platform":
+			var lp := _spawn_custom_bullet(origin, cast_angle, 880.0, dmg, "fireball", col, ab_name, 0.0, 18.0, false, 1.4, local_auth)
+			if lp != null:
+				lp.on_hit_effect_kind = "lava_platform"
+				lp.status_effect_dur = float(ab.get("duration", 6.0))
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.0)
+		"rolling_fireball":
+			var rf := _spawn_custom_bullet(origin, cast_angle, 620.0, dmg, "fireball", col, ab_name, 0.0, 28.0, false, 2.2, local_auth)
+			if rf != null:
+				rf.radius_scale = 2.0
+				rf.wall_bounces_left = 4
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 0.8)
+		"ult_inferno_ring":
+			var tgt_ir: Node2D = _find_nearest_enemy_player(cast_pos, 720.0)
+			var ir_pos: Vector2 = tgt_ir.global_position if tgt_ir != null else (cast_pos + Vector2.from_angle(cast_angle) * 180.0)
+			_spawn_hazard_zone("inferno_ring", ir_pos, float(ab.get("duration", 2.0)), 165.0, 50, ab_name, local_auth)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
+		"meteor_boulder":
+			var mb := _spawn_custom_bullet(origin, cast_angle, 760.0, dmg, "thrown_stone", col, ab_name, 0.6, 22.0, false, 1.8, local_auth)
+			if mb != null:
+				mb.radius_scale = 2.4
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.85)
+		"piercing_crystal":
+			var pc := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "ice_shard", col, ab_name, 0.0, 0.0, false, 3.0, local_auth)
+			if pc != null:
+				pc.pierce_players = true
+				pc.radius_scale = 1.4
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.1)
+		"mini_prisms":
+			for mpi in range(3):
+				_spawn_summon("mini_prism", origin + Vector2(0, (mpi - 1) * 22.0), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
+		"ult_crush_walls":
+			var cw_pos: Vector2 = cast_pos + Vector2.from_angle(cast_angle) * 180.0
+			_spawn_summon("crush_walls", cw_pos, dmg, 1.2, col, ab_name, local_auth)
+			add_screen_shake(2.4)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.8)
+		"long_spear":
+			_cast_beam_attack(origin, cast_angle, 230.0, 22.0, dmg, col, ab_name, 0.25, local_auth)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.85)
+		"bee_swarm":
+			for bei in range(5):
+				_spawn_summon("bee", origin + Vector2(randf_range(-24, 24), randf_range(-24, 24)), dmg, float(ab.get("duration", 7.0)), col, ab_name, local_auth)
+			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.4)
+		"boxer_huge_punch":
+			if local_auth:
+				_apply_melee_arc(cast_pos, Vector2.from_angle(cast_angle), 165.0, 95.0, dmg, stun_dur, 680.0, ab_name)
+			_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 65.0, 125.0, col)
+			add_screen_shake(1.8)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.15)
+		"running_spear":
+			velocity = Vector2.from_angle(cast_angle) * 820.0
+			if local_auth:
+				_apply_melee_arc(cast_pos, Vector2.from_angle(cast_angle), 175.0, 80.0, dmg, 0.3, 620.0, ab_name)
+			_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 50.0, 85.0, col)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.9)
+		"sky_smash_punch":
+			var tgt_sp: Node2D = _find_nearest_enemy_player(cast_pos, 540.0)
+			var sp_pos: Vector2 = tgt_sp.global_position if tgt_sp != null else (cast_pos + Vector2.from_angle(cast_angle) * 180.0)
+			_spawn_vfx_burst(sp_pos + Vector2(0.0, -90.0), 95.0, col)
+			_spawn_vfx_burst(sp_pos, 130.0, col)
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						if (p as Node2D).global_position.distance_to(sp_pos) <= 135.0 and p.has_method("apply_hit"):
+							p.apply_hit(dmg, peer_id, ab_name, player_name, Vector2(0.0, 420.0))
+							if stun_dur > 0.0 and p.has_method("apply_stun"):
+								p.apply_stun(stun_dur, peer_id)
+			add_screen_shake(2.2)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.85)
+		"ult_boxer_flurry":
+			control_lock_timer = 1.4
+			var tgt_bf: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
+			if tgt_bf != null:
+				global_position = tgt_bf.global_position + Vector2(-34.0 if global_position.x < tgt_bf.global_position.x else 34.0, 0.0)
+				_spawn_vfx_burst(tgt_bf.global_position, 115.0, col)
+				if local_auth and tgt_bf.has_method("apply_hit"):
+					tgt_bf.apply_hit(dmg, peer_id, ab_name, player_name, Vector2((1.0 if facing_right else -1.0) * 420.0, -140.0))
+			else:
+				velocity += Vector2.from_angle(cast_angle) * 620.0
+				_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 80.0, 115.0, col)
+			add_screen_shake(2.8)
+			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.1)
 
 
 func apply_reverse_controls(dur: float) -> void:
@@ -1748,6 +2451,211 @@ func apply_reverse_controls_rpc(dur: float) -> void:
 	reverse_controls_timer = maxf(reverse_controls_timer, dur)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_local_human or is_dead or not NetworkManager.is_agent_clash_mode():
+		return
+	if event is InputEventScreenTouch and event.pressed:
+		last_world_tap_pos = get_canvas_transform().affine_inverse() * event.position
+		has_world_tap = true
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if not pointer_over_ui:
+			last_world_tap_pos = get_global_mouse_position()
+			has_world_tap = true
+
+
+func apply_status(effect_name: String, dur: float, _extra: float = 0.0) -> void:
+	if is_dead or spawn_invuln_timer > 0.0:
+		return
+	if NetworkManager.is_network_active():
+		apply_status_rpc.rpc(effect_name, dur, _extra)
+	else:
+		_apply_status_local(effect_name, dur, _extra)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func apply_status_rpc(effect_name: String, dur: float, _extra: float = 0.0) -> void:
+	_apply_status_local(effect_name, dur, _extra)
+
+
+func _apply_status_local(effect_name: String, dur: float, _extra: float = 0.0) -> void:
+	if invincible_timer > 0.0:
+		return
+	match effect_name:
+		"freeze":
+			freeze_timer = maxf(freeze_timer, dur)
+		"ability_lock":
+			ability_lock_timer = maxf(ability_lock_timer, dur)
+		"flashbang":
+			flashbang_timer = maxf(flashbang_timer, dur)
+		"slow_mo":
+			slow_mo_timer = maxf(slow_mo_timer, dur)
+		"slippery":
+			slippery_timer = maxf(slippery_timer, dur)
+		"earth_shake":
+			earth_shake_timer = maxf(earth_shake_timer, dur)
+		"reverse_controls":
+			reverse_controls_timer = maxf(reverse_controls_timer, dur)
+		"stun":
+			stun_timer = maxf(stun_timer, dur)
+		"poison":
+			poison_dot_timer = maxf(poison_dot_timer, dur)
+			_poison_dot_accum = 0.0
+
+
+func _tick_agent_buffs_and_dots(delta: float) -> void:
+	if gradual_heal_timer > 0.0:
+		gradual_heal_timer = maxf(0.0, gradual_heal_timer - delta)
+		_gradual_heal_accum += delta
+		if _gradual_heal_accum >= 0.2:
+			_gradual_heal_accum = 0.0
+			health = mini(max_health, health + 5)
+			if is_local_human:
+				health_changed.emit(health, max_health)
+	if dual_shotgun_timer > 0.0:
+		dual_shotgun_timer = maxf(0.0, dual_shotgun_timer - delta)
+		if dual_shotgun_timer <= 0.0:
+			dual_shotgun_shots = 0
+	if personal_shield_timer > 0.0:
+		personal_shield_timer = maxf(0.0, personal_shield_timer - delta)
+		if personal_shield_timer <= 0.0:
+			personal_shield_hp = 0
+		queue_redraw()
+	if boar_ride_timer > 0.0:
+		boar_ride_timer = maxf(0.0, boar_ride_timer - delta)
+		for k in _boar_hit_cooldowns.keys():
+			_boar_hit_cooldowns[k] = float(_boar_hit_cooldowns[k]) - delta
+			if float(_boar_hit_cooldowns[k]) <= 0.0:
+				_boar_hit_cooldowns.erase(k)
+		for p in get_tree().get_nodes_in_group("players"):
+			if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				var pid: int = int(p.get("peer_id"))
+				if not _boar_hit_cooldowns.has(pid) and (p as Node2D).global_position.distance_to(global_position) <= 58.0:
+					_boar_hit_cooldowns[pid] = 0.65
+					var kb_dir: Vector2 = ((p as Node2D).global_position - global_position).normalized()
+					if kb_dir.length_squared() < 0.01:
+						kb_dir = Vector2.RIGHT if facing_right else Vector2.LEFT
+					if p.has_method("apply_hit"):
+						p.apply_hit(30, peer_id, "Boar Charge", player_name, kb_dir * 720.0 + Vector2(0.0, -240.0))
+		queue_redraw()
+	if auto_mg_timer > 0.0:
+		auto_mg_timer = maxf(0.0, auto_mg_timer - delta)
+		_auto_mg_accum += delta
+		if _auto_mg_accum >= 0.11:
+			_auto_mg_accum = 0.0
+			var mg_orig: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+			_spawn_custom_bullet(mg_orig, aim_angle + randf_range(-0.04, 0.04), 1280.0, 12, "bullet", Color(0.35, 0.86, 1.0), "Auto Machinegun", 0.0, 0.0, false, 1.1, _is_controlled_locally())
+			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -7.0, 1.1)
+	if electric_laser_timer > 0.0:
+		electric_laser_timer = maxf(0.0, electric_laser_timer - delta)
+		_laser_visual_timer = 0.12
+		_laser_visual_angle = aim_angle
+		_laser_visual_color = Color(0.45, 0.92, 1.0)
+		_laser_visual_width = 16.0
+		_laser_visual_len = 560.0
+		_electric_laser_accum += delta
+		if _electric_laser_accum >= 0.24:
+			_electric_laser_accum = 0.0
+			_cast_beam_attack(global_position + Vector2.from_angle(aim_angle) * 24.0, aim_angle, 560.0, 22.0, 12, Color(0.45, 0.92, 1.0), "Electric Laser Gun", 0.12, _is_controlled_locally())
+	if poison_dot_timer > 0.0:
+		poison_dot_timer = maxf(0.0, poison_dot_timer - delta)
+		_poison_dot_accum += delta
+		if _poison_dot_accum >= 0.5:
+			_poison_dot_accum = 0.0
+			if _is_controlled_locally():
+				_receive_damage_local(5, _poison_attacker_id, "Poison", _poison_attacker_name, Vector2.ZERO)
+
+
+func _spawn_custom_bullet(origin: Vector2, angle: float, spd: float, dmg: int, style: String, col: Color, w_name: String, stun_dur: float, grav: float, homing: bool, life: float, local_auth: bool) -> Node:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return null
+	var b := BULLET_SCENE.instantiate()
+	b.global_position = origin
+	b.velocity = Vector2.from_angle(angle) * spd
+	b.damage = dmg
+	b.shooter_peer_id = peer_id
+	b.shooter_team = team_id
+	b.shooter_name = player_name
+	b.shooter_rid = get_rid()
+	b.weapon_name = w_name
+	b.bullet_color = col
+	b.visual_style = style
+	b.stun_duration = stun_dur
+	b.gravity_mult = grav
+	b.is_homing = homing
+	b.allow_self_damage = false
+	b.can_deal_damage = local_auth
+	b.max_lifetime = life
+	parent_node.add_child(b)
+	return b
+
+
+func _spawn_summon(kind: String, pos: Vector2, dmg: int, dur: float, _col: Color, w_name: String, local_auth: bool, dir_override: float = 0.0) -> Node:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return null
+	var s := Area2D.new()
+	s.set_script(load("res://scripts/AgentSummon.gd"))
+	s.summon_kind = kind
+	s.owner_peer_id = peer_id
+	s.owner_team = team_id
+	s.owner_name = player_name
+	s.weapon_name = w_name
+	s.can_deal = local_auth
+	s.time_left = dur
+	s.damage = dmg
+	s.move_dir_x = dir_override if dir_override != 0.0 else (1.0 if facing_right else -1.0)
+	s.global_position = pos
+	parent_node.add_child(s)
+	return s
+
+
+func _spawn_hazard_zone(kind: String, pos: Vector2, dur: float, rad: float, dps_val: int, w_name: String, local_auth: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var hz := Node2D.new()
+	hz.set_script(load("res://scripts/PlatformHazardZone.gd"))
+	hz.zone_kind = kind
+	hz.shooter_id = peer_id
+	hz.shooter_team = team_id
+	hz.shooter_name = player_name
+	hz.weapon_name = w_name
+	hz.can_deal = local_auth
+	hz.time_left = dur
+	hz.radius = rad
+	hz.dps = dps_val
+	hz.global_position = pos
+	parent_node.add_child(hz)
+
+
+func _cast_beam_attack(origin: Vector2, angle: float, beam_len: float, beam_width: float, dmg: int, col: Color, w_name: String, vis_dur: float, local_auth: bool) -> void:
+	_laser_visual_timer = maxf(_laser_visual_timer, vis_dur)
+	_laser_visual_angle = angle
+	_laser_visual_color = col
+	_laser_visual_width = beam_width
+	_laser_visual_len = beam_len
+	queue_redraw()
+	if not local_auth:
+		return
+	var dir: Vector2 = Vector2.from_angle(angle)
+	var end_pt: Vector2 = origin + dir * beam_len
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or int(p.get("peer_id")) == peer_id:
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		var closest: Vector2 = Geometry2D.get_closest_point_to_segment((p as Node2D).global_position, origin, end_pt)
+		if closest.distance_to((p as Node2D).global_position) <= beam_width + 22.0 and p.has_method("apply_hit"):
+			p.apply_hit(dmg, peer_id, w_name, player_name, dir * 240.0)
+
+
 func _find_nearest_enemy_player(from_pos: Vector2, max_range: float = 1600.0) -> Node2D:
 	var best: Node2D = null
 	var best_d2: float = max_range * max_range
@@ -1757,6 +2665,8 @@ func _find_nearest_enemy_player(from_pos: Vector2, max_range: float = 1600.0) ->
 		if p.has_method("is_alive") and not p.is_alive():
 			continue
 		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		if float(p.get("invis_timer")) > 0.0:
 			continue
 		var d2: float = from_pos.distance_squared_to((p as Node2D).global_position)
 		if d2 < best_d2:
@@ -1869,16 +2779,23 @@ func _cast_reverse_smoke(origin: Vector2, angle: float, dmg: int, dur: float, co
 
 
 func _cast_backstab_teleport(cast_pos: Vector2, _dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
-	var target: Node2D = _find_nearest_enemy_player(cast_pos, 1800.0)
+	var target: Node2D = _find_nearest_enemy_player(cast_pos, 2400.0)
 	_spawn_vfx_burst(cast_pos, 58.0, col)
+	invis_timer = maxf(invis_timer, 3.0)
 	if target != null:
 		var t_facing: bool = bool(target.get("facing_right")) if "facing_right" in target else true
-		var behind_off: Vector2 = Vector2(-56.0 if t_facing else 56.0, -4.0)
+		var behind_dist: float = 125.0
+		var behind_off: Vector2 = Vector2(-behind_dist if t_facing else behind_dist, -6.0)
 		var dest: Vector2 = target.global_position + behind_off
-		dest.x = clampf(dest.x, 72.0, 4408.0)
-		dest.y = clampf(dest.y, 72.0, 2400.0)
+		var arena: Node = get_tree().current_scene
+		var max_w: float = float(arena.get("arena_width")) if (arena != null and "arena_width" in arena) else 2240.0
+		var max_h: float = float(arena.get("arena_height")) if (arena != null and "arena_height" in arena) else 1248.0
+		dest.x = clampf(dest.x, 72.0, maxf(144.0, max_w - 72.0))
+		dest.y = clampf(dest.y, 72.0, maxf(144.0, max_h - 84.0))
+		if absf(dest.x - target.global_position.x) < 70.0:
+			dest.x = clampf(target.global_position.x + (behind_dist if t_facing else -behind_dist), 72.0, maxf(144.0, max_w - 72.0))
 		global_position = dest
-		facing_right = t_facing
+		facing_right = target.global_position.x >= global_position.x
 		aim_angle = (target.global_position - global_position).angle()
 		_spawn_vfx_burst(global_position, 72.0, col)
 	else:
@@ -1912,13 +2829,13 @@ func _cast_lava_bomb(origin: Vector2, angle: float, dmg: int, stun_dur: float, c
 	_spawn_styled_projectile(origin, angle, 780.0, dmg, style, col, ab_name, stun_dur, 10.0, true, 165.0, 1.6, false, local_auth, 1.15, 1.35, 0.52)
 
 
-func _cast_multi_proj(origin: Vector2, angle: float, dmg: int, count: int, spread_deg: float, style: String, col: Color, ab_name: String, stun_dur: float, speed: float, spin_spd: float, pierce_w: bool, local_auth: bool, life: float, proj_scale: float) -> void:
+func _cast_multi_proj(origin: Vector2, angle: float, dmg: int, count: int, spread_deg: float, style: String, col: Color, ab_name: String, stun_dur: float, speed: float, spin_spd: float, pierce_w: bool, local_auth: bool, life: float, proj_scale: float, is_exp: bool = false, exp_rad: float = 120.0) -> void:
 	for i in range(count):
 		var off: float = 0.0
 		if count > 1:
 			var frac: float = (float(i) / float(count - 1)) - 0.5
 			off = deg_to_rad(spread_deg) * frac
-		_spawn_styled_projectile(origin, angle + off, speed, dmg, style, col, ab_name, stun_dur, spin_spd, false, 60.0, 1.1, pierce_w, local_auth, life, proj_scale)
+		_spawn_styled_projectile(origin, angle + off, speed, dmg, style, col, ab_name, stun_dur, spin_spd, is_exp, exp_rad, 1.1, pierce_w, local_auth, life, proj_scale)
 
 
 func _cast_teleport(cast_pos: Vector2, angle: float, max_dist: float, dmg: int, stun_dur: float, col: Color, ab_name: String, with_beams: bool, local_auth: bool) -> void:
@@ -2043,6 +2960,8 @@ func find_grabbable_player() -> Node2D:
 		if int(node.get("carried_by_peer_id")) != 0 or int(node.get("grabbed_player_id")) != 0:
 			continue
 		if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+			continue
+		if float(node.get("invis_timer")) > 0.0:
 			continue
 		var d: float = global_position.distance_to(node.global_position)
 		if d <= best_dist:
@@ -2323,9 +3242,20 @@ func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
 
 
 func _draw() -> void:
-	if not is_local_human or is_dead or not SettingsManager.sight_laser:
+	if NetworkManager.is_agent_clash_mode() and not is_dead:
+		if _laser_visual_timer > 0.0:
+			var p1: Vector2 = Vector2.from_angle(_laser_visual_angle) * 24.0
+			var p2: Vector2 = Vector2.from_angle(_laser_visual_angle) * _laser_visual_len
+			draw_line(p1, p2, Color(_laser_visual_color.r, _laser_visual_color.g, _laser_visual_color.b, 0.72), _laser_visual_width)
+			draw_line(p1, p2, Color.WHITE, maxf(3.0, _laser_visual_width * 0.25))
+		if personal_shield_hp > 0 and personal_shield_timer > 0.0:
+			draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 28, Color(0.35, 0.85, 1.0, 0.85), 4.0)
+		if boar_ride_timer > 0.0:
+			draw_rect(Rect2(-24.0, 4.0, 48.0, 20.0), Color(0.55, 0.34, 0.18, 0.92))
+		if freeze_timer > 0.0:
+			draw_rect(Rect2(-22.0, -34.0, 44.0, 62.0), Color(0.55, 0.92, 1.0, 0.45))
 		return
-	if NetworkManager.is_agent_clash_mode():
+	if not is_local_human or is_dead or not SettingsManager.sight_laser:
 		return
 	if _muzzle_primary == null or not is_instance_valid(_muzzle_primary):
 		return

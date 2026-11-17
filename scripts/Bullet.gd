@@ -29,6 +29,15 @@ var is_homing: bool = false
 var homing_turn_rate: float = 4.8
 var allow_self_damage: bool = true
 var reverse_controls_dur: float = 0.0
+var pierce_players: bool = false
+var wall_bounces_left: int = 0
+var status_effect_name: String = ""
+var status_effect_dur: float = 0.0
+var on_hit_effect_kind: String = ""
+var boomerang_owner: Node2D = null
+var boomerang_return_time: float = 0.0
+var radius_scale: float = 1.0
+var _pierced_rids: Array[RID] = []
 var _homing_target_pos: Vector2 = Vector2.INF
 var _visual_spin: float = 0.0
 var _distance_traveled: float = 0.0
@@ -58,6 +67,8 @@ func _ready() -> void:
 	_trail_points.append(global_position)
 	_trail_points.append(global_position)
 	_update_trail_visual()
+	if radius_scale != 1.0:
+		scale = Vector2(radius_scale, radius_scale)
 	if visual_style != "bullet":
 		queue_redraw()
 
@@ -78,7 +89,15 @@ func _physics_process(delta: float) -> void:
 	if gravity_mult > 0.0:
 		velocity.y += 980.0 * gravity_mult * maxf(0.15, NetworkManager.gravity_scale) * delta
 
-	if is_homing:
+	if boomerang_return_time > 0.0 and _age >= boomerang_return_time and is_instance_valid(boomerang_owner):
+		var to_owner: Vector2 = boomerang_owner.global_position - global_position
+		if to_owner.length() < 34.0:
+			queue_free()
+			return
+		var spd: float = maxf(680.0, velocity.length())
+		velocity = to_owner.normalized() * spd
+		rotation = velocity.angle()
+	elif is_homing:
 		_homing_target_pos = _find_homing_target()
 		if _homing_target_pos != Vector2.INF:
 			var desired_angle: float = (_homing_target_pos - global_position).angle()
@@ -98,6 +117,9 @@ func _physics_process(delta: float) -> void:
 	for p in get_tree().get_nodes_in_group("players"):
 		if is_instance_valid(p) and p.has_method("is_alive") and not p.is_alive() and p is CollisionObject2D:
 			excl.append((p as CollisionObject2D).get_rid())
+	for rid in _pierced_rids:
+		if rid.is_valid():
+			excl.append(rid)
 	if not excl.is_empty():
 		query.exclude = excl
 	query.collide_with_areas = false
@@ -106,12 +128,13 @@ func _physics_process(delta: float) -> void:
 	var hit: Dictionary = space_state.intersect_ray(query)
 	if not hit.is_empty():
 		var hit_pos: Vector2 = hit["position"]
+		var hit_norm: Vector2 = hit.get("normal", Vector2.UP)
 		var collider: Object = hit["collider"]
 		_distance_traveled += prev_pos.distance_to(hit_pos)
 		global_position = hit_pos
 		_trail_points.append(hit_pos)
 		_update_trail_visual()
-		_handle_collision(collider, hit_pos)
+		_handle_collision(collider, hit_pos, hit_norm)
 		return
 
 	_distance_traveled += prev_pos.distance_to(next_pos)
@@ -154,7 +177,7 @@ func _find_homing_target() -> Vector2:
 	return best_pos
 
 
-func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
+func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = Vector2.UP) -> void:
 	_finished = true
 	if collider != null and collider.is_in_group("barrier_walls"):
 		if can_deal_damage and collider.has_method("apply_wall_damage"):
@@ -171,8 +194,12 @@ func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
 		return
 
 	if collider != null and collider.is_in_group("destructible_bombs"):
-		if can_deal_damage and collider.has_method("on_shot_hit"):
-			collider.on_shot_hit(damage, shooter_peer_id)
+		var target_obj: Object = collider.get_meta("prop_node") if collider.has_meta("prop_node") else collider
+		if can_deal_damage:
+			if target_obj.has_method("detonate_barrel"):
+				target_obj.detonate_barrel(shooter_peer_id, shooter_name, shooter_team)
+			elif target_obj.has_method("on_shot_hit"):
+				target_obj.on_shot_hit(damage, shooter_peer_id)
 		if is_explosive:
 			_trigger_explosion(hit_pos)
 		else:
@@ -197,12 +224,24 @@ func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
 		if can_deal_damage and collider.has_method("apply_hit"):
 			var final_damage: int = _compute_falloff_damage()
 			var knockback: Vector2 = velocity.normalized() * (140.0 * knockback_mult)
+			if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner):
+				knockback = (boomerang_owner.global_position - (collider as Node2D).global_position).normalized() * 980.0 + Vector2(0.0, -240.0)
 			collider.apply_hit(final_damage, shooter_peer_id, weapon_name, shooter_name, knockback)
 			if stun_duration > 0.0 and collider.has_method("apply_stun"):
 				collider.apply_stun(stun_duration, shooter_peer_id)
 			if reverse_controls_dur > 0.0 and collider.has_method("apply_reverse_controls"):
 				collider.apply_reverse_controls(reverse_controls_dur)
+			if status_effect_name != "" and collider.has_method("apply_status"):
+				collider.apply_status(status_effect_name, status_effect_dur)
 		_spawn_impact_flash(hit_pos, bullet_color)
+		if on_hit_effect_kind != "":
+			_trigger_on_hit_effect(hit_pos)
+		if pierce_players:
+			if collider is CollisionObject2D:
+				_pierced_rids.append((collider as CollisionObject2D).get_rid())
+			_finished = false
+			global_position = hit_pos + velocity.normalized() * 12.0
+			return
 		if visual_style == "smoke_orb" and reverse_controls_dur > 0.0:
 			_spawn_impact_flash(hit_pos, Color(0.55, 0.22, 0.85))
 			if can_deal_damage:
@@ -213,7 +252,18 @@ func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
 						if (p as Node2D).global_position.distance_to(hit_pos) <= 115.0 and p.has_method("apply_reverse_controls"):
 							p.apply_reverse_controls(reverse_controls_dur)
 	else:
+		if wall_bounces_left > 0:
+			wall_bounces_left -= 1
+			_finished = false
+			var n: Vector2 = hit_norm.normalized() if hit_norm.length_squared() > 0.01 else Vector2.UP
+			velocity = velocity.bounce(n)
+			rotation = velocity.angle()
+			global_position = hit_pos + n * 8.0
+			_spawn_impact_flash(hit_pos, bullet_color)
+			return
 		_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
+		if on_hit_effect_kind != "":
+			_trigger_on_hit_effect(hit_pos)
 		if visual_style == "smoke_orb" and reverse_controls_dur > 0.0 and can_deal_damage:
 			for p in get_tree().get_nodes_in_group("players"):
 				if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
@@ -223,6 +273,47 @@ func _handle_collision(collider: Object, hit_pos: Vector2) -> void:
 						p.apply_reverse_controls(reverse_controls_dur)
 
 	queue_free()
+
+
+func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	match on_hit_effect_kind:
+		"ability_lock_aoe", "jelly_aoe":
+			if can_deal_damage:
+				var eff_name: String = "ability_lock" if on_hit_effect_kind == "ability_lock_aoe" else "slow_mo"
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+							continue
+						if (p as Node2D).global_position.distance_to(hit_pos) <= 145.0 and p.has_method("apply_status"):
+							p.apply_status(eff_name, status_effect_dur)
+		"death_kiss":
+			if can_deal_damage:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+							continue
+						if (p as Node2D).global_position.distance_to(hit_pos) <= 230.0 and p.has_method("apply_hit"):
+							p.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, Vector2(0, -120))
+			_spawn_impact_flash(hit_pos, Color(0.95, 0.35, 0.85))
+		"ice_platform", "lava_platform":
+			var hz := Area2D.new()
+			var hz_script := load("res://scripts/PlayerController.gd")
+			var zone := Node2D.new()
+			var is_lava: bool = (on_hit_effect_kind == "lava_platform")
+			zone.set_meta("is_lava", is_lava)
+			zone.set_meta("shooter_id", shooter_peer_id)
+			zone.set_meta("shooter_team", shooter_team)
+			zone.set_meta("shooter_name", shooter_name)
+			zone.set_meta("weapon_name", weapon_name)
+			zone.set_meta("can_deal", can_deal_damage)
+			zone.set_meta("time_left", status_effect_dur)
+			zone.set_meta("tick_accum", 0.0)
+			zone.global_position = hit_pos
+			parent_node.add_child(zone)
+			zone.set_script(load("res://scripts/PlatformHazardZone.gd"))
 
 
 func _compute_falloff_damage() -> int:

@@ -43,6 +43,7 @@ var _editing_secondary: bool = false
 var _slot_primary_btn: Button
 var _slot_secondary_btn: Button
 var _camo_btn: Button
+var _agent_pick_overlay: Control
 var _taunt_opt: OptionButton
 var _rail_btn: Button
 
@@ -162,12 +163,28 @@ func _build_ui() -> void:
 	lobby_btn.pressed.connect(func(): NetworkManager.go_to_lobby())
 	top_bar.add_child(lobby_btn)
 
+	var agent_btn := Button.new()
+	agent_btn.text = "⚡ AGENT MODE"
+	agent_btn.custom_minimum_size = Vector2(150, 50)
+	agent_btn.add_theme_font_size_override("font_size", 16)
+	_style_button(agent_btn, Color(0.20, 0.10, 0.34, 0.98), Color(0.78, 0.42, 1.0))
+	agent_btn.pressed.connect(_open_agent_pick_overlay)
+	top_bar.add_child(agent_btn)
+
 	var play_btn := Button.new()
-	play_btn.text = "PLAY NOW ▶"
-	play_btn.custom_minimum_size = Vector2(165, 50)
-	play_btn.add_theme_font_size_override("font_size", 18)
+	play_btn.text = "GUNFIGHT ▶"
+	play_btn.custom_minimum_size = Vector2(148, 50)
+	play_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(play_btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.28, 0.92, 0.45))
-	play_btn.pressed.connect(func(): NetworkManager.go_to_arena())
+	play_btn.pressed.connect(func():
+		if NetworkManager.is_agent_clash_mode():
+			_open_agent_pick_overlay()
+			return
+		NetworkManager.disconnect_network()
+		NetworkManager.test_mode_enabled = false
+		NetworkManager.match_mode = 0
+		NetworkManager.go_to_arena()
+	)
 	top_bar.add_child(play_btn)
 
 	# Main 2-Pane Split: Hero Stage (Left) + Tabbed Customization Deck (Right)
@@ -178,6 +195,7 @@ func _build_ui() -> void:
 
 	_build_hero_stage(split)
 	_build_customization_deck(split)
+	_build_agent_pick_overlay()
 
 
 func _build_hero_stage(parent: HBoxContainer) -> void:
@@ -318,7 +336,8 @@ func _build_heroes_tab(parent: VBoxContainer) -> Control:
 		card.custom_minimum_size = Vector2(0, 70)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.add_theme_font_size_override("font_size", 16)
-		card.text = "%s\n%s" % [str(arch["name"]).to_upper(), ProfileManager.ARCHETYPE_ROLES[i]]
+		var role_txt: String = ProfileManager.ARCHETYPE_ROLES[i] if i < ProfileManager.ARCHETYPE_ROLES.size() else "Agent"
+		card.text = "%s\n%s" % [str(arch["name"]).to_upper(), role_txt]
 		card.pressed.connect(_on_hero_card_pressed.bind(i))
 		grid.add_child(card)
 		_hero_cards.append(card)
@@ -779,7 +798,7 @@ func _get_part_names(prop_name: String) -> Array[String]:
 func _refresh_ui() -> void:
 	var arch_idx: int = clampi(ProfileManager.archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
 	_hero_name_label.text = str(ProfileManager.ARCHETYPES[arch_idx]["name"]).to_upper()
-	_hero_role_label.text = ProfileManager.ARCHETYPE_ROLES[arch_idx]
+	_hero_role_label.text = ProfileManager.ARCHETYPE_ROLES[arch_idx] if arch_idx < ProfileManager.ARCHETYPE_ROLES.size() else "Agent"
 	if is_instance_valid(_agent_summary_label):
 		var ag: Dictionary = AgentData.get_agent(arch_idx)
 		var bw: Dictionary = ag["base_weapon"]
@@ -874,3 +893,85 @@ func _refresh_ui() -> void:
 		var bg_c: Color = Color(0.26, 0.18, 0.06) if cur_w else Color(0.10, 0.14, 0.22)
 		var bd_c: Color = Color(1.0, 0.78, 0.25) if cur_w else Color(0.28, 0.42, 0.65)
 		_style_button(_weapon_cards[i], bg_c, bd_c, 8)
+
+
+func _build_agent_pick_overlay() -> void:
+	_agent_pick_overlay = ColorRect.new()
+	_agent_pick_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_agent_pick_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
+	_agent_pick_overlay.visible = false
+	add_child(_agent_pick_overlay)
+
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_agent_pick_overlay.add_child(cc)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(780, 480)
+	panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.15, 0.98), Color(0.78, 0.42, 1.0, 0.95), 14, 16, 14))
+	cc.add_child(panel)
+
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 10)
+	panel.add_child(pv)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 10)
+	pv.add_child(top_row)
+
+	var title := Label.new()
+	title.text = "⚡ SELECT AN AGENT FOR AGENT MODE"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 21)
+	title.modulate = Color(0.88, 0.68, 1.0)
+	top_row.add_child(title)
+
+	var close_btn := Button.new()
+	close_btn.text = "CANCEL"
+	close_btn.custom_minimum_size = Vector2(110, 40)
+	close_btn.add_theme_font_size_override("font_size", 15)
+	_style_button(close_btn, Color(0.24, 0.10, 0.12), Color(0.95, 0.42, 0.36))
+	close_btn.pressed.connect(func(): _agent_pick_overlay.visible = false)
+	top_row.add_child(close_btn)
+
+	var note := Label.new()
+	note.text = "Custom outfits & colors only apply in Gunfight. Pick an Agent to enter Agent Mode:"
+	note.add_theme_font_size_override("font_size", 14)
+	note.modulate = Color(0.74, 0.88, 1.0)
+	pv.add_child(note)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	pv.add_child(scroll)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(grid)
+
+	for i in range(AgentData.AGENTS.size()):
+		var ag: Dictionary = AgentData.AGENTS[i]
+		var ab := Button.new()
+		ab.custom_minimum_size = Vector2(0, 56)
+		ab.clip_text = true
+		ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ab.add_theme_font_size_override("font_size", 14)
+		ab.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		_style_button(ab, Color(0.10, 0.14, 0.22), Color(0.55, 0.40, 0.90), 8)
+		ab.pressed.connect(func():
+			ProfileManager.apply_archetype_preset(i, true)
+			NetworkManager.disconnect_network()
+			NetworkManager.test_mode_enabled = false
+			NetworkManager.match_mode = 2
+			_agent_pick_overlay.visible = false
+			NetworkManager.go_to_arena()
+		)
+		grid.add_child(ab)
+
+
+func _open_agent_pick_overlay() -> void:
+	if is_instance_valid(_agent_pick_overlay):
+		_agent_pick_overlay.visible = true

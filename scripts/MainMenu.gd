@@ -16,6 +16,8 @@ var _agent_preview: SoldierPreview
 var _agent_kit_title: Label
 var _agent_kit_body: Label
 var _agent_cards: Array[Button] = []
+var _agent_select_for_practice: bool = false
+var _agent_play_btn: Button
 var _test_mode_overlay: Control
 var _test_mode_type_buttons: Array[Button] = []
 var _test_bot_beh_buttons: Array[Button] = []
@@ -233,7 +235,7 @@ func _build_ui() -> void:
 	nav_v.add_child(btn_solo)
 
 	var btn_agent := _make_arcade_button("⚡ AGENT CLASH (ABILITIES MODE)", Color(0.78, 0.42, 1.0), 46.0, 17, Color(0.20, 0.10, 0.34, 0.98))
-	btn_agent.pressed.connect(_open_agent_select)
+	btn_agent.pressed.connect(func(): _open_agent_select(false))
 	nav_v.add_child(btn_agent)
 
 	var btn_test := _make_arcade_button("🎯 TEST / PRACTICE MODE (1 BOT)", Color(0.24, 0.86, 0.82), 42.0, 15, Color(0.08, 0.24, 0.26, 0.98))
@@ -548,16 +550,20 @@ func _build_agent_select_overlay() -> void:
 	act_row.add_theme_constant_override("separation", 8)
 	lv.add_child(act_row)
 
-	var play_solo_btn := _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 46.0, 15, Color(0.09, 0.30, 0.16))
-	play_solo_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	play_solo_btn.pressed.connect(func():
+	_agent_play_btn = _make_arcade_button("▶ PLAY AGENT CLASH", Color(0.30, 0.92, 0.48), 46.0, 15, Color(0.09, 0.30, 0.16))
+	_agent_play_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_agent_play_btn.pressed.connect(func():
 		NetworkManager.disconnect_network()
-		NetworkManager.test_mode_enabled = false
 		NetworkManager.match_mode = 2
+		if _agent_select_for_practice:
+			NetworkManager.test_mode_enabled = true
+			NetworkManager.test_bot_behavior = _test_bot_choice
+		else:
+			NetworkManager.test_mode_enabled = false
 		_close_agent_select()
 		_open_map_select(func(): _transition_to(NetworkManager.go_to_arena))
 	)
-	act_row.add_child(play_solo_btn)
+	act_row.add_child(_agent_play_btn)
 
 	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 46.0, 15, Color(0.10, 0.22, 0.36))
 	lobby_btn.custom_minimum_size = Vector2(130, 46)
@@ -621,10 +627,10 @@ func _refresh_agent_select_ui() -> void:
 	if is_instance_valid(_agent_kit_body):
 		_agent_kit_body.text = (
 			"∞ BASE WEAPON: %s (%d DMG)\n\n" % [str(bw["name"]), int(bw["damage"])]
-			+ "• ABIL 1 — %s (%.1fs):\n  %s\n\n" % [str(abils[0]["name"]), float(abils[0]["cooldown"]), str(abils[0]["desc"])]
-			+ "• ABIL 2 — %s (%.1fs):\n  %s\n\n" % [str(abils[1]["name"]), float(abils[1]["cooldown"]), str(abils[1]["desc"])]
-			+ "• ABIL 3 — %s (%.1fs):\n  %s\n\n" % [str(abils[2]["name"]), float(abils[2]["cooldown"]), str(abils[2]["desc"])]
-			+ "★ ULTIMATE — %s (%.0fs):\n  %s\n\n" % [str(ult["name"]), float(ult["cooldown"]), str(ult["desc"])]
+			+ "• ABIL 1 — %s (2 Kills):\n  %s\n\n" % [str(abils[0]["name"]), str(abils[0]["desc"])]
+			+ "• ABIL 2 — %s (2 Kills):\n  %s\n\n" % [str(abils[1]["name"]), str(abils[1]["desc"])]
+			+ "• ABIL 3 — %s (2 Kills):\n  %s\n\n" % [str(abils[2]["name"]), str(abils[2]["desc"])]
+			+ "★ ULTIMATE — %s (4 Ult Pts):\n  %s\n\n" % [str(ult["name"]), str(ult["desc"])]
 			+ "Ground weapons auto-pickup as you walk over them — tap THROW!"
 		)
 	for i in range(_agent_cards.size()):
@@ -670,7 +676,10 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	return ImageTexture.create_from_image(sq)
 
 
-func _open_agent_select() -> void:
+func _open_agent_select(for_practice: bool = false) -> void:
+	_agent_select_for_practice = for_practice
+	if is_instance_valid(_agent_play_btn):
+		_agent_play_btn.text = "▶ START PRACTICE (AGENT)" if for_practice else "▶ PLAY AGENT CLASH"
 	_refresh_agent_select_ui()
 	_agent_select_overlay.visible = true
 	_agent_select_overlay.modulate.a = 0.0
@@ -804,8 +813,22 @@ func _build_test_mode_overlay() -> void:
 	)
 	t_bot_row.add_child(t_plus)
 
+	var unlim_ab_cb := CheckBox.new()
+	unlim_ab_cb.text = "  Unlimited Abilities & Ultimate (No Kills Required)"
+	unlim_ab_cb.button_pressed = NetworkManager.unlimited_abilities_practice
+	unlim_ab_cb.add_theme_font_size_override("font_size", 14)
+	unlim_ab_cb.modulate = Color(0.95, 0.88, 0.45)
+	unlim_ab_cb.toggled.connect(func(on: bool):
+		NetworkManager.unlimited_abilities_practice = on
+	)
+	cv.add_child(unlim_ab_cb)
+
 	var start_btn := _make_arcade_button("▶  START PRACTICE", Color(0.30, 0.92, 0.56), 50.0, 18)
 	start_btn.pressed.connect(func():
+		if _test_mode_choice == 2:
+			_close_test_mode_overlay()
+			_open_agent_select(true)
+			return
 		NetworkManager.disconnect_network()
 		NetworkManager.test_mode_enabled = true
 		NetworkManager.match_mode = _test_mode_choice

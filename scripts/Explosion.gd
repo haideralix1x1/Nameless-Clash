@@ -108,10 +108,15 @@ func _apply_splash_damage() -> void:
 				if w_dist <= explosion_radius:
 					wall.apply_wall_damage(max_damage)
 		for bomb_hb in get_tree().get_nodes_in_group("destructible_bombs"):
-			if is_instance_valid(bomb_hb) and bomb_hb.has_method("on_shot_hit"):
-				var b_dist: float = global_position.distance_to(bomb_hb.global_position)
-				if b_dist <= explosion_radius:
-					bomb_hb.on_shot_hit(max_damage, shooter_peer_id)
+			if not is_instance_valid(bomb_hb):
+				continue
+			var b_dist: float = global_position.distance_to(bomb_hb.global_position)
+			if b_dist <= explosion_radius:
+				var target_obj: Object = bomb_hb.get_meta("prop_node") if bomb_hb.has_meta("prop_node") else bomb_hb
+				if target_obj.has_method("detonate_barrel"):
+					target_obj.detonate_barrel(shooter_peer_id, shooter_name, shooter_team)
+				elif target_obj.has_method("on_shot_hit"):
+					target_obj.on_shot_hit(max_damage, shooter_peer_id)
 
 
 func _create_big_blast_stream() -> AudioStreamWAV:

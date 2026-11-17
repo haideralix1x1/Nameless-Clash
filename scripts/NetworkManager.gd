@@ -81,6 +81,7 @@ var test_bot_count: int = 1      # 1..MAX_BOTS in Test/Practice Mode
 
 # Custom Game Rules / Mutators
 var unlimited_jetpack: bool = false
+var unlimited_abilities_practice: bool = false
 var gravity_scale: float = 1.0
 var only_pistols: bool = false
 var allow_snipers: bool = true
@@ -171,6 +172,10 @@ func is_host_active() -> bool:
 
 func is_agent_clash_mode() -> bool:
 	return match_mode == 2 or match_mode == 3
+
+
+func is_unlimited_abilities_active() -> bool:
+	return test_mode_enabled and unlimited_abilities_practice
 
 
 func is_team_mode() -> bool:

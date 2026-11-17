@@ -109,12 +109,13 @@ func apply_loadout(config: Dictionary) -> void:
 	_ensure_layers()
 
 	var arch_idx := clampi(int(config.get("archetype", 0)), 0, MAX_PART_INDEX)
-	var skin_id := clampi(int(config.get("skin_id", arch_idx)), 0, MAX_PART_INDEX)
-	var head_id := clampi(int(config.get("head_id", arch_idx)), 0, MAX_PART_INDEX)
-	var torso_id := clampi(int(config.get("torso_id", arch_idx)), 0, MAX_PART_INDEX)
-	var legs_id := clampi(int(config.get("legs_id", arch_idx)), 0, MAX_PART_INDEX)
-	var acc_id := clampi(int(config.get("accessories_id", arch_idx)), 0, MAX_PART_INDEX)
-	var hands_id := clampi(int(config.get("hands_id", arch_idx)), 0, MAX_PART_INDEX)
+	var def_part := arch_idx
+	var skin_id := clampi(int(config.get("skin_id", def_part)), 0, MAX_PART_INDEX)
+	var head_id := clampi(int(config.get("head_id", def_part)), 0, MAX_PART_INDEX)
+	var torso_id := clampi(int(config.get("torso_id", def_part)), 0, MAX_PART_INDEX)
+	var legs_id := clampi(int(config.get("legs_id", def_part)), 0, MAX_PART_INDEX)
+	var acc_id := clampi(int(config.get("accessories_id", def_part)), 0, MAX_PART_INDEX)
+	var hands_id := clampi(int(config.get("hands_id", def_part)), 0, MAX_PART_INDEX)
 
 	var head_path := str(config.get("head_texture", config.get("skin_texture",
 		"res://assets/sprites/modular/skin_%d.png" % skin_id)))
@@ -360,16 +361,48 @@ func reset_taunt_pose() -> void:
 
 func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 	_ensure_layers()
-	scale = Vector2.ONE
-	rotation = 0.0
-	position = Vector2.ZERO
 	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
 		if n != null:
-			n.visible = false
+			n.visible = true
+
+	var dir: float = -1.0 if flip_h else 1.0
+	var p: float = clampf(progress_0_to_1, 0.0, 1.0)
+	if p <= 0.62:
+		# Phase 1: Bend down toward lifted foot and pull shoe off
+		var bend: float = sin((p / 0.62) * PI * 0.85)
+		var upper_pos := Vector2(dir * 5.5 * bend, 5.0 * bend)
+		var upper_rot: float = dir * 0.36 * bend
+		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_gear]:
+			if u != null:
+				u.position = upper_pos
+				u.rotation = upper_rot
+		if _sprite_hands != null:
+			_sprite_hands.position = Vector2(dir * 7.5 * bend, 11.0 * bend)
+			_sprite_hands.rotation = dir * 0.55 * bend
+		if _anim_legs != null:
+			_anim_legs.position = Vector2(dir * 2.0 * bend, -2.5 * bend)
+			_anim_legs.rotation = -dir * 0.12 * bend
+	else:
+		# Phase 2: Wind up overhead and hurl the shoe forward
+		var throw_t: float = (p - 0.62) / 0.38
+		var lean: float = lerpf(-0.28, 0.22, throw_t)
+		var upper_pos := Vector2(dir * lean * 8.0, -1.5 * sin(throw_t * PI))
+		var upper_rot: float = dir * lean
+		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_gear]:
+			if u != null:
+				u.position = upper_pos
+				u.rotation = upper_rot
+		if _sprite_hands != null:
+			_sprite_hands.position = upper_pos + Vector2(dir * 4.0, -6.0 * (1.0 - throw_t))
+			_sprite_hands.rotation = dir * lerpf(-0.65, 0.35, throw_t)
+		if _anim_legs != null:
+			_anim_legs.position = Vector2.ZERO
+			_anim_legs.rotation = 0.0
+
 	if _sprite_shoe_throw != null:
 		_sprite_shoe_throw.visible = true
 		_sprite_shoe_throw.flip_h = flip_h
-		_sprite_shoe_throw.frame = clampi(int(progress_0_to_1 * float(SHEET_FRAMES)), 0, SHEET_FRAMES - 1)
+		_sprite_shoe_throw.frame = clampi(int(p * float(SHEET_FRAMES)), 0, SHEET_FRAMES - 1)
 
 
 func stop_shoe_throw() -> void:
@@ -379,3 +412,5 @@ func stop_shoe_throw() -> void:
 	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
 		if n != null:
 			n.visible = true
+			n.position = Vector2.ZERO
+			n.rotation = 0.0

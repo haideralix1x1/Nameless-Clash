@@ -25,6 +25,7 @@ var _spawn_points: Array[Vector2] = [
 ]
 
 var _crate_nodes: Array[Dictionary] = []
+var _static_platform_rects: Array[Rect2] = []
 var _interactables: Array[Node2D] = []
 var _bot_counter: int = 0
 var _tile_textures: Array[Texture2D] = []
@@ -87,7 +88,7 @@ func _process(delta: float) -> void:
 		else:
 			var visual_node: Node2D = c["sprite"] as Node2D
 			if is_instance_valid(visual_node):
-				visual_node.position.y = sin(t * 3.5 + float(c["phase"])) * 5.0
+				visual_node.position.y = 0.0
 
 
 func _get_map_theme(map_id: int) -> int:
@@ -235,8 +236,8 @@ func _build_map_geometry() -> void:
 			_add_platform(Rect2(1620, 560, 380, 34), 1)  # East catwalk
 			_add_platform(Rect2(860, 340, 520, 34), 2)   # Overhead crane bridge
 			_add_platform(Rect2(960, 560, 320, 32), 3)   # Center platform
-			_add_swinging_platform(Vector2(660, 48), 320.0, Vector2(180, 26), 0.38, 1.35, 0.0, true, 1)
-			_add_swinging_platform(Vector2(1580, 48), 320.0, Vector2(180, 26), 0.38, 1.35, 1.8, true, 1)
+			_add_swinging_platform(Vector2(610, 48), 290.0, Vector2(180, 26), 0.34, 1.35, 0.0, true, 1)
+			_add_swinging_platform(Vector2(1630, 48), 290.0, Vector2(180, 26), 0.34, 1.35, 1.8, true, 1)
 		2:
 			# Map 2: Desert Outpost (twin sandstone watchtowers + canyon bridge)
 			_spawn_points = [
@@ -298,9 +299,9 @@ func _build_map_geometry() -> void:
 			_add_platform(Rect2(1980, 1860, 520, 42), 3)
 			_add_platform(Rect2(1280, 1220, 380, 40), 2)
 			_add_platform(Rect2(2820, 1220, 380, 40), 2)
-			_add_swinging_platform(Vector2(1120, 48), 520.0, Vector2(220, 28), 0.35, 1.35, 0.0, true, 1)
+			_add_swinging_platform(Vector2(1120, 48), 360.0, Vector2(220, 28), 0.35, 1.35, 0.0, true, 1)
 			_add_swinging_platform(Vector2(2240, 48), 640.0, Vector2(260, 30), 0.42, 1.2, 1.4, true, 3)
-			_add_swinging_platform(Vector2(3360, 48), 520.0, Vector2(220, 28), 0.35, 1.35, 2.8, true, 1)
+			_add_swinging_platform(Vector2(3360, 48), 360.0, Vector2(220, 28), 0.35, 1.35, 2.8, true, 1)
 		4:
 			# Map 4: Outpost Towers (3 top steel watchtowers + cavern tunnels)
 			_spawn_points = [
@@ -342,9 +343,9 @@ func _build_map_geometry() -> void:
 			_add_platform(Rect2(1040, 520, 420, 40), 1)
 			_add_platform(Rect2(3020, 520, 420, 40), 1)
 			_add_platform(Rect2(1980, 2140, 520, 48), 2)
-			_add_swinging_platform(Vector2(1400, 48), 580.0, Vector2(240, 28), 0.45, 1.25, 0.4, false, 2)
+			_add_swinging_platform(Vector2(1400, 48), 390.0, Vector2(240, 28), 0.45, 1.25, 0.4, false, 2)
 			_add_swinging_platform(Vector2(2240, 48), 960.0, Vector2(260, 30), 0.36, 1.05, 1.8, false, 1)
-			_add_swinging_platform(Vector2(3080, 48), 580.0, Vector2(240, 28), 0.45, 1.25, 3.1, false, 2)
+			_add_swinging_platform(Vector2(3080, 48), 390.0, Vector2(240, 28), 0.45, 1.25, 3.1, false, 2)
 		6:
 			# Map 6: Pharaoh Pyramid (stepped desert pyramid + inner chambers)
 			_spawn_points = [
@@ -470,9 +471,9 @@ func _build_map_geometry() -> void:
 			_add_platform(Rect2(1280, 1460, 480, 42), 3)
 			_add_platform(Rect2(2720, 1460, 480, 42), 3)
 			_add_platform(Rect2(1980, 2140, 520, 46), 1)
-			_add_swinging_platform(Vector2(1500, 48), 560.0, Vector2(230, 28), 0.44, 1.3, 0.5, false, 2)
+			_add_swinging_platform(Vector2(1500, 48), 400.0, Vector2(230, 28), 0.44, 1.3, 0.5, false, 2)
 			_add_swinging_platform(Vector2(2240, 48), 640.0, Vector2(250, 30), 0.38, 1.15, 1.9, false, 3)
-			_add_swinging_platform(Vector2(2980, 48), 560.0, Vector2(230, 28), 0.44, 1.3, 3.3, false, 2)
+			_add_swinging_platform(Vector2(2980, 48), 400.0, Vector2(230, 28), 0.44, 1.3, 3.3, false, 2)
 
 
 func _add_platform_2x(rect: Rect2, tile_idx: int) -> void:
@@ -493,6 +494,7 @@ func _add_swinging_platform(anchor: Vector2, rope_len: float, plat_size: Vector2
 
 
 func _add_platform(rect: Rect2, tile_idx: int) -> void:
+	_static_platform_rects.append(rect)
 	var body := StaticBody2D.new()
 	body.position = rect.position
 	body.collision_layer = 1
@@ -509,40 +511,58 @@ func _add_platform(rect: Rect2, tile_idx: int) -> void:
 	tex_rect.texture = _tile_textures[clampi(tile_idx, 0, _tile_textures.size() - 1)]
 	tex_rect.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	tex_rect.stretch_mode = TextureRect.STRETCH_TILE
-	tex_rect.size = rect.size
+	var cols: int = maxi(1, int(round(rect.size.x / 32.0)))
+	var rows: int = maxi(1, int(round(rect.size.y / 32.0)))
+	var snapped_sz := Vector2(float(cols) * 32.0, float(rows) * 32.0)
+	tex_rect.size = snapped_sz
+	tex_rect.scale = Vector2(rect.size.x / snapped_sz.x, rect.size.y / snapped_sz.y)
 	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(tex_rect)
 
 	_world_geometry.add_child(body)
 
 
+func _snap_to_floor(raw_pos: Vector2, half_h: float = 14.0) -> Vector2:
+	var best_y: float = arena_height - 64.0
+	var clamped_x: float = clampf(raw_pos.x, 84.0, arena_width - 84.0)
+	for rect in _static_platform_rects:
+		# Skip ceiling and narrow vertical walls
+		if rect.position.y <= 10.0 or rect.size.x <= 64.0:
+			continue
+		if clamped_x >= rect.position.x + 20.0 and clamped_x <= rect.end.x - 20.0:
+			if rect.position.y >= raw_pos.y - 24.0 and rect.position.y < best_y:
+				best_y = rect.position.y
+	return Vector2(clamped_x, best_y - half_h)
+
+
 func _build_pickup_crates() -> void:
 	var crate_specs: Array[Dictionary] = []
 	if NetworkManager.is_agent_clash_mode():
 		crate_specs = [
-			{"pos": Vector2(1120, 1140), "type": "throwable", "val": 0},
-			{"pos": Vector2(280, 925), "type": "throwable", "val": 1},
-			{"pos": Vector2(1960, 925), "type": "throwable", "val": 2},
-			{"pos": Vector2(440, 410), "type": "throwable", "val": 3},
-			{"pos": Vector2(1800, 410), "type": "throwable", "val": 4},
-			{"pos": Vector2(880, 705), "type": "throwable", "val": 0},
-			{"pos": Vector2(1360, 705), "type": "throwable", "val": 6},
-			{"pos": Vector2(1120, 710), "type": "health", "val": 45},
-			{"pos": Vector2(1120, 280), "type": "health", "val": 50}
+			{"pos": Vector2(arena_width * 0.50, arena_height - 120.0), "type": "throwable", "val": 0},
+			{"pos": Vector2(arena_width * 0.14, arena_height * 0.72), "type": "throwable", "val": 1},
+			{"pos": Vector2(arena_width * 0.86, arena_height * 0.72), "type": "throwable", "val": 2},
+			{"pos": Vector2(arena_width * 0.22, arena_height * 0.30), "type": "throwable", "val": 3},
+			{"pos": Vector2(arena_width * 0.78, arena_height * 0.30), "type": "throwable", "val": 4},
+			{"pos": Vector2(arena_width * 0.38, arena_height * 0.52), "type": "throwable", "val": 0},
+			{"pos": Vector2(arena_width * 0.62, arena_height * 0.52), "type": "throwable", "val": 6},
+			{"pos": Vector2(arena_width * 0.50, arena_height * 0.52), "type": "health", "val": 45},
+			{"pos": Vector2(arena_width * 0.50, arena_height * 0.20), "type": "health", "val": 50}
 		]
 	else:
 		var allowed_ws: Array[int] = WeaponData.get_pickup_weapon_ids()
 		for sp_idx in range(_spawn_points.size()):
 			var w_id: int = allowed_ws[randi() % allowed_ws.size()]
-			var off_x: float = randf_range(-90.0, 90.0)
-			crate_specs.append({"pos": _spawn_points[sp_idx] + Vector2(off_x, -12.0), "type": "weapon", "val": w_id})
-		crate_specs.append({"pos": Vector2(arena_width * 0.5, arena_height * 0.57), "type": "health", "val": 45})
-		crate_specs.append({"pos": Vector2(arena_width * 0.5, arena_height * 0.22), "type": "health", "val": 50})
+			var off_x: float = randf_range(-60.0, 60.0)
+			crate_specs.append({"pos": _spawn_points[sp_idx] + Vector2(off_x, 0.0), "type": "weapon", "val": w_id})
+		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.52), "type": "health", "val": 45})
+		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.20), "type": "health", "val": 50})
 
 	for i in range(crate_specs.size()):
 		var spec: Dictionary = crate_specs[i]
+		var half_h: float = 12.0 if str(spec["type"]) == "weapon" else 15.0
 		var area := Area2D.new()
-		area.position = spec["pos"]
+		area.position = _snap_to_floor(spec["pos"] as Vector2, half_h)
 		area.collision_layer = 0
 		area.collision_mask = 2
 
@@ -584,6 +604,13 @@ func _build_pickup_crates() -> void:
 		area.body_entered.connect(_on_crate_body_entered.bind(i))
 		area.body_exited.connect(_on_crate_body_exited.bind(i))
 		_pickups_container.add_child(area)
+
+	if NetworkManager.is_agent_clash_mode():
+		for _u in range(3):
+			var orb := UltPointPickup.new()
+			orb.arena_ref = self
+			_pickups_container.add_child(orb)
+			orb.relocate_random()
 
 
 func _build_interactables() -> void:
@@ -812,9 +839,9 @@ func _spawn_all_participants() -> void:
 			var cam: Camera2D = player.get_node_or_null("Camera2D") as Camera2D
 			if cam != null:
 				cam.limit_left = 0
-				cam.limit_top = 0
+				cam.limit_top = -76
 				cam.limit_right = int(arena_width)
-				cam.limit_bottom = int(arena_height)
+				cam.limit_bottom = int(arena_height) + 170
 			_hud.bind_local_player(player)
 
 	var target_bots: int = clampi(NetworkManager.test_bot_count, 1, NetworkManager.MAX_BOTS) if NetworkManager.is_test_mode() else clampi(NetworkManager.bot_count, 0, NetworkManager.MAX_BOTS)
@@ -841,14 +868,15 @@ func _spawn_bot(bot_index: int) -> void:
 	var bot_name: String = "Bot-%d" % bot_index
 	if NetworkManager.is_agent_clash_mode():
 		bot_name = "%s (Bot)" % str(AgentData.get_agent(arch_idx)["agent_name"])
+	var part_idx: int = ProfileManager.get_archetype_part_id(arch_idx)
 	var bot_avatar: Dictionary = {
 		"archetype_id": arch_idx,
-		"skin_id": arch_idx,
-		"head_id": (arch_idx + bot_index) % ProfileManager.ARCHETYPES.size(),
-		"torso_id": arch_idx,
-		"legs_id": arch_idx,
-		"hands_id": arch_idx,
-		"accessories_id": arch_idx,
+		"skin_id": part_idx,
+		"head_id": part_idx,
+		"torso_id": part_idx,
+		"legs_id": part_idx,
+		"hands_id": part_idx,
+		"accessories_id": part_idx,
 		"shirt_color": arch["shirt"],
 		"pants_color": arch["pants"],
 		"skin_color": arch["skin"],
@@ -878,7 +906,7 @@ func _spawn_bot(bot_index: int) -> void:
 func _get_active_bots() -> Array[Node]:
 	var out: Array[Node] = []
 	for child in _players_container.get_children():
-		if is_instance_valid(child) and bool(child.get("is_bot")):
+		if is_instance_valid(child) and not child.is_queued_for_deletion() and child.get("is_bot") == true:
 			out.append(child)
 	return out
 
@@ -1058,8 +1086,12 @@ class SwingingPlatform extends Node2D:
 			tr.texture = tile_tex
 			tr.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 			tr.stretch_mode = TextureRect.STRETCH_TILE
+			var cols: int = maxi(1, int(round(plat_size.x / 32.0)))
+			var rows: int = maxi(1, int(round(plat_size.y / 32.0)))
+			var snapped_sz := Vector2(float(cols) * 32.0, float(rows) * 32.0)
 			tr.position = -plat_size * 0.5
-			tr.size = plat_size
+			tr.size = snapped_sz
+			tr.scale = Vector2(plat_size.x / snapped_sz.x, plat_size.y / snapped_sz.y)
 			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_body.add_child(tr)
 		add_child(_body)
@@ -1257,11 +1289,14 @@ class InteractableHealStation extends Node2D:
 
 
 class InteractableProp extends Node2D:
+	const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 	var inter_idx: int = 0
 	var prop_kind: String = "chair"
 	var is_available: bool = true
 	var _respawn_timer: float = 0.0
 	var _area: Area2D
+	var _hit_body: StaticBody2D
+	var _hit_col: CollisionShape2D
 
 	func _ready() -> void:
 		_area = Area2D.new()
@@ -1276,9 +1311,47 @@ class InteractableProp extends Node2D:
 		_area.body_exited.connect(_on_exited)
 		add_child(_area)
 
+		if prop_kind == "barrel":
+			_hit_body = StaticBody2D.new()
+			_hit_body.collision_layer = 2
+			_hit_body.collision_mask = 0
+			_hit_body.add_to_group("destructible_bombs")
+			_hit_body.set_meta("prop_node", self)
+			_hit_col = CollisionShape2D.new()
+			var h_box := RectangleShape2D.new()
+			h_box.size = Vector2(44, 66)
+			_hit_col.shape = h_box
+			_hit_col.position = Vector2(0, -13)
+			_hit_body.add_child(_hit_col)
+			add_child(_hit_body)
+
+	func detonate_barrel(attacker_id: int = 0, attacker_name: String = "", attacker_team: int = -1) -> void:
+		if not is_available or prop_kind != "barrel":
+			return
+		is_available = false
+		_respawn_timer = 12.0
+		if _hit_col != null:
+			_hit_col.set_deferred("disabled", true)
+		queue_redraw()
+		var world_node: Node = get_parent()
+		if world_node != null:
+			var exp := EXPLOSION_SCENE.instantiate()
+			exp.global_position = global_position + Vector2(0, -14)
+			exp.explosion_radius = 165.0
+			exp.max_damage = 85
+			exp.shooter_peer_id = attacker_id
+			exp.shooter_name = attacker_name if not attacker_name.is_empty() else "Explosive Barrel"
+			exp.shooter_team = attacker_team
+			exp.weapon_name = "Explosive Barrel"
+			exp.allow_self_damage = true
+			exp.can_deal_damage = true
+			world_node.add_child(exp)
+
 	func pick_up_prop() -> void:
 		is_available = false
 		_respawn_timer = 10.0
+		if _hit_col != null:
+			_hit_col.set_deferred("disabled", true)
 		queue_redraw()
 
 	func _process(delta: float) -> void:
@@ -1286,6 +1359,8 @@ class InteractableProp extends Node2D:
 			_respawn_timer -= delta
 			if _respawn_timer <= 0.0:
 				is_available = true
+				if _hit_col != null:
+					_hit_col.set_deferred("disabled", false)
 				queue_redraw()
 
 	func _on_entered(body: Node2D) -> void:
@@ -1333,3 +1408,46 @@ class InteractableProp extends Node2D:
 			"crate":
 				draw_rect(Rect2(-11, -11, 22, 22), Color(0.26, 0.34, 0.46))
 				draw_rect(Rect2(-11, -11, 22, 22), Color(0.38, 0.86, 0.98), false, 2.0)
+
+
+class UltPointPickup extends Area2D:
+	var arena_ref: Node2D = null
+	var _pulse: float = 0.0
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 22.0
+		cs.shape = circ
+		add_child(cs)
+		body_entered.connect(_on_body_entered)
+
+	func relocate_random() -> void:
+		if arena_ref == null:
+			return
+		var w: float = float(arena_ref.get("arena_width"))
+		var h: float = float(arena_ref.get("arena_height"))
+		var raw := Vector2(randf_range(120.0, w - 120.0), randf_range(120.0, h - 100.0))
+		position = arena_ref.call("_snap_to_floor", raw, 18.0)
+
+	func _process(delta: float) -> void:
+		_pulse += delta * 4.0
+		queue_redraw()
+
+	func _on_body_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.has_method("can_collect_ult_point") and body.can_collect_ult_point():
+			body.collect_ult_point()
+			call_deferred("relocate_random")
+
+	func _draw() -> void:
+		var glow: float = 0.72 + 0.28 * sin(_pulse)
+		draw_circle(Vector2.ZERO, 17.0, Color(0.95, 0.72, 0.18, 0.24 * glow))
+		draw_arc(Vector2.ZERO, 15.0, 0.0, TAU, 24, Color(1.0, 0.84, 0.24, 0.92), 2.5)
+		var pts := PackedVector2Array()
+		for i in range(8):
+			var ang: float = float(i) * PI * 0.25 - PI * 0.5
+			var r: float = 11.0 if i % 2 == 0 else 5.0
+			pts.append(Vector2.from_angle(ang) * r)
+		draw_colored_polygon(pts, Color(1.0, 0.88, 0.30, 0.98))
