@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bx3n22j7ynxb1"
-path="res://.godot/imported/video_005_sheet_custom_horizontal_tiny (1).png-bd60eb73ffc0f4401585b2cfad00845b.ctex"
+uid="uid://dtndertvaifgd"
+path="res://.godot/imported/barbarian_attack_sheet.png-579fb3762ca24c7f0a0dda05b090e7d0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/summons/video_005_sheet_custom_horizontal_tiny (1).png"
-dest_files=["res://.godot/imported/video_005_sheet_custom_horizontal_tiny (1).png-bd60eb73ffc0f4401585b2cfad00845b.ctex"]
+source_file="res://assets/sprites/summons/barbarian_attack_sheet.png"
+dest_files=["res://.godot/imported/barbarian_attack_sheet.png-579fb3762ca24c7f0a0dda05b090e7d0.ctex"]
 
 [params]
 

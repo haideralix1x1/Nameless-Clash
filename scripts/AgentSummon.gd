@@ -20,6 +20,11 @@ var _phase: float = 0.0
 var _wall_gap: float = 110.0
 var _attack_anim_timer: float = 0.0
 var _attack_dir: Vector2 = Vector2.RIGHT
+var _barb_attacking: bool = false
+var _barb_attack_elapsed: float = 0.0
+var _barb_target: Node = null
+var _barb_hit_done: bool = false
+const TEX_BARBARIAN_ATTACK: Texture2D = preload("res://assets/sprites/summons/barbarian_attack_sheet.png")
 
 const SUMMON_TEXTURES: Dictionary = {
 	"winged_lion": preload("res://assets/sprites/summons/winged_lion_sheet.png"),
@@ -126,6 +131,19 @@ func on_shot_hit(dmg: int, attacker_id: int) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if summon_kind == "barbarian" and _barb_attacking:
+		_barb_attack_elapsed += delta
+		var atk_frame: int = int(_barb_attack_elapsed * 13.5)
+		if atk_frame >= 5 and not _barb_hit_done:
+			_barb_hit_done = true
+			if can_deal and is_instance_valid(_barb_target) and _barb_target.has_method("apply_hit"):
+				_barb_target.apply_hit(damage, owner_peer_id, weapon_name, owner_name, Vector2(move_dir_x * 220.0, -120.0))
+		if atk_frame >= 12:
+			queue_free()
+			return
+		if is_instance_valid(_sprite):
+			_sprite.frame = atk_frame
+		return
 	if _attack_anim_timer > 0.0:
 		_attack_anim_timer = maxf(0.0, _attack_anim_timer - delta)
 		global_position += _attack_dir * 260.0 * delta
@@ -241,13 +259,14 @@ func _physics_process(delta: float) -> void:
 			global_position += vel * delta + Vector2(0.0, sin(_phase * 1.5) * 18.0) * delta
 		"barbarian", "zombie_dog", "small_snake":
 			var g_spd: float = 240.0 if summon_kind == "zombie_dog" else 195.0
+			var foot_off: float = 34.0 if summon_kind == "barbarian" else 16.0
 			vel.x = move_dir_x * g_spd
 			vel.y = minf(vel.y + 920.0 * delta, 650.0)
 			var space := get_world_2d().direct_space_state
-			var ray := PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(0.0, 20.0), 1)
+			var ray := PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(0.0, foot_off + maxf(6.0, vel.y * delta)), 1)
 			var hit := space.intersect_ray(ray)
-			if not hit.is_empty() and vel.y > 0.0:
-				global_position.y = (hit["position"] as Vector2).y - 16.0
+			if not hit.is_empty() and vel.y >= 0.0:
+				global_position.y = (hit["position"] as Vector2).y - foot_off
 				vel.y = 0.0
 			if summon_kind in ["barbarian", "small_snake"]:
 				var h_ray := PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(move_dir_x * 20.0, 0.0), 1)
@@ -378,6 +397,21 @@ func _on_body_entered(body: Node) -> void:
 		queue_free()
 		return
 	if summon_kind in ["shadow_mummy", "turret", "mirror_clone", "crush_walls", "bomb_eagle", "dragon_strike"]:
+		return
+	if summon_kind == "barbarian":
+		if _barb_attacking:
+			return
+		_barb_attacking = true
+		_barb_attack_elapsed = 0.0
+		_barb_target = body
+		_barb_hit_done = false
+		set_deferred("monitoring", false)
+		if is_instance_valid(_sprite):
+			_sprite.texture = TEX_BARBARIAN_ATTACK
+			_sprite.hframes = 12
+			_sprite.frame = 0
+			_sprite.scale = Vector2(_base_scale * 1.57, _base_scale * 1.57)
+			_sprite.flip_h = (body as Node2D).global_position.x < global_position.x
 		return
 	if can_deal and body.has_method("apply_hit"):
 		body.apply_hit(damage, owner_peer_id, weapon_name, owner_name, Vector2(move_dir_x * 220.0, -120.0))
