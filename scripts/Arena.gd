@@ -53,14 +53,17 @@ func _ready() -> void:
 	_build_pickup_crates()
 	_build_interactables()
 	_spawn_all_participants()
+	NetworkManager.reset_match_state()
 	_hud.add_bot_requested.connect(_on_add_bot_requested)
 	_hud.remove_bot_requested.connect(_on_remove_bot_requested)
 	_hud.pickup_weapon_requested.connect(_on_pickup_weapon_requested)
 	_hud.interact_requested.connect(_on_interact_requested)
 	NetworkManager.interactable_toggled.connect(_on_interactable_toggled)
+	NetworkManager.player_list_updated.connect(_on_network_players_updated)
 
 
 func _process(delta: float) -> void:
+	NetworkManager.tick_match_timer(delta)
 	var t: float = Time.get_ticks_msec() / 1000.0
 	for m in _scenery_movers:
 		var nd: Node2D = m["node"] as Node2D
@@ -735,6 +738,9 @@ func _on_crate_body_entered(body: Node2D, crate_idx: int) -> void:
 	if body.is_in_group("players") and body.has_method("apply_pickup"):
 		if body.has_method("is_alive") and not body.is_alive():
 			return
+		var is_local_actor: bool = (body.get("is_local_human") == true) or (body.get("is_bot") == true and (not NetworkManager.is_network_active() or NetworkManager.is_host_active()))
+		if not is_local_actor:
+			return
 		var p_type: String = str(entry["type"])
 		if p_type == "throwable":
 			if not body.has_method("can_grab_throwable") or not body.can_grab_throwable():
@@ -858,7 +864,35 @@ func _pick_safest_spawn() -> Vector2:
 	return best_pos
 
 
+const BOT_WORD_A: Array[String] = [
+	"Shadow", "Neon", "Iron", "Turbo", "Frost", "Blaze",
+	"Ghost", "Cyber", "Storm", "Pixel", "Venom", "Rogue",
+	"Nova", "Apex", "Crimson", "Steel", "Lunar", "Solar",
+	"Silent", "Hyper", "Rapid", "Cobalt", "Vortex", "Phantom"
+]
+const BOT_WORD_B: Array[String] = [
+	"Fox", "Viper", "Wolf", "Hawk", "Byte", "King",
+	"Rider", "Ninja", "Raven", "Titan", "Strike", "Falcon",
+	"Knight", "Hunter", "Phoenix", "Spark", "Fang", "Drifter",
+	"Sniper", "Blade", "Rex", "Flare", "Arrow", "Bolt"
+]
+var _used_bot_names: Dictionary = {}
+
+
+func _generate_bot_username() -> String:
+	for _attempt in range(30):
+		var cand: String = BOT_WORD_A[randi() % BOT_WORD_A.size()] + BOT_WORD_B[randi() % BOT_WORD_B.size()]
+		if not _used_bot_names.has(cand):
+			_used_bot_names[cand] = true
+			return cand
+	var fallback: String = "%s%s%d" % [BOT_WORD_A[randi() % BOT_WORD_A.size()], BOT_WORD_B[randi() % BOT_WORD_B.size()], randi() % 99]
+	_used_bot_names[fallback] = true
+	return fallback
+
+
 func _spawn_all_participants() -> void:
+	NetworkManager.clear_bot_stats()
+	_used_bot_names.clear()
 	var peer_ids: Array = NetworkManager.players.keys()
 	peer_ids.sort()
 
@@ -900,10 +934,39 @@ func _spawn_all_participants() -> void:
 		_spawn_bot(b + 1)
 
 
+func _on_network_players_updated() -> void:
+	if not NetworkManager.is_network_active() or _players_container == null:
+		return
+	var peer_ids: Array = NetworkManager.players.keys()
+	peer_ids.sort()
+	for i in range(peer_ids.size()):
+		var pid: int = int(peer_ids[i])
+		var node_name: String = "Player_%d" % pid
+		if _players_container.get_node_or_null(node_name) != null:
+			continue
+		var pinfo: Dictionary = NetworkManager.players[pid]
+		var spawn_pos: Vector2 = _pick_safest_spawn()
+		var player := PLAYER_SCENE.instantiate()
+		player.name = node_name
+		var p_avatar: Dictionary = pinfo.get("avatar", {})
+		player.setup_player(
+			pid,
+			str(pinfo.get("name", "Trooper")),
+			int(pinfo.get("color_index", i % NetworkManager.TEAM_COLORS.size())),
+			false,
+			_spawn_points,
+			int(pinfo.get("team", i % 2)),
+			p_avatar
+		)
+		player.global_position = spawn_pos
+		_players_container.add_child(player)
+
+
 func _spawn_bot(bot_index: int) -> void:
 	_bot_counter = maxi(_bot_counter, bot_index)
 	var bot_id: int = -bot_index
-	var bot_team: int = bot_index % 2
+	var max_teams: int = maxi(2, NetworkManager.team_count)
+	var bot_team: int = bot_index % max_teams
 	var color_idx: int = bot_team if NetworkManager.is_team_mode() else (NetworkManager.local_color_index + bot_index) % NetworkManager.TEAM_COLORS.size()
 	var spawn_pos: Vector2 = _pick_safest_spawn()
 
@@ -912,9 +975,8 @@ func _spawn_bot(bot_index: int) -> void:
 	var raw_bot_w: int = int(arch["weapon"]) if (bot_index % 2 == 0) else (bot_index % WeaponData.get_weapon_count())
 	var bot_weapon: int = WeaponData.sanitize_weapon_id(raw_bot_w)
 	var sec_weapon: int = 9 if WeaponData.is_weapon_allowed(9) else bot_weapon
-	var bot_name: String = "Bot-%d" % bot_index
-	if NetworkManager.is_agent_clash_mode():
-		bot_name = "%s (Bot)" % str(AgentData.get_agent(arch_idx)["agent_name"])
+	var bot_name: String = _generate_bot_username()
+	NetworkManager.register_bot_stat(bot_id, bot_name, bot_team)
 	var part_idx: int = ProfileManager.get_archetype_part_id(arch_idx)
 	var bot_avatar: Dictionary = {
 		"archetype_id": arch_idx,

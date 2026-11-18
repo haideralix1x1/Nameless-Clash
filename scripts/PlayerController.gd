@@ -303,7 +303,7 @@ func setup_player(
 	elif not NetworkManager.is_network_active():
 		is_local_human = true
 	else:
-		is_local_human = (p_id == multiplayer.get_unique_id())
+		is_local_human = (p_id == NetworkManager.get_local_peer_id())
 
 
 func _ready() -> void:
@@ -412,7 +412,7 @@ func collect_ult_point() -> void:
 func _on_kill_scored(killer_id: int, victim_id: int) -> void:
 	if killer_id != peer_id or victim_id == peer_id:
 		return
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		ability_kill_progress += 1
 		if ability_kill_progress >= 2:
 			ability_kill_progress = 0
@@ -472,7 +472,7 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 func _apply_modular_textures() -> void:
 	if not is_node_ready() or _modular_rig == null:
 		return
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		var ag_id: int = clampi(archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
 		var arch: Dictionary = ProfileManager.ARCHETYPES[ag_id]
 		var parts: Dictionary = arch.get("parts", {})
@@ -527,6 +527,9 @@ func add_screen_shake(strength: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if NetworkManager.match_over and not is_preview_dummy:
+		velocity = Vector2.ZERO
+		return
 	if spawn_invuln_timer > 0.0:
 		spawn_invuln_timer = maxf(0.0, spawn_invuln_timer - delta)
 
@@ -645,7 +648,7 @@ func _process_alive(delta: float) -> void:
 			else:
 				_throw_item_local(DEFAULT_SHOE_ITEM_ID, safe_m, aim_angle)
 
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		if stun_timer > 0.0:
 			stun_timer = maxf(0.0, stun_timer - delta)
 		if _grab_cooldown > 0.0:
@@ -759,7 +762,7 @@ func _process_alive(delta: float) -> void:
 	var want_jet: bool = false
 	var want_fire: bool = false
 
-	var is_stunned: bool = NetworkManager.is_agent_clash_mode() and (stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0)
+	var is_stunned: bool = _is_agent_logic_active() and (stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0)
 
 	if is_bot:
 		var bot_cmd: Dictionary = _compute_bot_input(delta)
@@ -821,7 +824,7 @@ func _process_alive(delta: float) -> void:
 
 		want_fire = virtual_fire if is_mobile_touch else (virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui))
 
-		if NetworkManager.is_agent_clash_mode():
+		if _is_agent_logic_active():
 			if Input.is_action_just_pressed("ability_1"):
 				use_agent_ability(0)
 			if Input.is_action_just_pressed("ability_2"):
@@ -924,7 +927,7 @@ func _process_alive(delta: float) -> void:
 	move_and_slide()
 
 	if want_fire and _fire_cooldown <= 0.0 and not is_stunned:
-		if NetworkManager.is_agent_clash_mode():
+		if _is_agent_logic_active():
 			_fire_agent_base_weapon()
 		else:
 			if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
@@ -1087,7 +1090,7 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 
 
 func start_reload() -> void:
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		return
 	if is_reloading or current_ammo >= _weapon.mag_size or is_dead:
 		return
@@ -1139,7 +1142,7 @@ func set_weapon(new_weapon_id: int) -> void:
 
 
 func apply_gun_preset(preset_idx: int) -> void:
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		return
 	selected_gun_preset_id = clampi(preset_idx, 0, WeaponData.GUN_PRESETS.size() - 1)
 	var preset: Dictionary = WeaponData.get_effective_preset(selected_gun_preset_id)
@@ -1159,7 +1162,7 @@ func apply_gun_preset(preset_idx: int) -> void:
 
 
 func set_bomb_type(b_type: String) -> void:
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		return
 	bomb_type = b_type if not b_type.is_empty() else "frag"
 	if is_local_human:
@@ -1225,7 +1228,7 @@ func _spawn_bomb_instance(origin: Vector2, angle: float, b_type: String, speed: 
 
 
 func toggle_dual_wield() -> void:
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		return
 	if not _weapon.supports_dual_wield or is_dead:
 		return
@@ -1297,7 +1300,7 @@ func _apply_weapon_visuals() -> void:
 	if _weapons_sheet_tex == null and _primary_weapon != null:
 		_weapons_sheet_tex = _primary_weapon.texture
 		_weapons_base_scale = _primary_weapon.scale
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		_primary_weapon.visible = false
 		_secondary_weapon.visible = false
 		if _agent_weapon_node != null:
@@ -1356,26 +1359,26 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 			var picked_w: WeaponData = WeaponData.get_weapon(new_w_id, weapon_skin_id, m4a1_rail_mod)
 			if new_w_id == _equipped_primary_id and _primary_reserve_ammo >= 0:
 				_primary_saved_ammo = picked_w.mag_size
-				_primary_reserve_ammo = 0
+				_primary_reserve_ammo = picked_w.mag_size
 				if not _is_using_secondary_slot():
 					current_ammo = picked_w.mag_size
 					is_reloading = false
 					_emit_ammo()
 			elif new_w_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id and _secondary_reserve_ammo >= 0:
 				_secondary_saved_ammo = picked_w.mag_size
-				_secondary_reserve_ammo = 0
+				_secondary_reserve_ammo = picked_w.mag_size
 				if _is_using_secondary_slot():
 					current_ammo = picked_w.mag_size
 					is_reloading = false
 					_emit_ammo()
 			elif _is_using_secondary_slot():
 				secondary_weapon_id = new_w_id
-				_secondary_reserve_ammo = 0
+				_secondary_reserve_ammo = picked_w.mag_size
 				_secondary_saved_ammo = picked_w.mag_size
 				set_weapon(secondary_weapon_id)
 			else:
 				_equipped_primary_id = new_w_id
-				_primary_reserve_ammo = 0
+				_primary_reserve_ammo = picked_w.mag_size
 				_primary_saved_ammo = picked_w.mag_size
 				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
@@ -1454,13 +1457,17 @@ func request_damage_rpc(dmg: int, attacker_id: int, weapon_name: String, attacke
 	_receive_damage_local(dmg, attacker_id, weapon_name, attacker_name, knockback)
 
 
+func _is_agent_logic_active() -> bool:
+	return is_preview_dummy or NetworkManager.is_agent_clash_mode()
+
+
 func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, attacker_name: String, knockback: Vector2) -> void:
 	if is_dead or spawn_invuln_timer > 0.0:
 		return
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		if attacker_id == peer_id:
 			return
-		if invincible_timer > 0.0 or deathless_timer > 0.0 or (invis_timer > 0.0 and str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Tiny Taz"):
+		if invincible_timer > 0.0 or deathless_timer > 0.0 or (invis_timer > 0.0 and str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Soulless"):
 			return
 		if personal_shield_hp > 0 and personal_shield_timer > 0.0:
 			var absorbed: int = mini(personal_shield_hp, dmg)
@@ -1804,18 +1811,19 @@ func _apply_team_visuals() -> void:
 
 func _update_overhead_ui() -> void:
 	_overhead_ui.visible = (not is_dead) and (invis_timer <= 0.0 or is_local_human)
-	_name_label.visible = SettingsManager.show_callsigns or (NetworkManager.is_agent_clash_mode() and (stun_timer > 0.0 or ability_lock_timer > 0.0 or carried_by_peer_id != 0 or thrown_flight_timer > 0.0))
-	if NetworkManager.is_agent_clash_mode() and carried_by_peer_id != 0:
-		_name_label.text = "✋ GRABBED!"
+	var ag_active: bool = _is_agent_logic_active()
+	_name_label.visible = SettingsManager.show_callsigns or (ag_active and (stun_timer > 0.0 or ability_lock_timer > 0.0 or carried_by_peer_id != 0 or thrown_flight_timer > 0.0))
+	if ag_active and carried_by_peer_id != 0:
+		_name_label.text = "GRABBED!"
 		_name_label.modulate = Color(1.0, 0.65, 0.22)
-	elif NetworkManager.is_agent_clash_mode() and thrown_flight_timer > 0.0:
-		_name_label.text = "☄ THROWN!"
+	elif ag_active and thrown_flight_timer > 0.0:
+		_name_label.text = "THROWN!"
 		_name_label.modulate = Color(1.0, 0.42, 0.22)
-	elif NetworkManager.is_agent_clash_mode() and stun_timer > 0.0:
-		_name_label.text = "⚡ STUNNED %.1fs" % stun_timer
+	elif ag_active and stun_timer > 0.0:
+		_name_label.text = "STUNNED %.1fs" % stun_timer
 		_name_label.modulate = Color(0.45, 0.95, 1.0)
-	elif NetworkManager.is_agent_clash_mode() and ability_lock_timer > 0.0:
-		_name_label.text = "🔒 SUPPRESSED %.1fs" % ability_lock_timer
+	elif ag_active and ability_lock_timer > 0.0:
+		_name_label.text = "SUPPRESSED %.1fs" % ability_lock_timer
 		_name_label.modulate = Color(0.86, 0.42, 1.0)
 	else:
 		_name_label.text = player_name
@@ -1837,7 +1845,7 @@ func _emit_hud_signals() -> void:
 	fuel_changed.emit(jetpack_fuel, MAX_FUEL)
 	weapon_changed.emit(_weapon, is_dual_wielding)
 	_emit_ammo()
-	if NetworkManager.is_agent_clash_mode():
+	if _is_agent_logic_active():
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	else:
 		bombs_changed.emit(bomb_count, bomb_type)
@@ -2027,7 +2035,7 @@ func _compute_bot_input(delta: float) -> Dictionary:
 # --- AGENT CLASH MODE ABILITIES, STUN, THROWABLES & BARRIERS ---
 
 func apply_stun(duration: float, attacker_id: int = 0) -> void:
-	if not NetworkManager.is_agent_clash_mode() or is_dead or duration <= 0.0:
+	if not _is_agent_logic_active() or is_dead or duration <= 0.0:
 		return
 	if attacker_id != 0 and attacker_id == peer_id:
 		return
@@ -2118,7 +2126,7 @@ func spawn_slash_vfx_rpc(origin: Vector2, angle: float, col: Color) -> void:
 
 
 func use_agent_ability(slot_idx: int) -> void:
-	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0 or ability_lock_timer > 0.0:
+	if not _is_agent_logic_active() or is_dead or stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0 or ability_lock_timer > 0.0:
 		return
 	if slot_idx < 0 or slot_idx > 3 or ability_cooldowns[slot_idx] > 0.0:
 		return
@@ -2813,10 +2821,12 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			add_screen_shake(2.4)
 			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
 		"meteor_boulder":
-			var mb := _spawn_custom_bullet(origin, cast_angle, 740.0, dmg, "thrown_stone", col, ab_name, 0.6, 0.65, false, 1.8, local_auth)
+			var mb := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "thrown_stone", col, ab_name, 0.6, 0.95, false, 5.0, local_auth)
 			if mb != null:
-				mb.radius_scale = 4.2
-				mb.spin_speed = 10.0
+				mb.radius_scale = 8.4
+				mb.wall_bounces_left = 1
+				mb.stop_on_vertical_wall = true
+				mb.spin_speed = 8.0
 			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.85)
 		"piercing_crystal":
 			var pc := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "ice_shard", col, ab_name, 0.0, 0.0, false, 3.0, local_auth)
@@ -2824,9 +2834,8 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				pc.pierce_players = true
 				pc.radius_scale = 1.4
 			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 1.1)
-		"mini_prisms":
-			for mpi in range(3):
-				_spawn_summon("mini_prism", origin + Vector2(0, (mpi - 1) * 22.0), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
+		"prism_mirror", "mini_prisms":
+			_spawn_prism_mirror(float(ab.get("duration", 5.0)), col)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
 		"ult_crush_walls":
 			var cw_pos: Vector2 = cast_pos + Vector2.from_angle(cast_angle) * 180.0
@@ -4609,3 +4618,56 @@ class BoxingFistVfx extends Node2D:
 		draw_circle(Vector2(0.0, 15.0), 6.5, red)
 		# Glove highlight
 		draw_circle(Vector2(4.0, -6.0), 8.5, hi)
+
+
+func _spawn_prism_mirror(dur: float, col: Color) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var m := PrismMirrorShield.new()
+	m.owner_node = self
+	m.owner_peer_id = peer_id
+	m.owner_team = team_id
+	m.facing_dir = 1.0 if facing_right else -1.0
+	m.mirror_color = col
+	m.time_left = dur
+	m.global_position = global_position + Vector2(m.facing_dir * 42.0, -4.0)
+	parent_node.add_child(m)
+
+
+class PrismMirrorShield extends StaticBody2D:
+	var owner_node: Node2D = null
+	var owner_peer_id: int = 0
+	var owner_team: int = 0
+	var facing_dir: float = 1.0
+	var mirror_color: Color = Color(1.0, 0.58, 0.92)
+	var time_left: float = 5.0
+
+	func _ready() -> void:
+		add_to_group("prism_mirrors")
+		collision_layer = 2
+		collision_mask = 0
+		var cs := CollisionShape2D.new()
+		var rs := RectangleShape2D.new()
+		rs.size = Vector2(18.0, 92.0)
+		cs.shape = rs
+		add_child(cs)
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		time_left -= delta
+		if time_left <= 0.0 or not is_instance_valid(owner_node) or bool(owner_node.get("is_dead")):
+			queue_free()
+			return
+		facing_dir = 1.0 if bool(owner_node.get("facing_right")) else -1.0
+		global_position = owner_node.global_position + Vector2(facing_dir * 42.0, -4.0)
+		queue_redraw()
+
+	func _draw() -> void:
+		var a: float = clampf(time_left * 2.0, 0.25, 0.95)
+		var frame_col := Color(0.95, 0.72, 1.0, a)
+		var glass_col := Color(0.75, 0.94, 1.0, a * 0.55)
+		draw_rect(Rect2(-7.0, -44.0, 14.0, 88.0), glass_col)
+		draw_rect(Rect2(-7.0, -44.0, 14.0, 88.0), frame_col, false, 3.0)
+		draw_line(Vector2(-3.0, -34.0), Vector2(3.0, -14.0), Color(1.0, 1.0, 1.0, a * 0.85), 2.5)
+		draw_line(Vector2(-3.0, 4.0), Vector2(3.0, 24.0), Color(1.0, 1.0, 1.0, a * 0.85), 2.5)

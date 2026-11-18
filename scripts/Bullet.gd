@@ -34,6 +34,7 @@ var allow_self_damage: bool = true
 var reverse_controls_dur: float = 0.0
 var pierce_players: bool = false
 var wall_bounces_left: int = 0
+var stop_on_vertical_wall: bool = false
 var status_effect_name: String = ""
 var status_effect_dur: float = 0.0
 var on_hit_effect_kind: String = ""
@@ -273,6 +274,26 @@ func _find_homing_target() -> Vector2:
 
 func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = Vector2.UP) -> void:
 	_finished = true
+	if collider != null and collider.is_in_group("prism_mirrors"):
+		var m_owner_id: int = int(collider.get("owner_peer_id"))
+		var m_team: int = int(collider.get("owner_team"))
+		var m_dir: float = float(collider.get("facing_dir"))
+		var same_side: bool = (shooter_peer_id == m_owner_id) or (NetworkManager.is_team_mode() and shooter_team == m_team)
+		var from_front: bool = (velocity.x * m_dir) < -1.0
+		if same_side or not from_front:
+			_finished = false
+			if collider is CollisionObject2D:
+				_pierced_rids.append((collider as CollisionObject2D).get_rid())
+			global_position = hit_pos + velocity.normalized() * 12.0
+			return
+		var base_ang: float = 0.0 if m_dir > 0.0 else PI
+		var rand_ang: float = base_ang + randf_range(-1.15, 1.15)
+		velocity = Vector2.from_angle(rand_ang) * maxf(velocity.length(), 420.0)
+		rotation = velocity.angle()
+		global_position = hit_pos + Vector2.from_angle(rand_ang) * 14.0
+		_finished = false
+		_spawn_impact_flash(hit_pos, Color(1.0, 0.72, 0.96))
+		return
 	if collider != null and collider.is_in_group("barrier_walls"):
 		if can_deal_damage and collider.has_method("apply_wall_damage"):
 			collider.apply_wall_damage(damage)
@@ -357,11 +378,13 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 				_pierced_rids.append((collider as CollisionObject2D).get_rid())
 			global_position = hit_pos + velocity.normalized() * 14.0
 			return
-		if wall_bounces_left > 0:
+		if wall_bounces_left > 0 and not (stop_on_vertical_wall and absf(hit_norm.x) > 0.6):
 			wall_bounces_left -= 1
 			_finished = false
 			var n: Vector2 = hit_norm.normalized() if hit_norm.length_squared() > 0.01 else Vector2.UP
 			velocity = velocity.bounce(n)
+			if stop_on_vertical_wall:
+				velocity *= 0.74
 			rotation = velocity.angle()
 			global_position = hit_pos + n * 8.0
 			_spawn_impact_flash(hit_pos, bullet_color)

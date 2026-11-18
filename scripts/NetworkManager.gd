@@ -12,11 +12,24 @@ signal killfeed_event(killer_name: String, victim_name: String, weapon_name: Str
 signal kill_scored(killer_id: int, victim_id: int)
 signal chat_message_received(sender_name: String, message: String)
 signal interactable_toggled(inter_idx: int, new_state: bool)
+signal match_timer_updated(time_left: float)
+signal match_ended(winner_text: String, rankings: Array)
+signal combo_achieved(killer_id: int, killer_name: String, combo_count: int)
 
 const GAME_PORT: int = 44334
 const DISCOVERY_PORT: int = 44335
-const MAX_CLIENTS: int = 6
+const MAX_CLIENTS: int = 20
 const MAX_BOTS: int = 10
+const MIN_MATCH_MINUTES: int = 5
+const MAX_MATCH_MINUTES: int = 20
+const DEFAULT_MATCH_MINUTES: int = 5
+const COMBO_WINDOW_SEC: float = 5.0
+
+var match_duration_minutes: int = DEFAULT_MATCH_MINUTES
+var match_time_left: float = float(DEFAULT_MATCH_MINUTES * 60)
+var match_over: bool = false
+var match_in_progress: bool = false
+var _timer_sync_accum: float = 0.0
 
 const MAP_NAMES: Array[String] = [
 	"Bunker Base",
@@ -47,12 +60,24 @@ const TEAM_COLORS: Array[Color] = [
 	Color(0.22, 0.88, 0.48, 1.0),  # 2: Emerald
 	Color(1.0, 0.78, 0.16, 1.0),   # 3: Gold
 	Color(0.75, 0.36, 1.0, 1.0),   # 4: Violet
-	Color(1.0, 0.48, 0.14, 1.0)    # 5: Blaze Orange
+	Color(1.0, 0.48, 0.14, 1.0),   # 5: Blaze Orange
+	Color(0.20, 0.90, 0.90, 1.0),  # 6: Cyan
+	Color(0.98, 0.42, 0.76, 1.0),  # 7: Pink
+	Color(0.68, 0.96, 0.24, 1.0),  # 8: Lime
+	Color(0.92, 0.92, 0.96, 1.0)   # 9: Silver
 ]
 
 const TEAM_NAMES: Array[String] = [
 	"Blue Team",
-	"Red Team"
+	"Red Team",
+	"Emerald Team",
+	"Gold Team",
+	"Violet Team",
+	"Orange Team",
+	"Cyan Team",
+	"Pink Team",
+	"Lime Team",
+	"Silver Team"
 ]
 
 const BOT_DIFFICULTY_NAMES: Array[String] = [
@@ -87,8 +112,13 @@ var only_pistols: bool = false
 var allow_snipers: bool = true
 var allow_shotguns: bool = true
 var allow_explosives: bool = true
+var restricted_weapons: Array = []
+var max_room_players: int = 20
+var team_count: int = 2
+var leader_peer_id: int = 1
 
 var players: Dictionary = {}
+var bot_stats: Dictionary = {}
 var discovered_servers: Dictionary = {}
 
 var _udp_broadcaster: PacketPeerUDP = null
@@ -220,6 +250,10 @@ func _build_local_player_dict(existing: Dictionary = {}) -> Dictionary:
 		"kills": int(existing.get("kills", 0)),
 		"assists": int(existing.get("assists", 0)),
 		"deaths": int(existing.get("deaths", 0)),
+		"combos": int(existing.get("combos", 0)),
+		"max_combo": int(existing.get("max_combo", 0)),
+		"combo_streak": int(existing.get("combo_streak", 0)),
+		"combo_timer": float(existing.get("combo_timer", 0.0)),
 		"ready": true,
 		"avatar": ProfileManager.to_dict()
 	}
@@ -230,8 +264,14 @@ func ensure_offline_player() -> void:
 		players[1] = _build_local_player_dict()
 
 
+func get_local_peer_id() -> int:
+	if is_network_active() and multiplayer != null:
+		return multiplayer.get_unique_id()
+	return 1
+
+
 func sync_local_profile() -> void:
-	var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
+	var my_id: int = get_local_peer_id()
 	var info: Dictionary = _build_local_player_dict(players.get(my_id, {}))
 	if is_network_active():
 		register_player.rpc(info)
@@ -251,7 +291,8 @@ func update_local_profile(player_name: String, color_idx: int) -> void:
 
 
 func set_local_team(team_idx: int) -> void:
-	local_team = clampi(team_idx, 0, 1)
+	var max_t: int = maxi(1, team_count) - 1
+	local_team = clampi(team_idx, 0, max_t)
 	if is_network_active():
 		set_player_team_rpc.rpc(local_team)
 	else:
@@ -268,11 +309,66 @@ func set_player_team_rpc(team_idx: int) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	if sender_id == 0:
 		sender_id = 1
+	var max_t: int = maxi(1, team_count) - 1
 	if players.has(sender_id):
-		players[sender_id]["team"] = clampi(team_idx, 0, 1)
+		players[sender_id]["team"] = clampi(team_idx, 0, max_t)
 		if is_team_mode():
-			players[sender_id]["color_index"] = clampi(team_idx, 0, 1)
+			players[sender_id]["color_index"] = clampi(team_idx, 0, max_t)
 		sync_all_players.rpc(players)
+
+
+func set_local_ready(is_ready: bool) -> void:
+	if is_network_active():
+		set_player_ready_rpc.rpc_id(1, is_ready)
+	elif players.has(1):
+		players[1]["ready"] = is_ready
+		player_list_updated.emit()
+
+
+@rpc("any_peer", "call_local", "reliable")
+func set_player_ready_rpc(is_ready: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		sender_id = 1
+	if players.has(sender_id):
+		players[sender_id]["ready"] = is_ready
+		sync_all_players.rpc(players)
+
+
+func is_local_leader() -> bool:
+	return get_local_peer_id() == leader_peer_id
+
+
+func transfer_leadership(target_pid: int) -> void:
+	if not is_host_active() or not players.has(target_pid):
+		return
+	sync_leader_rpc.rpc(target_pid)
+
+
+@rpc("authority", "call_local", "reliable")
+func sync_leader_rpc(new_leader_id: int) -> void:
+	leader_peer_id = new_leader_id
+	player_list_updated.emit()
+
+
+func request_start_match() -> void:
+	if is_host_active():
+		host_start_match()
+	elif is_network_active() and is_local_leader():
+		request_start_match_rpc.rpc_id(1)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func request_start_match_rpc() -> void:
+	if not multiplayer.is_server():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		sender_id = 1
+	if sender_id == leader_peer_id or sender_id == 1:
+		host_start_match()
 
 
 func host_update_match_settings(new_mode: int, new_map_id: int, new_bots: int, new_bot_diff: int = -1) -> void:
@@ -303,7 +399,11 @@ func get_rules_dict() -> Dictionary:
 		"only_pistols": only_pistols,
 		"allow_snipers": allow_snipers,
 		"allow_shotguns": allow_shotguns,
-		"allow_explosives": allow_explosives
+		"allow_explosives": allow_explosives,
+		"restricted_weapons": restricted_weapons.duplicate(),
+		"max_room_players": clampi(max_room_players, 2, MAX_CLIENTS),
+		"team_count": clampi(team_count, 2, maxi(2, max_room_players / 2)),
+		"match_duration_minutes": clampi(match_duration_minutes, MIN_MATCH_MINUTES, MAX_MATCH_MINUTES)
 	}
 
 
@@ -314,6 +414,11 @@ func apply_rules_dict(rules: Dictionary) -> void:
 	allow_snipers = bool(rules.get("allow_snipers", allow_snipers))
 	allow_shotguns = bool(rules.get("allow_shotguns", allow_shotguns))
 	allow_explosives = bool(rules.get("allow_explosives", allow_explosives))
+	if rules.has("restricted_weapons") and rules["restricted_weapons"] is Array:
+		restricted_weapons = (rules["restricted_weapons"] as Array).duplicate()
+	max_room_players = clampi(int(rules.get("max_room_players", max_room_players)), 2, MAX_CLIENTS)
+	team_count = clampi(int(rules.get("team_count", team_count)), 2, maxi(2, max_room_players / 2))
+	match_duration_minutes = clampi(int(rules.get("match_duration_minutes", match_duration_minutes)), MIN_MATCH_MINUTES, MAX_MATCH_MINUTES)
 	game_rules_updated.emit()
 
 
@@ -330,11 +435,14 @@ func sync_game_rules_rpc(rules: Dictionary) -> void:
 
 func host_game(room_name: String = "") -> Error:
 	disconnect_network()
+	bot_count = 0
+	leader_peer_id = 1
+	match_in_progress = false
 	if not room_name.strip_edges().is_empty():
 		local_room_name = room_name.strip_edges().left(24)
 
 	var peer := ENetMultiplayerPeer.new()
-	var err: Error = peer.create_server(GAME_PORT, MAX_CLIENTS)
+	var err: Error = peer.create_server(GAME_PORT, clampi(max_room_players, 2, MAX_CLIENTS))
 	if err != OK:
 		connection_failed.emit("Failed to bind port %d (error %d)" % [GAME_PORT, err])
 		return err
@@ -367,6 +475,7 @@ func join_game(ip_address: String) -> Error:
 
 
 func disconnect_network() -> void:
+	match_in_progress = false
 	_stop_broadcaster()
 	if multiplayer.multiplayer_peer != null and not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
 		multiplayer.multiplayer_peer.close()
@@ -418,7 +527,7 @@ func _broadcast_lan_presence() -> void:
 		"room": local_room_name,
 		"host_ip": host_ip,
 		"players": players.size(),
-		"max": MAX_CLIENTS,
+		"max": max_room_players,
 		"map": MAP_NAMES[selected_map_id],
 		"mode": MODE_NAMES[match_mode],
 		"port": GAME_PORT
@@ -475,13 +584,17 @@ func _on_peer_connected(peer_id: int) -> void:
 		sync_all_players.rpc_id(peer_id, players)
 		sync_match_settings_rpc.rpc_id(peer_id, match_mode, selected_map_id, bot_count, bot_difficulty)
 		sync_game_rules_rpc.rpc_id(peer_id, get_rules_dict())
+		sync_leader_rpc.rpc_id(peer_id, leader_peer_id)
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	players.erase(peer_id)
+	if peer_id == leader_peer_id:
+		leader_peer_id = 1
 	player_list_updated.emit()
 	if multiplayer.is_server():
 		sync_all_players.rpc(players)
+		sync_leader_rpc.rpc(leader_peer_id)
 
 
 func _on_connected_to_server() -> void:
@@ -507,19 +620,25 @@ func register_player(info: Dictionary) -> void:
 	if sender_id == 0:
 		sender_id = 1
 	var existing: Dictionary = players.get(sender_id, {})
-	var default_team: int = (players.size() % 2) if not existing.has("team") else int(existing["team"])
+	var default_team: int = (players.size() % maxi(2, team_count)) if not existing.has("team") else int(existing["team"])
 	var avatar_dict: Dictionary = ProfileManager.sanitize_avatar(info.get("avatar", {}))
 	players[sender_id] = {
 		"name": str(info.get("name", "Trooper")).left(16),
 		"color_index": int(info.get("color_index", sender_id % TEAM_COLORS.size())),
-		"team": clampi(int(info.get("team", default_team)), 0, 1),
+		"team": clampi(int(info.get("team", default_team)), 0, maxi(1, team_count) - 1),
 		"kills": int(existing.get("kills", 0)),
 		"assists": int(existing.get("assists", 0)),
 		"deaths": int(existing.get("deaths", 0)),
+		"combos": int(existing.get("combos", 0)),
+		"max_combo": int(existing.get("max_combo", 0)),
+		"combo_streak": int(existing.get("combo_streak", 0)),
+		"combo_timer": float(existing.get("combo_timer", 0.0)),
 		"ready": bool(info.get("ready", true)),
 		"avatar": avatar_dict
 	}
 	sync_all_players.rpc(players)
+	if match_in_progress and sender_id != 1:
+		start_match_rpc.rpc_id(sender_id, bot_count, match_mode, selected_map_id, bot_difficulty, get_rules_dict())
 
 
 @rpc("authority", "call_local", "reliable")
@@ -537,6 +656,7 @@ func host_start_match() -> void:
 
 @rpc("authority", "call_local", "reliable")
 func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1, synced_rules: Dictionary = {}) -> void:
+	match_in_progress = true
 	bot_count = synced_bot_count
 	match_mode = clampi(synced_mode, 0, MODE_NAMES.size() - 1)
 	selected_map_id = clampi(synced_map_id, 0, MAP_NAMES.size() - 1)
@@ -559,18 +679,187 @@ func record_kill_rpc(killer_id: int, victim_id: int, weapon_name: String, killer
 	_apply_kill(killer_id, victim_id, weapon_name, killer_label, victim_label, assist_ids)
 
 
+func clear_bot_stats() -> void:
+	bot_stats.clear()
+
+
+func register_bot_stat(bot_id: int, bot_name: String, bot_team: int) -> void:
+	bot_stats[bot_id] = {
+		"name": bot_name,
+		"team": bot_team,
+		"is_bot": true,
+		"kills": 0,
+		"assists": 0,
+		"deaths": 0,
+		"combos": 0,
+		"max_combo": 0,
+		"combo_streak": 0,
+		"combo_timer": 0.0
+	}
+
+
+func unregister_bot_stat(bot_id: int) -> void:
+	bot_stats.erase(bot_id)
+
+
+func _get_participant_stats(pid: int) -> Dictionary:
+	if players.has(pid):
+		return players[pid]
+	if bot_stats.has(pid):
+		return bot_stats[pid]
+	return {}
+
+
 func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String, assist_ids: Array = []) -> void:
-	if killer_id != victim_id and players.has(killer_id):
-		players[killer_id]["kills"] = int(players[killer_id].get("kills", 0)) + 1
+	var kp: Dictionary = _get_participant_stats(killer_id)
+	if killer_id != victim_id and not kp.is_empty():
+		kp["kills"] = int(kp.get("kills", 0)) + 1
+		var c_timer: float = float(kp.get("combo_timer", 0.0))
+		var streak: int = (int(kp.get("combo_streak", 0)) + 1) if c_timer > 0.0 else 1
+		kp["combo_streak"] = streak
+		kp["combo_timer"] = COMBO_WINDOW_SEC
+		if streak >= 2:
+			kp["combos"] = int(kp.get("combos", 0)) + 1
+			kp["max_combo"] = maxi(int(kp.get("max_combo", 0)), streak)
+			combo_achieved.emit(killer_id, killer_label, streak)
 	for raw_aid in assist_ids:
 		var aid: int = int(raw_aid)
-		if aid != killer_id and aid != victim_id and players.has(aid):
-			players[aid]["assists"] = int(players[aid].get("assists", 0)) + 1
-	if players.has(victim_id):
-		players[victim_id]["deaths"] = int(players[victim_id].get("deaths", 0)) + 1
+		var ap: Dictionary = _get_participant_stats(aid)
+		if aid != killer_id and aid != victim_id and not ap.is_empty():
+			ap["assists"] = int(ap.get("assists", 0)) + 1
+	var vp: Dictionary = _get_participant_stats(victim_id)
+	if not vp.is_empty():
+		vp["deaths"] = int(vp.get("deaths", 0)) + 1
 	player_list_updated.emit()
 	killfeed_event.emit(killer_label, victim_label, weapon_name)
 	kill_scored.emit(killer_id, victim_id)
+
+
+func reset_match_state() -> void:
+	var mins: int = clampi(match_duration_minutes, MIN_MATCH_MINUTES, MAX_MATCH_MINUTES)
+	match_time_left = float(mins * 60)
+	match_over = false
+	_timer_sync_accum = 0.0
+	for pid in players.keys():
+		players[pid]["kills"] = 0
+		players[pid]["assists"] = 0
+		players[pid]["deaths"] = 0
+		players[pid]["combos"] = 0
+		players[pid]["max_combo"] = 0
+		players[pid]["combo_streak"] = 0
+		players[pid]["combo_timer"] = 0.0
+	for bid in bot_stats.keys():
+		bot_stats[bid]["kills"] = 0
+		bot_stats[bid]["assists"] = 0
+		bot_stats[bid]["deaths"] = 0
+		bot_stats[bid]["combos"] = 0
+		bot_stats[bid]["max_combo"] = 0
+		bot_stats[bid]["combo_streak"] = 0
+		bot_stats[bid]["combo_timer"] = 0.0
+	player_list_updated.emit()
+	match_timer_updated.emit(match_time_left)
+
+
+func tick_match_timer(delta: float) -> void:
+	if match_over or is_test_mode():
+		return
+	for pid in players.keys():
+		var ct: float = float(players[pid].get("combo_timer", 0.0))
+		if ct > 0.0:
+			ct = maxf(0.0, ct - delta)
+			players[pid]["combo_timer"] = ct
+			if ct <= 0.0:
+				players[pid]["combo_streak"] = 0
+	for bid in bot_stats.keys():
+		var bct: float = float(bot_stats[bid].get("combo_timer", 0.0))
+		if bct > 0.0:
+			bct = maxf(0.0, bct - delta)
+			bot_stats[bid]["combo_timer"] = bct
+			if bct <= 0.0:
+				bot_stats[bid]["combo_streak"] = 0
+	if is_network_active() and not is_host_active():
+		return
+	match_time_left = maxf(0.0, match_time_left - delta)
+	match_timer_updated.emit(match_time_left)
+	_timer_sync_accum += delta
+	if is_network_active() and is_host_active() and _timer_sync_accum >= 0.5:
+		_timer_sync_accum = 0.0
+		sync_match_timer_rpc.rpc(match_time_left)
+	if match_time_left <= 0.0:
+		finish_match()
+
+
+@rpc("authority", "call_remote", "unreliable")
+func sync_match_timer_rpc(t_left: float) -> void:
+	match_time_left = t_left
+	match_timer_updated.emit(match_time_left)
+
+
+func get_sorted_rankings() -> Array:
+	var rows: Array = []
+	for pid in players.keys():
+		var d: Dictionary = players[pid].duplicate()
+		d["peer_id"] = pid
+		d["is_bot"] = false
+		rows.append(d)
+	for bid in bot_stats.keys():
+		var bd: Dictionary = bot_stats[bid].duplicate()
+		bd["peer_id"] = bid
+		bd["is_bot"] = true
+		rows.append(bd)
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ka: int = int(a.get("kills", 0))
+		var kb: int = int(b.get("kills", 0))
+		if ka != kb:
+			return ka > kb
+		var aa: int = int(a.get("assists", 0))
+		var ab: int = int(b.get("assists", 0))
+		if aa != ab:
+			return aa > ab
+		var da: int = int(a.get("deaths", 0))
+		var db: int = int(b.get("deaths", 0))
+		if da != db:
+			return da < db
+		var ca: int = int(a.get("combos", 0))
+		var cb: int = int(b.get("combos", 0))
+		if ca != cb:
+			return ca > cb
+		return int(a.get("max_combo", 0)) > int(b.get("max_combo", 0))
+	)
+	return rows
+
+
+func finish_match() -> void:
+	if match_over:
+		return
+	var rankings: Array = get_sorted_rankings()
+	var winner_text: String = "MATCH COMPLETE!"
+	if not rankings.is_empty():
+		var top: Dictionary = rankings[0]
+		var tied: bool = false
+		if rankings.size() > 1:
+			var s: Dictionary = rankings[1]
+			if int(top.get("kills", 0)) == int(s.get("kills", 0)) and int(top.get("assists", 0)) == int(s.get("assists", 0)) and int(top.get("deaths", 0)) == int(s.get("deaths", 0)) and int(top.get("combos", 0)) == int(s.get("combos", 0)):
+				tied = true
+		winner_text = "DRAW!" if tied else ("%s WINS!" % str(top.get("name", "Player")).to_upper())
+	if is_network_active():
+		end_match_rpc.rpc(winner_text, rankings)
+	else:
+		_apply_match_end(winner_text, rankings)
+
+
+@rpc("authority", "call_local", "reliable")
+func end_match_rpc(winner_text: String, rankings: Array) -> void:
+	_apply_match_end(winner_text, rankings)
+
+
+func _apply_match_end(winner_text: String, rankings: Array) -> void:
+	if match_over:
+		return
+	match_over = true
+	match_time_left = 0.0
+	match_timer_updated.emit(0.0)
+	match_ended.emit(winner_text, rankings)
 
 
 func send_chat_message(msg: String) -> void:

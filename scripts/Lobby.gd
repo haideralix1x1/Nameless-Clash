@@ -8,12 +8,17 @@ var _room_input: LineEdit
 var _ip_input: LineEdit
 var _status_label: Label
 var _room_ip_banner: Label
-var _players_box: VBoxContainer
+var _players_box: GridContainer
 var _lan_list_box: VBoxContainer
 var _start_btn: Button
+var _make_leader_btn: Button
+var _ready_btn: Button
+var _selected_peer_id: int = -1
+var _local_ready: bool = true
 var _wait_host_label: Label
 var _host_btn: Button
 var _join_btn: Button
+var _join_row: HBoxContainer
 var _disconnect_btn: Button
 var _mode_opt: OptionButton
 var _map_opt: OptionButton
@@ -35,6 +40,8 @@ var _syncing_rules_ui: bool = false
 
 
 func _ready() -> void:
+	if not NetworkManager.is_network_active():
+		NetworkManager.bot_count = 0
 	_local_bot_count = NetworkManager.bot_count
 	_build_ui()
 	NetworkManager.player_list_updated.connect(_refresh_players)
@@ -366,22 +373,22 @@ func _build_ui() -> void:
 	_host_btn.pressed.connect(_on_host_pressed)
 	lv.add_child(_host_btn)
 
-	var join_row := HBoxContainer.new()
-	join_row.add_theme_constant_override("separation", 8)
-	lv.add_child(join_row)
+	_join_row = HBoxContainer.new()
+	_join_row.add_theme_constant_override("separation", 8)
+	lv.add_child(_join_row)
 	_ip_input = LineEdit.new()
 	_ip_input.placeholder_text = "Enter Friend's IP"
 	_ip_input.text = NetworkManager.get_primary_local_ip()
 	_ip_input.custom_minimum_size = Vector2(0, 48)
 	_ip_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	join_row.add_child(_ip_input)
+	_join_row.add_child(_ip_input)
 	_join_btn = Button.new()
 	_join_btn.text = "JOIN GAME"
 	_join_btn.custom_minimum_size = Vector2(130, 48)
 	_join_btn.add_theme_font_size_override("font_size", 16)
 	_style_button(_join_btn, Color(0.10, 0.22, 0.36, 0.95), Color(0.28, 0.74, 1.0))
 	_join_btn.pressed.connect(_on_join_pressed)
-	join_row.add_child(_join_btn)
+	_join_row.add_child(_join_btn)
 
 	_disconnect_btn = Button.new()
 	_disconnect_btn.text = "LEAVE ROOM"
@@ -407,8 +414,12 @@ func _build_ui() -> void:
 	slots_hdr.modulate = Color(1.0, 0.82, 0.35)
 	rv.add_child(slots_hdr)
 
-	_players_box = VBoxContainer.new()
-	_players_box.add_theme_constant_override("separation", 5)
+	_players_box = GridContainer.new()
+	_players_box.columns = 4
+	_players_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_players_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_players_box.add_theme_constant_override("h_separation", 8)
+	_players_box.add_theme_constant_override("v_separation", 8)
 	rv.add_child(_players_box)
 
 	rv.add_child(HSeparator.new())
@@ -433,20 +444,50 @@ func _build_ui() -> void:
 	_lan_list_box.add_child(empty_lan)
 
 	_wait_host_label = Label.new()
-	_wait_host_label.text = "Waiting for Host to start battle..."
+	_wait_host_label.text = "Waiting for Leader to start battle..."
 	_wait_host_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_wait_host_label.add_theme_font_size_override("font_size", 17)
 	_wait_host_label.modulate = Color(1.0, 0.82, 0.35)
 	_wait_host_label.visible = false
 	rv.add_child(_wait_host_label)
 
+	var r_act_row := HBoxContainer.new()
+	r_act_row.add_theme_constant_override("separation", 10)
+	rv.add_child(r_act_row)
+
+	_make_leader_btn = Button.new()
+	_make_leader_btn.text = "MAKE LEADER"
+	_make_leader_btn.custom_minimum_size = Vector2(0, 52)
+	_make_leader_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_make_leader_btn.add_theme_font_size_override("font_size", 17)
+	_style_button(_make_leader_btn, Color(0.24, 0.18, 0.06, 0.96), Color(1.0, 0.78, 0.22))
+	_make_leader_btn.pressed.connect(func():
+		if _selected_peer_id > 0:
+			NetworkManager.transfer_leadership(_selected_peer_id)
+	)
+	r_act_row.add_child(_make_leader_btn)
+
+	_ready_btn = Button.new()
+	_ready_btn.text = "READY"
+	_ready_btn.custom_minimum_size = Vector2(0, 56)
+	_ready_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ready_btn.add_theme_font_size_override("font_size", 19)
+	_style_button(_ready_btn, Color(0.09, 0.30, 0.16, 0.96), Color(0.30, 0.92, 0.48))
+	_ready_btn.pressed.connect(func():
+		_local_ready = not _local_ready
+		NetworkManager.set_local_ready(_local_ready)
+		_refresh_controls_state()
+	)
+	r_act_row.add_child(_ready_btn)
+
 	_start_btn = Button.new()
-	_start_btn.text = "▶  START BATTLE"
-	_start_btn.custom_minimum_size = Vector2(0, 60)
-	_start_btn.add_theme_font_size_override("font_size", 21)
+	_start_btn.text = "START BATTLE"
+	_start_btn.custom_minimum_size = Vector2(0, 56)
+	_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_start_btn.add_theme_font_size_override("font_size", 20)
 	_style_button(_start_btn, Color(0.09, 0.32, 0.16, 0.98), Color(0.28, 0.92, 0.45))
 	_start_btn.pressed.connect(_on_start_pressed)
-	rv.add_child(_start_btn)
+	r_act_row.add_child(_start_btn)
 
 
 func _step_bot_count(delta_step: int) -> void:
@@ -476,18 +517,18 @@ func _refresh_bot_label() -> void:
 
 
 func _on_toggle_team_pressed() -> void:
-	var next_team: int = 1 if NetworkManager.local_team == 0 else 0
+	var max_teams: int = maxi(2, NetworkManager.team_count)
+	var next_team: int = (NetworkManager.local_team + 1) % max_teams
 	NetworkManager.set_local_team(next_team)
 	_refresh_team_button()
 
 
 func _refresh_team_button() -> void:
-	if NetworkManager.local_team == 0:
-		_team_toggle_btn.text = "BLUE TEAM (Tap to Switch)"
-		_team_toggle_btn.modulate = NetworkManager.TEAM_COLORS[0]
-	else:
-		_team_toggle_btn.text = "RED TEAM (Tap to Switch)"
-		_team_toggle_btn.modulate = NetworkManager.TEAM_COLORS[1]
+	var max_teams: int = maxi(2, NetworkManager.team_count)
+	var t_idx: int = clampi(NetworkManager.local_team, 0, max_teams - 1)
+	var t_name: String = NetworkManager.TEAM_NAMES[t_idx] if t_idx < NetworkManager.TEAM_NAMES.size() else "Team %d" % (t_idx + 1)
+	_team_toggle_btn.text = "%s (Tap to Switch)" % t_name.to_upper()
+	_team_toggle_btn.modulate = NetworkManager.get_team_color(t_idx)
 
 
 func _on_host_pressed() -> void:
@@ -508,12 +549,11 @@ func _on_join_pressed() -> void:
 
 func _on_disconnect_pressed() -> void:
 	NetworkManager.disconnect_network()
-	_status_label.text = "Left multiplayer room."
-	_refresh_controls_state()
+	NetworkManager.go_to_main_menu()
 
 
 func _on_start_pressed() -> void:
-	NetworkManager.host_start_match()
+	NetworkManager.request_start_match()
 
 
 func _on_connected() -> void:
@@ -588,14 +628,31 @@ func _refresh_rules_ui() -> void:
 func _refresh_controls_state() -> void:
 	var net_active: bool = NetworkManager.is_network_active()
 	var is_host: bool = NetworkManager.is_host_active()
-	var can_edit_match: bool = (not net_active) or is_host
+	var is_leader: bool = NetworkManager.is_local_leader()
+	var can_edit_match: bool = (not net_active) or is_leader
 
-	_start_btn.visible = can_edit_match
-	_wait_host_label.visible = net_active and not is_host
-	if is_host:
-		_start_btn.text = "▶  START BATTLE (%d/%d)" % [NetworkManager.players.size(), NetworkManager.MAX_CLIENTS]
+	if is_instance_valid(_host_btn):
+		_host_btn.visible = not net_active
+	if is_instance_valid(_join_row):
+		_join_row.visible = not net_active
+
+	_start_btn.visible = (not net_active) or is_leader
+	_wait_host_label.visible = net_active and not is_leader
+	if is_leader:
+		_start_btn.text = "START BATTLE (%d/%d)" % [NetworkManager.players.size(), NetworkManager.max_room_players]
 	else:
-		_start_btn.text = "▶  START BATTLE"
+		_start_btn.text = "START BATTLE"
+
+	if is_instance_valid(_make_leader_btn):
+		_make_leader_btn.visible = net_active and is_host
+		_make_leader_btn.disabled = (_selected_peer_id <= 0 or _selected_peer_id == NetworkManager.leader_peer_id or not NetworkManager.players.has(_selected_peer_id))
+	if is_instance_valid(_ready_btn):
+		_ready_btn.visible = net_active and not is_leader
+		_ready_btn.text = "READY" if _local_ready else "NOT READY"
+		if _local_ready:
+			_style_button(_ready_btn, Color(0.09, 0.30, 0.16, 0.96), Color(0.30, 0.92, 0.48))
+		else:
+			_style_button(_ready_btn, Color(0.24, 0.16, 0.08, 0.96), Color(0.98, 0.68, 0.22))
 
 	_mode_opt.disabled = not can_edit_match
 	_map_opt.disabled = not can_edit_match
@@ -621,39 +678,43 @@ func _refresh_players() -> void:
 	var ids: Array = NetworkManager.players.keys()
 	ids.sort()
 
-	for slot_idx in range(NetworkManager.MAX_CLIENTS):
-		var row := PanelContainer.new()
+	var max_slots: int = clampi(NetworkManager.max_room_players, 2, NetworkManager.MAX_CLIENTS)
+	for slot_idx in range(max_slots):
+		var box_btn := Button.new()
+		box_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box_btn.custom_minimum_size = Vector2(0, 56)
+		box_btn.add_theme_font_size_override("font_size", 13)
 		var bg_col := Color(0.11, 0.15, 0.22, 0.88)
 		var border_col := Color(0.28, 0.36, 0.48, 0.6)
-		var slot_text: String = "Slot %d  —  Open" % (slot_idx + 1)
+		var slot_text: String = "Slot %d\nOpen" % (slot_idx + 1)
 
 		if slot_idx < ids.size():
 			var pid: int = int(ids[slot_idx])
 			var info: Dictionary = NetworkManager.players[pid]
-			var av: Dictionary = ProfileManager.sanitize_avatar(info.get("avatar", {}))
 			var t_id: int = int(info.get("team", 0))
-			var role: String = "Host" if pid == 1 else "Ready"
-			var team_txt: String = "Solo" if not NetworkManager.is_team_mode() else ("Blue Team" if t_id == 0 else "Red Team")
+			var is_ldr: bool = (pid == NetworkManager.leader_peer_id)
+			var is_rdy: bool = bool(info.get("ready", true))
+			var role: String = "LEADER" if is_ldr else ("READY" if is_rdy else "WAIT")
+			var team_txt: String = "FFA" if not NetworkManager.is_team_mode() else NetworkManager.TEAM_NAMES[clampi(t_id, 0, NetworkManager.TEAM_NAMES.size() - 1)]
 			border_col = NetworkManager.get_team_color(t_id if NetworkManager.is_team_mode() else int(info.get("color_index", 0)))
-			var a_idx: int = clampi(int(av["archetype_id"]), 0, ProfileManager.ARCHETYPES.size() - 1)
-			var arch_lbl: String = ProfileManager.ARCHETYPES[a_idx]["name"]
-			var load_lbl: String = str(AgentData.get_agent(a_idx)["base_weapon"]["name"]) if NetworkManager.is_agent_clash_mode() else ProfileManager.WEAPON_NAMES[int(av["primary_weapon_id"])]
-			slot_text = "%s (%s)  •  %s  •  %s  •  %s" % [
+			if pid == _selected_peer_id:
+				bg_col = Color(0.22, 0.26, 0.14, 0.96)
+				border_col = Color(1.0, 0.84, 0.22)
+			slot_text = "%s\n%s • %s" % [
 				str(info.get("name", "Trooper")),
-				arch_lbl,
 				role,
-				team_txt,
-				load_lbl
+				team_txt
 			]
+			box_btn.pressed.connect(func():
+				_selected_peer_id = pid
+				_refresh_players()
+			)
+		else:
+			box_btn.disabled = true
 
-		var sb := _make_style(bg_col, border_col, 8, 12, 5)
-		row.add_theme_stylebox_override("panel", sb)
-
-		var lbl := Label.new()
-		lbl.text = slot_text
-		lbl.add_theme_font_size_override("font_size", 15)
-		row.add_child(lbl)
-		_players_box.add_child(row)
+		_style_button(box_btn, bg_col, border_col, 8)
+		box_btn.text = slot_text
+		_players_box.add_child(box_btn)
 
 	_refresh_controls_state()
 

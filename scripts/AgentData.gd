@@ -219,12 +219,12 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Unleash a massive blast around yourself that kills nearby enemies."
 		}
 	},
-	# 3: Tiny Taz // Casper Ghost
+	# 3: Soulless // Evil Being
 	{
 		"id": 3,
-		"agent_name": "Tiny Taz",
-		"title": "Casper Ghost",
-		"role": "Casper Phantom",
+		"agent_name": "Soulless",
+		"title": "Evil Being",
+		"role": "Evil Being",
 		"accent": Color(0.68, 0.94, 1.0),
 		"base_weapon": {
 			"name": "Spectral Touch",
@@ -997,7 +997,7 @@ const AGENTS: Array[Dictionary] = [
 				"kind": "meteor_boulder",
 				"damage": 60,
 				"color": Color(0.96, 0.52, 0.84),
-				"desc": "Throw a huge meteor stone larger than yourself for 60% damage."
+				"desc": "Throw a giant boulder (double size) that bounces once, drops with gravity, and breaks on walls or after 5s."
 			},
 			{
 				"name": "Piercing Crystal Shot",
@@ -1007,13 +1007,12 @@ const AGENTS: Array[Dictionary] = [
 				"desc": "Fire a slow crystal shot that pierces players until hitting a wall."
 			},
 			{
-				"name": "Mini Prisms",
-				"kind": "mini_prisms",
-				"damage": 30,
-				"shots": 3,
+				"name": "Prism Mirror",
+				"kind": "prism_mirror",
+				"damage": 0,
 				"duration": 5.0,
-				"color": Color(1.0, 0.48, 0.86),
-				"desc": "Spawn mini prisms that chase nearby enemies for 5s."
+				"color": Color(1.0, 0.58, 0.92),
+				"desc": "Cast a crystal mirror in front of Prism for 5s that deflects incoming enemy projectiles to random angles."
 			}
 		],
 		"ultimate": {

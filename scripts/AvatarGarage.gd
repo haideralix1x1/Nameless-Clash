@@ -33,6 +33,8 @@ var _active_tab: int = 0
 
 var _pose_buttons: Array[Button] = []
 var _hero_cards: Array[Button] = []
+var _hero_ability_btns: Array[Button] = []
+var _hero_preview_arena: Node2D = null
 var _layer_labels: Dictionary = {}
 
 var _active_color_prop: String = "shirt_color"
@@ -164,7 +166,7 @@ func _build_ui() -> void:
 	top_bar.add_child(lobby_btn)
 
 	var agent_btn := Button.new()
-	agent_btn.text = "⚡ AGENT MODE"
+	agent_btn.text = "AGENT MODE"
 	agent_btn.custom_minimum_size = Vector2(150, 50)
 	agent_btn.add_theme_font_size_override("font_size", 16)
 	_style_button(agent_btn, Color(0.20, 0.10, 0.34, 0.98), Color(0.78, 0.42, 1.0))
@@ -172,7 +174,7 @@ func _build_ui() -> void:
 	top_bar.add_child(agent_btn)
 
 	var play_btn := Button.new()
-	play_btn.text = "GUNFIGHT ▶"
+	play_btn.text = "GUNFIGHT"
 	play_btn.custom_minimum_size = Vector2(148, 50)
 	play_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(play_btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.28, 0.92, 0.45))
@@ -245,7 +247,7 @@ func _build_hero_stage(parent: HBoxContainer) -> void:
 	v.add_child(pose_row)
 
 	_pose_buttons.clear()
-	var poses: Array[String] = ["IDLE", "RUN", "FLY", "FIRE"]
+	var poses: Array[String] = ["IDLE", "RUN", "FLY"]
 	for i in range(poses.size()):
 		var pb := Button.new()
 		pb.text = poses[i]
@@ -300,49 +302,104 @@ func _build_customization_deck(parent: HBoxContainer) -> void:
 
 
 func _build_heroes_tab(parent: VBoxContainer) -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	parent.add_child(scroll)
+	var root_v := VBoxContainer.new()
+	root_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root_v.add_theme_constant_override("separation", 8)
+	parent.add_child(root_v)
 
-	var v := VBoxContainer.new()
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 10)
-	scroll.add_child(v)
+	# Top Ability Kit Preview (matching Agent Clash selection screen)
+	var kit_row := HBoxContainer.new()
+	kit_row.add_theme_constant_override("separation", 10)
+	root_v.add_child(kit_row)
 
-	var hint := Label.new()
-	hint.text = "Tap any Agent Hero to load their signature look, gun, and Agent Clash powers."
-	hint.modulate = Color(0.72, 0.88, 1.0)
-	hint.add_theme_font_size_override("font_size", 15)
-	v.add_child(hint)
+	var stage := PanelContainer.new()
+	stage.custom_minimum_size = Vector2(240, 128)
+	stage.clip_contents = true
+	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10, 4, 4))
+	kit_row.add_child(stage)
+
+	var sv_cont := SubViewportContainer.new()
+	sv_cont.stretch = true
+	sv_cont.custom_minimum_size = Vector2(240, 128)
+	stage.add_child(sv_cont)
+
+	var sv := SubViewport.new()
+	sv.world_2d = World2D.new()
+	sv.size = Vector2i(360, 160)
+	sv.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	sv_cont.add_child(sv)
+
+	_hero_preview_arena = Node2D.new()
+	_hero_preview_arena.set_script(load("res://scripts/AgentPreviewArena.gd"))
+	sv.add_child(_hero_preview_arena)
+
+	var ab_col := VBoxContainer.new()
+	ab_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_col.add_theme_constant_override("separation", 6)
+	kit_row.add_child(ab_col)
 
 	_agent_summary_label = Label.new()
-	_agent_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_agent_summary_label.add_theme_font_size_override("font_size", 16)
-	_agent_summary_label.modulate = Color(0.86, 0.72, 1.0)
-	v.add_child(_agent_summary_label)
+	_agent_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_agent_summary_label.custom_minimum_size = Vector2(0, 38)
+	_agent_summary_label.add_theme_font_size_override("font_size", 14)
+	_agent_summary_label.modulate = Color(0.88, 0.96, 1.0)
+	ab_col.add_child(_agent_summary_label)
+
+	var ab_grid := GridContainer.new()
+	ab_grid.columns = 2
+	ab_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_grid.add_theme_constant_override("h_separation", 6)
+	ab_grid.add_theme_constant_override("v_separation", 6)
+	ab_col.add_child(ab_grid)
+
+	_hero_ability_btns.clear()
+	for slot_i in range(4):
+		var is_ult: bool = (slot_i == 3)
+		var b_col: Color = Color(1.0, 0.78, 0.24) if is_ult else Color(0.32, 0.78, 1.0)
+		var b_bg: Color = Color(0.24, 0.16, 0.06, 0.95) if is_ult else Color(0.08, 0.16, 0.26, 0.95)
+		var ab_btn := Button.new()
+		ab_btn.text = "Ability"
+		ab_btn.custom_minimum_size = Vector2(0, 40)
+		ab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ab_btn.clip_text = true
+		ab_btn.add_theme_font_size_override("font_size", 13)
+		_style_button(ab_btn, b_bg, b_col, 8)
+		ab_btn.pressed.connect(_trigger_hero_ability.bind(slot_i))
+		ab_grid.add_child(ab_btn)
+		_hero_ability_btns.append(ab_btn)
+
+	# Bottom 24-Agent Portrait Grid (matching Agent Clash selection screen)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root_v.add_child(scroll)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
-	v.add_child(grid)
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(grid)
 
 	_hero_cards.clear()
-	for i in range(ProfileManager.ARCHETYPES.size()):
-		var arch: Dictionary = ProfileManager.ARCHETYPES[i]
-		var card := Button.new()
-		card.custom_minimum_size = Vector2(0, 70)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.add_theme_font_size_override("font_size", 16)
-		var role_txt: String = ProfileManager.ARCHETYPE_ROLES[i] if i < ProfileManager.ARCHETYPE_ROLES.size() else "Agent"
-		card.text = "%s\n%s" % [str(arch["name"]).to_upper(), role_txt]
-		card.pressed.connect(_on_hero_card_pressed.bind(i))
-		grid.add_child(card)
-		_hero_cards.append(card)
+	for i in range(AgentData.AGENTS.size()):
+		var ag: Dictionary = AgentData.AGENTS[i]
+		var cb := Button.new()
+		cb.custom_minimum_size = Vector2(0, 64)
+		cb.clip_text = true
+		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cb.icon = _make_agent_icon(i)
+		cb.add_theme_font_size_override("font_size", 15)
+		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		cb.pressed.connect(_on_hero_card_pressed.bind(i))
+		grid.add_child(cb)
+		_hero_cards.append(cb)
 
-	return scroll
+	return root_v
 
 
 func _build_outfit_tab(parent: VBoxContainer) -> Control:
@@ -380,7 +437,7 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 		row.add_child(lbl)
 
 		var prev_btn := Button.new()
-		prev_btn.text = "◀"
+		prev_btn.text = "<"
 		prev_btn.custom_minimum_size = Vector2(56, 46)
 		prev_btn.add_theme_font_size_override("font_size", 18)
 		_style_button(prev_btn, Color(0.14, 0.20, 0.30), Color(0.45, 0.72, 0.98))
@@ -396,7 +453,7 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 		_layer_labels[prop] = val_lbl
 
 		var next_btn := Button.new()
-		next_btn.text = "▶"
+		next_btn.text = ">"
 		next_btn.custom_minimum_size = Vector2(56, 46)
 		next_btn.add_theme_font_size_override("font_size", 18)
 		_style_button(next_btn, Color(0.14, 0.20, 0.30), Color(0.45, 0.72, 0.98))
@@ -799,23 +856,31 @@ func _refresh_ui() -> void:
 	var arch_idx: int = clampi(ProfileManager.archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
 	_hero_name_label.text = str(ProfileManager.ARCHETYPES[arch_idx]["name"]).to_upper()
 	_hero_role_label.text = ProfileManager.ARCHETYPE_ROLES[arch_idx] if arch_idx < ProfileManager.ARCHETYPE_ROLES.size() else "Agent"
+	var ag: Dictionary = AgentData.get_agent(arch_idx)
+	var bw: Dictionary = ag["base_weapon"]
+	var abils: Array = ag["abilities"]
+	var ult: Dictionary = ag["ultimate"]
+	if is_instance_valid(_hero_preview_arena) and _hero_preview_arena.has_method("set_agent"):
+		_hero_preview_arena.set_agent(arch_idx)
 	if is_instance_valid(_agent_summary_label):
-		var ag: Dictionary = AgentData.get_agent(arch_idx)
-		var bw: Dictionary = ag["base_weapon"]
-		var abils: Array = ag["abilities"]
-		var ult: Dictionary = ag["ultimate"]
-		_agent_summary_label.text = (
-			"⚡ AGENT CLASH KIT — Base: %s | 1: %s | 2: %s | 3: %s | ★ ULT: %s"
-			% [str(bw["name"]), str(abils[0]["name"]), str(abils[1]["name"]), str(abils[2]["name"]), str(ult["name"])]
-		)
+		_agent_summary_label.text = "BASE WEAPON: %s (%d DMG) — Tap an ability below to preview!" % [str(bw["name"]), int(bw["damage"])]
+	for si in range(_hero_ability_btns.size()):
+		var btn: Button = _hero_ability_btns[si]
+		if not is_instance_valid(btn):
+			continue
+		if si == 3:
+			btn.text = "ULT: %s" % str(ult["name"])
+		else:
+			btn.text = "%d: %s" % [si + 1, str(abils[si]["name"])]
 	_refresh_pose_buttons()
 
 	# Hero preset grid highlight
+	var ac: Color = ag["accent"] as Color
 	for i in range(_hero_cards.size()):
 		var sel: bool = (i == arch_idx)
-		var bg_c: Color = Color(0.26, 0.18, 0.06) if sel else Color(0.10, 0.14, 0.22)
-		var bd_c: Color = Color(1.0, 0.78, 0.24) if sel else Color(0.26, 0.40, 0.62)
-		_style_button(_hero_cards[i], bg_c, bd_c, 10)
+		var bg_c: Color = Color(0.22, 0.14, 0.34) if sel else Color(0.10, 0.14, 0.22)
+		var bd_c: Color = ac if sel else Color(0.28, 0.42, 0.62)
+		_style_button(_hero_cards[i], bg_c, bd_c, 8)
 
 	# Friendly gear labels
 	for spec in GEAR_SPECS:
@@ -920,7 +985,7 @@ func _build_agent_pick_overlay() -> void:
 	pv.add_child(top_row)
 
 	var title := Label.new()
-	title.text = "⚡ SELECT AN AGENT FOR AGENT MODE"
+	title.text = "SELECT AN AGENT FOR AGENT MODE"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 21)
 	title.modulate = Color(0.88, 0.68, 1.0)
@@ -975,3 +1040,72 @@ func _build_agent_pick_overlay() -> void:
 func _open_agent_pick_overlay() -> void:
 	if is_instance_valid(_agent_pick_overlay):
 		_agent_pick_overlay.visible = true
+
+
+func _trigger_hero_ability(slot_i: int) -> void:
+	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	var ab: Dictionary = AgentData.get_ability_slot(idx, slot_i)
+	if is_instance_valid(_agent_summary_label):
+		var prefix: String = "ULT" if slot_i == 3 else ("ABIL %d" % (slot_i + 1))
+		_agent_summary_label.text = "%s — %s: %s" % [prefix, str(ab["name"]), str(ab["desc"])]
+	if is_instance_valid(_hero_preview_arena) and _hero_preview_arena.has_method("cast_slot"):
+		_hero_preview_arena.cast_slot(slot_i)
+
+
+func _make_agent_icon(arch_idx: int) -> Texture2D:
+	if arch_idx == 23:
+		var j_abs: String = ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png")
+		var j_img: Image = null
+		if ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png"):
+			var jt: Texture2D = load("res://assets/sprites/characters/jackson_sheet.png") as Texture2D
+			if jt != null:
+				j_img = jt.get_image()
+		elif FileAccess.file_exists(j_abs):
+			j_img = Image.new()
+			if j_img.load(j_abs) != OK:
+				j_img = null
+		if j_img != null and j_img.get_width() >= 768:
+			var j_crop: Image = j_img.get_region(Rect2i(0, 0, 96, 56))
+			if j_crop.get_format() != Image.FORMAT_RGBA8:
+				j_crop.convert(Image.FORMAT_RGBA8)
+			var j_used: Rect2i = j_crop.get_used_rect()
+			if j_used.size.x > 0 and j_used.size.y > 0:
+				var j_trim: Image = j_crop.get_region(j_used)
+				var j_sc: float = 42.0 / float(maxi(j_used.size.x, j_used.size.y))
+				j_trim.resize(maxi(1, int(round(float(j_used.size.x) * j_sc))), maxi(1, int(round(float(j_used.size.y) * j_sc))), Image.INTERPOLATE_BILINEAR)
+				return ImageTexture.create_from_image(j_trim)
+	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
+	var parts: Dictionary = arch.get("parts", {})
+	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
+	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
+	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
+	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	if skin_tex == null:
+		return null
+	var fw: int = skin_tex.get_width() / 8
+	var fh: int = mini(skin_tex.get_height(), int(float(skin_tex.get_height()) * 0.72))
+	var crop := Rect2i(0, 0, fw, fh)
+	var base_img: Image = skin_tex.get_image().get_region(crop)
+	if base_img.get_format() != Image.FORMAT_RGBA8:
+		base_img.convert(Image.FORMAT_RGBA8)
+	if head_tex != null:
+		var h_fw: int = maxi(1, head_tex.get_width() / 8)
+		var h_fh: int = mini(head_tex.get_height(), int(float(head_tex.get_height()) * 0.72))
+		var head_img: Image = head_tex.get_image().get_region(Rect2i(0, 0, h_fw, h_fh))
+		if head_img.get_format() != Image.FORMAT_RGBA8:
+			head_img.convert(Image.FORMAT_RGBA8)
+		if h_fw != fw or h_fh != fh:
+			head_img.resize(fw, fh, Image.INTERPOLATE_BILINEAR)
+		base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
+	var used: Rect2i = base_img.get_used_rect()
+	if used.size.x <= 0 or used.size.y <= 0:
+		return null
+	var trimmed: Image = base_img.get_region(used)
+	var scale_f: float = 42.0 / float(maxi(used.size.x, used.size.y))
+	var tw: int = maxi(1, int(round(float(used.size.x) * scale_f)))
+	var th: int = maxi(1, int(round(float(used.size.y) * scale_f)))
+	trimmed.resize(tw, th, Image.INTERPOLATE_BILINEAR)
+	var sq := Image.create(48, 48, false, Image.FORMAT_RGBA8)
+	sq.fill(Color(0, 0, 0, 0))
+	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((48 - tw) / 2, (48 - th) / 2))
+	return ImageTexture.create_from_image(sq)

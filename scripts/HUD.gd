@@ -54,6 +54,12 @@ var _scoreboard_label: Label
 var _kad_label: Label
 var _killfeed_label: RichTextLabel
 var _diag_label: Label
+var _match_timer_pill: PanelContainer
+var _match_timer_label: Label
+var _combo_banner_label: Label
+var _match_end_overlay: Control
+var _match_end_title: Label
+var _match_end_rows: Label
 var _respawn_panel: PanelContainer
 var _respawn_label: Label
 var _add_bot_btn: Button
@@ -121,6 +127,9 @@ func _ready() -> void:
 	NetworkManager.player_list_updated.connect(_refresh_scoreboard)
 	NetworkManager.killfeed_event.connect(_on_killfeed_event)
 	NetworkManager.chat_message_received.connect(_on_chat_message_received)
+	NetworkManager.match_timer_updated.connect(_on_match_timer_updated)
+	NetworkManager.match_ended.connect(_on_match_ended)
+	NetworkManager.combo_achieved.connect(_on_combo_achieved)
 	if NetworkManager.has_signal("game_rules_updated"):
 		NetworkManager.game_rules_updated.connect(_sync_mode_hud_visibility)
 	SettingsManager.touch_layout_changed.connect(_update_stick_and_button_positions)
@@ -161,13 +170,13 @@ func _process(delta: float) -> void:
 		var w_t: float = float(local_player.get("_shoe_windup_timer"))
 		var cd_t: float = float(local_player.get("shoe_cooldown_timer"))
 		if w_t > 0.01:
-			_btn_shoe.text = "👟\n%.1fs" % w_t
+			_btn_shoe.text = "KICK\n%.1fs" % w_t
 			_btn_shoe.modulate = Color(1.0, 0.78, 0.28)
 		elif cd_t > 0.05:
-			_btn_shoe.text = "👟\n%.1fs" % cd_t
+			_btn_shoe.text = "KICK\n%.1fs" % cd_t
 			_btn_shoe.modulate = Color(0.55, 0.58, 0.65)
 		else:
-			_btn_shoe.text = "👟"
+			_btn_shoe.text = "KICK"
 			_btn_shoe.modulate = Color.WHITE
 
 	if not NetworkManager.is_agent_clash_mode() and Input.is_action_just_pressed("loadout_menu"):
@@ -714,7 +723,7 @@ func _build_ui() -> void:
 	hp_row.add_theme_constant_override("separation", 6)
 	lv.add_child(hp_row)
 	_hp_label = Label.new()
-	_hp_label.text = "♥"
+	_hp_label.text = "HP"
 	_hp_label.add_theme_font_size_override("font_size", 15)
 	_hp_label.modulate = Color(1.0, 0.45, 0.82)
 	hp_row.add_child(_hp_label)
@@ -732,7 +741,7 @@ func _build_ui() -> void:
 	fuel_row.add_theme_constant_override("separation", 6)
 	lv.add_child(fuel_row)
 	_fuel_label = Label.new()
-	_fuel_label.text = "▲"
+	_fuel_label.text = "GAS"
 	_fuel_label.add_theme_font_size_override("font_size", 14)
 	_fuel_label.modulate = Color(0.42, 0.78, 1.0)
 	fuel_row.add_child(_fuel_label)
@@ -747,7 +756,7 @@ func _build_ui() -> void:
 	fuel_row.add_child(_fuel_bar)
 
 	var drawer_btn := Button.new()
-	drawer_btn.text = "⚙"
+	drawer_btn.text = "MENU"
 	drawer_btn.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(drawer_btn, Color(0.12, 0.16, 0.24, 0.72), Color(1.0, 1.0, 1.0, 0.78), 50, 22)
 	left_h.add_child(drawer_btn)
@@ -772,7 +781,7 @@ func _build_ui() -> void:
 	top_bar.add_child(_agent_swap_row)
 
 	var prev_ag_btn := Button.new()
-	prev_ag_btn.text = "◀"
+	prev_ag_btn.text = "<"
 	prev_ag_btn.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(prev_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 48, 18)
 	prev_ag_btn.pressed.connect(func():
@@ -782,7 +791,7 @@ func _build_ui() -> void:
 	_agent_swap_row.add_child(prev_ag_btn)
 
 	var next_ag_btn := Button.new()
-	next_ag_btn.text = "▶"
+	next_ag_btn.text = ">"
 	next_ag_btn.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(next_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 48, 18)
 	next_ag_btn.pressed.connect(func():
@@ -871,7 +880,7 @@ func _build_ui() -> void:
 	w_row.add_child(_secondary_weapon_icon)
 
 	_bomb_hud_label = Label.new()
-	_bomb_hud_label.text = "💣 3"
+	_bomb_hud_label.text = "3"
 	_bomb_hud_label.add_theme_font_size_override("font_size", 14)
 	_bomb_hud_label.modulate = Color(1.0, 0.72, 0.35)
 	_bomb_hud_label.visible = false
@@ -894,29 +903,38 @@ func _build_ui() -> void:
 	_target_portrait.add_child(_target_hat_overlay)
 	w_row.add_child(_target_portrait)
 
+	var kad_sep := ColorRect.new()
+	kad_sep.custom_minimum_size = Vector2(2, 34)
+	kad_sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	kad_sep.color = Color(1.0, 1.0, 1.0, 0.22)
+	w_row.add_child(kad_sep)
+
+	_kad_label = Label.new()
+	_kad_label.text = "K:0  A:0  D:0"
+	_kad_label.add_theme_font_size_override("font_size", 15)
+	_kad_label.modulate = Color(1.0, 0.90, 0.45)
+	_kad_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	w_row.add_child(_kad_label)
+
 	var right_spacer := Control.new()
 	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(right_spacer)
 
-	var kad_pill := PanelContainer.new()
-	kad_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var kad_sb := StyleBoxFlat.new()
-	kad_sb.bg_color = Color(0.11, 0.14, 0.21, 0.88)
-	kad_sb.border_color = Color(0.88, 0.92, 0.98, 0.85)
-	kad_sb.set_border_width_all(2)
-	kad_sb.set_corner_radius_all(14)
-	kad_sb.set_content_margin_all(8)
-	kad_pill.add_theme_stylebox_override("panel", kad_sb)
-	top_bar.add_child(kad_pill)
-	_kad_label = Label.new()
-	_kad_label.text = "K:0  A:0  D:0"
-	_kad_label.add_theme_font_size_override("font_size", 15)
-	_kad_label.modulate = Color(1.0, 0.90, 0.45)
-	kad_pill.add_child(_kad_label)
+	_match_timer_pill = PanelContainer.new()
+	_match_timer_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_match_timer_pill.add_theme_stylebox_override("panel", _make_compact_glass_style())
+	_match_timer_pill.visible = not NetworkManager.is_test_mode()
+	top_bar.add_child(_match_timer_pill)
+
+	_match_timer_label = Label.new()
+	_match_timer_label.text = "05:00"
+	_match_timer_label.add_theme_font_size_override("font_size", 18)
+	_match_timer_label.modulate = Color(0.95, 0.96, 1.0)
+	_match_timer_pill.add_child(_match_timer_label)
 
 	_chat_toggle_btn = Button.new()
-	_chat_toggle_btn.text = "💬 CHAT"
+	_chat_toggle_btn.text = "CHAT"
 	_chat_toggle_btn.custom_minimum_size = Vector2(148, 50)
 	_chat_toggle_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_chat_toggle_btn.focus_mode = Control.FOCUS_NONE
@@ -966,7 +984,7 @@ func _build_ui() -> void:
 	add_child(_btn_bomb)
 
 	_btn_shoe = Button.new()
-	_btn_shoe.text = "👟"
+	_btn_shoe.text = "KICK"
 	_btn_shoe.offset_left = 14
 	_btn_shoe.offset_top = 96
 	_btn_shoe.offset_right = 94
@@ -1073,7 +1091,7 @@ func _build_ui() -> void:
 	_stun_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_stun_label.add_theme_font_size_override("font_size", 18)
 	_stun_label.modulate = Color(0.55, 0.96, 1.0)
-	_stun_label.text = "⚡ STUNNED!"
+	_stun_label.text = "STUNNED!"
 	_stun_banner.add_child(_stun_label)
 
 	_sync_mode_hud_visibility()
@@ -1105,7 +1123,7 @@ func _build_ui() -> void:
 	var emoji_row := HBoxContainer.new()
 	emoji_row.add_theme_constant_override("separation", 6)
 	chat_vbox.add_child(emoji_row)
-	for em in ["😜", "😂", "💨", "🖕", "❓", "🔥", "💀"]:
+	for em in ["HAHA", "GG", "NICE", "OUCH", "WHAT?!", "BOOM", "RIP"]:
 		var eb := Button.new()
 		eb.text = em
 		eb.focus_mode = Control.FOCUS_NONE
@@ -1139,7 +1157,7 @@ func _build_ui() -> void:
 	_chat_toggle_btn.pressed.connect(func():
 		_chat_panel.visible = not _chat_panel.visible
 		if _chat_panel.visible:
-			_chat_toggle_btn.text = "💬 CHAT"
+			_chat_toggle_btn.text = "CHAT"
 		if is_instance_valid(_chat_toast_label):
 			_chat_toast_label.visible = (not _chat_panel.visible) and (not _chat_toast_items.is_empty())
 		_update_killfeed_offset()
@@ -1330,19 +1348,30 @@ func _build_ui() -> void:
 	_respawn_panel.add_child(_respawn_label)
 	_build_preset_overlay()
 	_build_hud_layout_overlay()
+	_build_match_end_overlay()
+
+	_combo_banner_label = Label.new()
+	_combo_banner_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_combo_banner_label.position = Vector2(0, 84)
+	_combo_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_combo_banner_label.add_theme_font_size_override("font_size", 32)
+	_combo_banner_label.modulate = Color(1.0, 0.78, 0.18)
+	_combo_banner_label.visible = false
+	_combo_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_combo_banner_label)
 
 
 func _on_health_changed(current: int, maximum: int) -> void:
 	_hp_bar.max_value = maximum
 	_hp_bar.value = current
-	_hp_label.text = "♥%d" % current
+	_hp_label.text = "HP %d" % current
 
 
 func _on_fuel_changed(current: float, maximum: float) -> void:
 	_fuel_bar.max_value = maximum
 	if NetworkManager.unlimited_jetpack:
 		_fuel_bar.value = maximum
-		_fuel_label.text = "▲∞"
+		_fuel_label.text = "GAS INF"
 	else:
 		_fuel_bar.value = current
 		_fuel_label.text = "▲%d" % int(round(current))
@@ -1361,11 +1390,10 @@ func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 	else:
 		var res_ammo: int = int(local_player.get_active_reserve_ammo()) if (local_player != null and local_player.has_method("get_active_reserve_ammo")) else -1
 		if res_ammo >= 0:
+			_ammo_label.text = "%d / %d" % [current, res_ammo]
 			if current <= 0 and res_ammo <= 0:
-				_ammo_label.text = "0 / %d (EMPTY)" % mag_size
 				_ammo_label.modulate = Color(1.0, 0.35, 0.30)
 			else:
-				_ammo_label.text = "%d / %d" % [current, mag_size]
 				_ammo_label.modulate = Color(1.0, 0.88, 0.4)
 		elif _active_weapon != null and _active_weapon.unlimited_reserve:
 			_ammo_label.text = "%d / ∞" % current
@@ -1456,7 +1484,7 @@ func _refresh_top_info_pill() -> void:
 					best_enemy = p as Node2D
 			if best_enemy != null:
 				var t_name: String = str(best_enemy.get("player_name"))
-				_ammo_label.text = "🎯 %s (%dm)" % [t_name, int(round(best_dist / 16.0))]
+				_ammo_label.text = "LOCK: %s (%dm)" % [t_name, int(round(best_dist / 16.0))]
 				_ammo_label.modulate = Color(1.0, 0.72, 0.35) if best_dist <= 460.0 else Color(0.45, 0.96, 1.0)
 				if is_instance_valid(_target_portrait):
 					var e_arch: int = int(best_enemy.get("archetype_id"))
@@ -1465,7 +1493,7 @@ func _refresh_top_info_pill() -> void:
 					_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
 					_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
 			else:
-				_ammo_label.text = "🎯 NO TARGET"
+				_ammo_label.text = "NO TARGET"
 				_ammo_label.modulate = Color(0.65, 0.75, 0.85)
 				if is_instance_valid(_target_portrait):
 					_target_portrait.visible = false
@@ -1481,7 +1509,7 @@ func _refresh_top_info_pill() -> void:
 			var other_w: WeaponData = WeaponData.get_weapon(other_id, skin_row, 0)
 			_set_weapon_icon_texture(_secondary_weapon_icon, other_w, skin_row)
 		if is_instance_valid(_bomb_hud_label):
-			_bomb_hud_label.text = "💣 %d" % maxi(0, int(local_player.get("bomb_count")))
+			_bomb_hud_label.text = "%d" % maxi(0, int(local_player.get("bomb_count")))
 
 
 func _on_player_died(seconds_left: float) -> void:
@@ -1639,9 +1667,9 @@ func _on_killfeed_event(killer_name: String, victim_name: String, weapon_name: S
 	var w_esc: String = weapon_name.replace("[", "(").replace("]", ")")
 	var bb_line: String
 	if victim_name == local_name:
-		bb_line = "[right][bgcolor=#5e1818][color=#ff7070] ☠ %s (%s) → %s [/color][/bgcolor][/right]" % [k_esc, w_esc, v_esc]
+		bb_line = "[right][bgcolor=#5e1818][color=#ff7070] %s (%s) → %s [/color][/bgcolor][/right]" % [k_esc, w_esc, v_esc]
 	elif killer_name == local_name:
-		bb_line = "[right][bgcolor=#164a22][color=#66ff88] ★ %s (%s) → %s [/color][/bgcolor][/right]" % [k_esc, w_esc, v_esc]
+		bb_line = "[right][bgcolor=#164a22][color=#66ff88] %s (%s) → %s [/color][/bgcolor][/right]" % [k_esc, w_esc, v_esc]
 	else:
 		bb_line = "[right][color=#d4dce8]%s (%s) → %s[/color][/right]" % [k_esc, w_esc, v_esc]
 	_killfeed_lines.append({"text": bb_line, "ttl": 5.5})
@@ -1694,7 +1722,7 @@ func _refresh_scoreboard() -> void:
 		rows.append("%s%s  |  K:%d  A:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("assists", 0)), int(p.get("deaths", 0))])
 	_scoreboard_label.text = "\n".join(rows)
 	if is_instance_valid(_kad_label):
-		var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else (multiplayer.get_unique_id() if NetworkManager.is_network_active() else 1)
+		var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else NetworkManager.get_local_peer_id()
 		if NetworkManager.players.has(local_pid):
 			var lp: Dictionary = NetworkManager.players[local_pid]
 			_kad_label.text = "K:%d  A:%d  D:%d" % [int(lp.get("kills", 0)), int(lp.get("assists", 0)), int(lp.get("deaths", 0))]
@@ -1745,7 +1773,7 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 		return
 	var arch_id: int = int(local_player.get("archetype_id")) if local_player != null else ProfileManager.archetype_id
 	_refresh_top_info_pill()
-	var keys: Array[String] = ["1:", "2:", "3:", "★"]
+	var keys: Array[String] = ["1:", "2:", "3:", "ULT"]
 	var btns: Array[Button] = [_btn_ability_1, _btn_ability_2, _btn_ability_3, _btn_ult]
 	var kill_prog: int = int(local_player.get("ability_kill_progress")) if local_player != null else 0
 	var ult_pts: int = int(local_player.get("ult_points")) if local_player != null else 0
@@ -1812,7 +1840,7 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 	if is_instance_valid(_stun_banner) and is_instance_valid(_stun_label):
 		_stun_banner.visible = stun_left > 0.0
 		if stun_left > 0.0:
-			_stun_label.text = "⚡ STUNNED! %.1fs" % stun_left
+			_stun_label.text = "STUNNED! %.1fs" % stun_left
 
 
 func _on_bombs_changed(count: int, bomb_type: String) -> void:
@@ -1822,7 +1850,7 @@ func _on_bombs_changed(count: int, bomb_type: String) -> void:
 	_btn_bomb.text = "%s\nx%d" % [label_type, maxi(0, count)]
 	_btn_bomb.visible = (not NetworkManager.is_agent_clash_mode()) and NetworkManager.allow_explosives
 	if is_instance_valid(_bomb_hud_label):
-		_bomb_hud_label.text = "💣 %d" % maxi(0, count)
+		_bomb_hud_label.text = "%d" % maxi(0, count)
 	_btn_bomb.modulate = Color.WHITE if count > 0 else Color(0.55, 0.58, 0.65)
 
 
@@ -2132,6 +2160,133 @@ func _confirm_preset(preset_idx: int) -> void:
 		local_player.apply_gun_preset(_chosen_preset_idx)
 	if not _chosen_bomb_type.is_empty() and local_player != null and local_player.has_method("set_bomb_type"):
 		local_player.set_bomb_type(_chosen_bomb_type)
+
+
+func _build_match_end_overlay() -> void:
+	_match_end_overlay = ColorRect.new()
+	_match_end_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_match_end_overlay.color = Color(0.02, 0.03, 0.06, 0.88)
+	_match_end_overlay.visible = false
+	add_child(_match_end_overlay)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_match_end_overlay.add_child(center)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(560, 0)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	sb.border_color = Color(0.98, 0.76, 0.22, 0.95)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(18)
+	sb.set_content_margin_all(22)
+	card.add_theme_stylebox_override("panel", sb)
+	center.add_child(card)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 14)
+	card.add_child(vb)
+
+	_match_end_title = Label.new()
+	_match_end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_match_end_title.add_theme_font_size_override("font_size", 30)
+	_match_end_title.modulate = Color(1.0, 0.84, 0.24)
+	vb.add_child(_match_end_title)
+
+	var rows_scroll := ScrollContainer.new()
+	rows_scroll.custom_minimum_size = Vector2(540, 220)
+	rows_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rows_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.add_child(rows_scroll)
+
+	_match_end_rows = Label.new()
+	_match_end_rows.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_match_end_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_match_end_rows.add_theme_font_size_override("font_size", 18)
+	_match_end_rows.modulate = Color(0.90, 0.94, 1.0)
+	rows_scroll.add_child(_match_end_rows)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 12)
+	vb.add_child(btn_row)
+
+	var again_btn := Button.new()
+	again_btn.text = "PLAY AGAIN"
+	again_btn.custom_minimum_size = Vector2(0, 50)
+	again_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	again_btn.add_theme_font_size_override("font_size", 18)
+	UIStyle.style_layer_button(again_btn, "green", "", 10, 6)
+	again_btn.pressed.connect(func():
+		NetworkManager.go_to_arena()
+	)
+	btn_row.add_child(again_btn)
+
+	var menu_btn := Button.new()
+	menu_btn.text = "MAIN MENU"
+	menu_btn.custom_minimum_size = Vector2(0, 50)
+	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_btn.add_theme_font_size_override("font_size", 18)
+	UIStyle.style_layer_button(menu_btn, "blue", "", 10, 6)
+	menu_btn.pressed.connect(func():
+		NetworkManager.disconnect_network()
+		NetworkManager.go_to_main_menu()
+	)
+	btn_row.add_child(menu_btn)
+
+
+func _on_match_timer_updated(t_left: float) -> void:
+	if is_instance_valid(_match_timer_pill):
+		_match_timer_pill.visible = not NetworkManager.is_test_mode()
+	if not is_instance_valid(_match_timer_label):
+		return
+	var secs: int = maxi(0, int(ceil(t_left)))
+	var mm: int = secs / 60
+	var ss: int = secs % 60
+	_match_timer_label.text = "%02d:%02d" % [mm, ss]
+	if secs <= 10:
+		_match_timer_label.modulate = Color(1.0, 0.32, 0.28)
+	elif secs <= 30:
+		_match_timer_label.modulate = Color(1.0, 0.78, 0.24)
+	else:
+		_match_timer_label.modulate = Color(0.95, 0.96, 1.0)
+
+
+func _on_combo_achieved(killer_id: int, killer_name: String, combo_count: int) -> void:
+	var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else NetworkManager.get_local_peer_id()
+	if killer_id != local_pid or not is_instance_valid(_combo_banner_label):
+		return
+	_combo_banner_label.text = "%dx COMBO! (%s)" % [combo_count, killer_name]
+	_combo_banner_label.visible = true
+	_combo_banner_label.modulate.a = 1.0
+	_combo_banner_label.scale = Vector2(1.2, 1.2)
+	var tw := create_tween()
+	tw.tween_property(_combo_banner_label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.5)
+	tw.tween_property(_combo_banner_label, "modulate:a", 0.0, 0.4)
+	tw.finished.connect(func():
+		if is_instance_valid(_combo_banner_label):
+			_combo_banner_label.visible = false
+	)
+
+
+func _on_match_ended(winner_text: String, rankings: Array) -> void:
+	if not is_instance_valid(_match_end_overlay):
+		return
+	_match_end_title.text = winner_text
+	var lines: PackedStringArray = PackedStringArray()
+	for i in range(rankings.size()):
+		var r: Dictionary = rankings[i] as Dictionary
+		lines.append("#%d  %s   —   K:%d   A:%d   D:%d   Combos:%d" % [
+			i + 1,
+			str(r.get("name", "Player")),
+			int(r.get("kills", 0)),
+			int(r.get("assists", 0)),
+			int(r.get("deaths", 0)),
+			int(r.get("combos", 0))
+		])
+	_match_end_rows.text = "\n".join(lines)
+	_match_end_overlay.visible = true
 
 
 func _build_hud_layout_overlay() -> void:

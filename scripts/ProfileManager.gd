@@ -33,8 +33,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 5
 	},
 	{
-		"callsign": "Tiny Taz",
-		"name": "Tiny Taz (Casper Ghost)",
+		"callsign": "Soulless",
+		"name": "Soulless (Evil Being)",
 		"desc": "Playful spectral phantom who pushes foes back, silences abilities, spawns decoys, and turns invisible.",
 		"part_id": 27,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -223,7 +223,7 @@ const WEAPON_SKIN_NAMES: Array[String] = ["Digital Camo", "Solid Matte", "Neon T
 const RAIL_MOD_NAMES: Array[String] = ["Iron Sights", "Suppressor", "Tactical Scope"]
 
 const ARCHETYPE_ROLES: Array[String] = [
-	"Infantry Trooper", "Field Adventurer", "Outback Marksman", "Casper Phantom",
+	"Infantry Trooper", "Field Adventurer", "Outback Marksman", "Evil Being",
 	"Tactical Breacher", "Northern Raider", "Vampire Lord",
 	"Shadow Assassin", "Undead Brawler", "Cursed Warrior", "Spectral Phantom",
 	"Tomb Guardian", "Heavy Automaton", "Bio Specialist", "Feline Striker",

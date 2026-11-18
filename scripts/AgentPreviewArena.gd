@@ -98,8 +98,6 @@ func set_agent(arch_id: int) -> void:
 		hero._apply_weapon_visuals()
 		hero._fly_kick_timer = 0.0
 		hero._shadow_dash_timer = 0.0
-		hero.headless_timer = 0.0
-		hero._yagami_ult_timer = 0.0
 		hero._bat_ult_timer = 0.0
 		hero.preview_move_x = 0.0
 		hero.global_position = Vector2(120.0, 142.0)

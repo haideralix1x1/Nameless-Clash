@@ -121,6 +121,9 @@ static func is_weapon_allowed(weapon_id: int) -> bool:
 		return true
 	if bool(nm.get("only_pistols")):
 		return weapon_id == 9
+	var rw = nm.get("restricted_weapons")
+	if rw is Array and rw.has(weapon_id):
+		return false
 	if not bool(nm.get("allow_shotguns")) and (weapon_id == 5 or weapon_id == 6):
 		return false
 	if not bool(nm.get("allow_snipers")) and (weapon_id == 7 or weapon_id == 8):
