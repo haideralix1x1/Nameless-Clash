@@ -75,3 +75,5 @@ func _process(delta: float) -> void:
 
 	_weapon_pivot.position.y = 11.0 if anim_mode == 3 else (7.0 if anim_mode == 2 else 9.0)
 	_weapon_pivot.rotation = sin(_timer * 2.0) * 0.08
+	var stance: String = ModularCharacter.get_weapon_stance(ProfileManager.primary_weapon_id, _gun_s != null and _gun_s.visible)
+	_modular.apply_weapon_arm_pose(stance, _weapon_pivot.rotation, true, 0.0, -1.0)

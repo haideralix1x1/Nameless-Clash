@@ -7,6 +7,7 @@ const TEX_BG_DESERT: Texture2D = preload("res://assets/tilemaps/desert_bg.png")
 const TEX_TILES: Texture2D = preload("res://assets/tilemaps/bunker_tileset.png")
 const TEX_CRATE: Texture2D = preload("res://assets/sprites/weapon_crate.png")
 const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
 const DEFAULT_ARENA_HEIGHT: float = 1248.0
@@ -579,11 +580,7 @@ func _build_pickup_crates() -> void:
 			visual = icon
 		elif str(spec["type"]) == "weapon":
 			var w_spr := Sprite2D.new()
-			w_spr.texture = TEX_WEAPONS
-			w_spr.hframes = 11
-			w_spr.vframes = 3
-			w_spr.frame = WeaponData.get_weapon(int(spec["val"]), 0, 0).sprite_frame
-			w_spr.scale = Vector2(0.95, 0.95)
+			_apply_pickup_weapon_sprite(w_spr, int(spec["val"]))
 			visual = w_spr
 		else:
 			var spr := Sprite2D.new()
@@ -808,7 +805,57 @@ func _consume_weapon_crate(crate_idx: int, body: Node2D) -> void:
 	entry["val"] = next_w
 	var w_spr := entry["sprite"] as Sprite2D
 	if w_spr != null:
-		w_spr.frame = WeaponData.get_weapon(next_w, 0, 0).sprite_frame
+		_apply_pickup_weapon_sprite(w_spr, next_w)
+
+
+func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
+	if w_id == 11:
+		w_spr.texture = TEX_FLAMETHROWER
+		w_spr.hframes = 1
+		w_spr.vframes = 1
+		w_spr.frame = 0
+		w_spr.scale = Vector2(0.55, 0.55)
+	else:
+		w_spr.texture = TEX_WEAPONS
+		w_spr.hframes = 11
+		w_spr.vframes = 3
+		w_spr.frame = WeaponData.get_weapon(w_id, 0, 0).sprite_frame
+		w_spr.scale = Vector2(0.95, 0.95)
+
+
+func _pick_safest_spawn() -> Vector2:
+	if _spawn_points.is_empty():
+		return Vector2(640.0, 320.0)
+	var occupied: Array[Vector2] = []
+	if is_instance_valid(_players_container):
+		for ch in _players_container.get_children():
+			if ch is Node2D and (not ch.has_method("is_alive") or ch.is_alive()):
+				occupied.append((ch as Node2D).global_position)
+	if occupied.is_empty():
+		return _spawn_points[0]
+
+	var best_pos: Vector2 = _spawn_points[0]
+	var best_min_d: float = -1.0
+	var space := get_world_2d().direct_space_state
+	for sp in _spawn_points:
+		for off_x in [0.0, 72.0, -72.0, 144.0, -144.0]:
+			var cand: Vector2 = sp + Vector2(off_x, 0.0)
+			if absf(off_x) > 1.0:
+				var wall_hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, cand + Vector2(signf(off_x) * 20.0, 0.0), 1))
+				if not wall_hit.is_empty():
+					continue
+				var floor_hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(cand, cand + Vector2(0.0, 56.0), 1))
+				if floor_hit.is_empty():
+					continue
+			var min_d: float = 1e9
+			for occ in occupied:
+				var d: float = cand.distance_to(occ)
+				if d < min_d:
+					min_d = d
+			if min_d > best_min_d:
+				best_min_d = min_d
+				best_pos = cand
+	return best_pos
 
 
 func _spawn_all_participants() -> void:
@@ -818,7 +865,7 @@ func _spawn_all_participants() -> void:
 	for i in range(peer_ids.size()):
 		var pid: int = int(peer_ids[i])
 		var pinfo: Dictionary = NetworkManager.players[pid]
-		var spawn_pos: Vector2 = _spawn_points[i % _spawn_points.size()]
+		var spawn_pos: Vector2 = _pick_safest_spawn()
 		var player := PLAYER_SCENE.instantiate()
 		player.name = "Player_%d" % pid
 		var p_avatar: Dictionary = pinfo.get("avatar", {})
@@ -858,7 +905,7 @@ func _spawn_bot(bot_index: int) -> void:
 	var bot_id: int = -bot_index
 	var bot_team: int = bot_index % 2
 	var color_idx: int = bot_team if NetworkManager.is_team_mode() else (NetworkManager.local_color_index + bot_index) % NetworkManager.TEAM_COLORS.size()
-	var spawn_pos: Vector2 = _spawn_points[(bot_index + 1) % _spawn_points.size()]
+	var spawn_pos: Vector2 = _pick_safest_spawn()
 
 	var arch_idx: int = (bot_index * 3 + 1) % ProfileManager.ARCHETYPES.size()
 	var arch: Dictionary = ProfileManager.ARCHETYPES[arch_idx]

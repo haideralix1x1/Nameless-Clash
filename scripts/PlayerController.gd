@@ -100,6 +100,11 @@ var pointer_over_ui: bool = false
 var _weapon: WeaponData = WeaponData.get_weapon(0, 0, 0)
 var _fire_cooldown: float = 0.0
 var _reload_timer: float = 0.0
+var _damage_by_attacker: Dictionary = {}
+var _primary_reserve_ammo: int = -1
+var _secondary_reserve_ammo: int = -1
+var _primary_saved_ammo: int = -1
+var _secondary_saved_ammo: int = -1
 var _fuel_recharge_delay: float = 0.0
 var _respawn_timer: float = 0.0
 var _anim_timer: float = 0.0
@@ -116,9 +121,9 @@ var _spawn_points: Array[Vector2] = []
 
 const GRAB_PLAYER_RANGE: float = 92.0
 const THROW_PLAYER_SPEED: float = 980.0
-const THROWN_SELF_DAMAGE: int = 36
-const THROWN_TARGET_DAMAGE: int = 44
-const THROWN_WALL_DAMAGE: int = 22
+const THROWN_SELF_DAMAGE: int = 70
+const THROWN_TARGET_DAMAGE: int = 30
+const THROWN_WALL_DAMAGE: int = 70
 const DEFAULT_SHOE_ITEM_ID: int = 5
 const SHOE_COOLDOWN_SEC: float = 5.0
 const SHOE_WINDUP_SEC: float = 1.0
@@ -169,6 +174,7 @@ var _bat_ult_hit_done: bool = false
 var _bat_ult_sprite: Sprite2D = null
 var _fly_kick_timer: float = 0.0
 var _fly_kick_dir: Vector2 = Vector2.RIGHT
+var _fly_kick_target: Node2D = null
 var _fly_kick_hit_ids: Array[int] = []
 var _shadow_dash_timer: float = 0.0
 var _shadow_dash_dir: Vector2 = Vector2.RIGHT
@@ -230,6 +236,7 @@ var _taunt_timer: float = 0.0
 var _taunt_cooldown: float = 0.0
 var _taunt_anim: String = ""
 var _bomb_cooldown: float = 0.0
+var _bomb_throw_timer: float = 0.0
 
 @onready var _collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var _modular_rig: ModularCharacter = $ModularRig
@@ -617,6 +624,8 @@ func _process_alive(delta: float) -> void:
 		_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
 	if _bomb_cooldown > 0.0:
 		_bomb_cooldown = maxf(0.0, _bomb_cooldown - delta)
+	if _bomb_throw_timer > 0.0:
+		_bomb_throw_timer = maxf(0.0, _bomb_throw_timer - delta)
 	if shoe_cooldown_timer > 0.0:
 		shoe_cooldown_timer = maxf(0.0, shoe_cooldown_timer - delta)
 	if _shoe_windup_timer > 0.0:
@@ -720,17 +729,28 @@ func _process_alive(delta: float) -> void:
 	if not NetworkManager.is_agent_clash_mode() and is_reloading:
 		_reload_timer -= delta
 		if _reload_timer <= 0.0:
+			var res_ammo: int = get_active_reserve_ammo()
 			if _weapon.single_shell_reload:
-				current_ammo = mini(_weapon.mag_size, current_ammo + 1)
-				_play_local_sfx("res://assets/audio/pickup.wav", -10.0)
-				if current_ammo < _weapon.mag_size:
+				if res_ammo != 0:
+					current_ammo = mini(_weapon.mag_size, current_ammo + 1)
+					if res_ammo > 0:
+						res_ammo -= 1
+						_set_active_reserve_ammo(res_ammo)
+					_play_local_sfx("res://assets/audio/pickup.wav", -10.0)
+				if current_ammo < _weapon.mag_size and res_ammo != 0:
 					_reload_timer = _weapon.reload_time
 				else:
 					is_reloading = false
 				_emit_ammo()
 			else:
 				is_reloading = false
-				current_ammo = _weapon.mag_size
+				if res_ammo >= 0:
+					var needed: int = maxi(0, _weapon.mag_size - current_ammo)
+					var take: int = mini(needed, res_ammo)
+					current_ammo += take
+					_set_active_reserve_ammo(res_ammo - take)
+				else:
+					current_ammo = _weapon.mag_size
 				_emit_ammo()
 
 	var move_dir: float = 0.0
@@ -1043,9 +1063,11 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 			elif w.is_explosive:
 				b.visual_style = "rocket"
 			if w.pellet_count > 1:
-				# Shotguns deal strong burst at close-to-mid range (~315 px)
+				# Shotguns deal strong burst at close-to-mid range (~315 px) and instant kill at close range
 				b.max_lifetime = 0.34
 				b.knockback_mult = 1.5 / float(w.pellet_count)
+				if w.id == 5 or w.id == 6:
+					b.close_lethal_dist = 135.0
 			else:
 				b.max_lifetime = w.custom_lifetime
 			parent_node.add_child(b)
@@ -1069,6 +1091,8 @@ func start_reload() -> void:
 		return
 	if is_reloading or current_ammo >= _weapon.mag_size or is_dead:
 		return
+	if get_active_reserve_ammo() == 0:
+		return
 	is_reloading = true
 	_reload_timer = _weapon.reload_time
 	_emit_ammo()
@@ -1077,6 +1101,10 @@ func start_reload() -> void:
 func cycle_weapon() -> void:
 	if NetworkManager.is_agent_clash_mode() or is_dead:
 		return
+	if _is_using_secondary_slot():
+		_secondary_saved_ammo = current_ammo
+	else:
+		_primary_saved_ammo = current_ammo
 	if _equipped_primary_id != secondary_weapon_id:
 		var next_id: int = secondary_weapon_id if current_weapon_id != secondary_weapon_id else _equipped_primary_id
 		set_weapon(next_id)
@@ -1086,6 +1114,21 @@ func cycle_weapon() -> void:
 	else:
 		var next_id: int = (current_weapon_id + 1) % WeaponData.get_weapon_count()
 		set_weapon(next_id)
+
+
+func _is_using_secondary_slot() -> bool:
+	return current_weapon_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id
+
+
+func get_active_reserve_ammo() -> int:
+	return _secondary_reserve_ammo if _is_using_secondary_slot() else _primary_reserve_ammo
+
+
+func _set_active_reserve_ammo(val: int) -> void:
+	if _is_using_secondary_slot():
+		_secondary_reserve_ammo = val
+	else:
+		_primary_reserve_ammo = val
 
 
 func set_weapon(new_weapon_id: int) -> void:
@@ -1103,6 +1146,10 @@ func apply_gun_preset(preset_idx: int) -> void:
 	primary_weapon_id = int(preset["primary"])
 	secondary_weapon_id = int(preset["secondary"])
 	_equipped_primary_id = primary_weapon_id
+	_primary_reserve_ammo = -1
+	_secondary_reserve_ammo = -1
+	_primary_saved_ammo = -1
+	_secondary_saved_ammo = -1
 	bomb_type = str(preset.get("bomb_type", "frag"))
 	max_bombs = int(preset.get("bombs", 3))
 	bomb_count = max_bombs
@@ -1139,6 +1186,7 @@ func throw_bomb_rpc(origin: Vector2, angle: float, b_type: String) -> void:
 
 
 func _throw_bomb_local(origin: Vector2, angle: float, b_type: String) -> void:
+	_bomb_throw_timer = 0.26
 	var local_auth: bool = _is_controlled_locally()
 	match b_type:
 		"cluster":
@@ -1203,7 +1251,12 @@ func _apply_weapon(weapon_id: int) -> void:
 	if not _weapon.supports_dual_wield:
 		is_dual_wielding = false
 	is_reloading = false
-	current_ammo = _weapon.mag_size
+	var active_res: int = get_active_reserve_ammo()
+	var saved_ammo: int = _secondary_saved_ammo if _is_using_secondary_slot() else _primary_saved_ammo
+	if active_res >= 0 and saved_ammo >= 0:
+		current_ammo = mini(saved_ammo, _weapon.mag_size)
+	else:
+		current_ammo = _weapon.mag_size
 	current_zoom_level = clampi(current_zoom_level, 1, get_max_zoom_level())
 	_apply_weapon_visuals()
 	_emit_hud_signals()
@@ -1233,9 +1286,17 @@ func cycle_zoom() -> void:
 		zoom_changed.emit(current_zoom_level, max_z)
 
 
+const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
+var _weapons_sheet_tex: Texture2D = null
+var _weapons_base_scale: Vector2 = Vector2.ONE
+
+
 func _apply_weapon_visuals() -> void:
 	if not is_node_ready():
 		return
+	if _weapons_sheet_tex == null and _primary_weapon != null:
+		_weapons_sheet_tex = _primary_weapon.texture
+		_weapons_base_scale = _primary_weapon.scale
 	if NetworkManager.is_agent_clash_mode():
 		_primary_weapon.visible = false
 		_secondary_weapon.visible = false
@@ -1252,6 +1313,19 @@ func _apply_weapon_visuals() -> void:
 	if _agent_weapon_node != null:
 		_agent_weapon_node.visible = false
 	var w: WeaponData = WeaponData.get_weapon(current_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	if current_weapon_id == 11:
+		_primary_weapon.texture = TEX_FLAMETHROWER
+		_primary_weapon.hframes = 1
+		_primary_weapon.vframes = 1
+		_primary_weapon.frame = 0
+		_primary_weapon.scale = _weapons_base_scale * 0.52
+		_secondary_weapon.visible = false
+		return
+	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
+		_primary_weapon.texture = _weapons_sheet_tex
+		_primary_weapon.hframes = 11
+		_primary_weapon.vframes = 3
+		_primary_weapon.scale = _weapons_base_scale
 	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
 	_primary_weapon.frame = sheet_frame
 	_secondary_weapon.frame = sheet_frame
@@ -1259,7 +1333,7 @@ func _apply_weapon_visuals() -> void:
 
 
 func can_grab_throwable() -> bool:
-	return NetworkManager.is_agent_clash_mode() and grabbed_player_id == 0 and carried_by_peer_id == 0 and not is_dead
+	return NetworkManager.is_agent_clash_mode() and grabbed_player_id == 0 and carried_by_peer_id == 0 and held_throwable_id < 0 and held_throwables.is_empty() and not is_dead
 
 
 func apply_pickup(pickup_type: String, value: int) -> void:
@@ -1270,7 +1344,7 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 		if is_local_human:
 			health_changed.emit(health, max_health)
 	elif pickup_type == "throwable":
-		if NetworkManager.is_agent_clash_mode():
+		if NetworkManager.is_agent_clash_mode() and held_throwable_id < 0 and held_throwables.is_empty():
 			var item_id: int = clampi(value, 0, AgentData.THROWABLE_ITEMS.size() - 1)
 			held_throwables.append(item_id)
 			held_throwable_id = held_throwables.back()
@@ -1279,11 +1353,30 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 	elif pickup_type == "weapon":
 		if not NetworkManager.is_agent_clash_mode():
 			var new_w_id: int = WeaponData.sanitize_weapon_id(value)
-			if current_weapon_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id:
+			var picked_w: WeaponData = WeaponData.get_weapon(new_w_id, weapon_skin_id, m4a1_rail_mod)
+			if new_w_id == _equipped_primary_id and _primary_reserve_ammo >= 0:
+				_primary_saved_ammo = picked_w.mag_size
+				_primary_reserve_ammo = 0
+				if not _is_using_secondary_slot():
+					current_ammo = picked_w.mag_size
+					is_reloading = false
+					_emit_ammo()
+			elif new_w_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id and _secondary_reserve_ammo >= 0:
+				_secondary_saved_ammo = picked_w.mag_size
+				_secondary_reserve_ammo = 0
+				if _is_using_secondary_slot():
+					current_ammo = picked_w.mag_size
+					is_reloading = false
+					_emit_ammo()
+			elif _is_using_secondary_slot():
 				secondary_weapon_id = new_w_id
+				_secondary_reserve_ammo = 0
+				_secondary_saved_ammo = picked_w.mag_size
 				set_weapon(secondary_weapon_id)
 			else:
 				_equipped_primary_id = new_w_id
+				_primary_reserve_ammo = 0
+				_primary_saved_ammo = picked_w.mag_size
 				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
 				bomb_count = mini(max_bombs, bomb_count + 1)
@@ -1391,6 +1484,10 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 		return
 
 	velocity += knockback
+	if attacker_id > 0 and attacker_id != peer_id and deathless_timer <= 0.0:
+		var dealt_hp: int = mini(health, dmg)
+		if dealt_hp > 0:
+			_damage_by_attacker[attacker_id] = int(_damage_by_attacker.get(attacker_id, 0)) + dealt_hp
 	if deathless_timer > 0.0:
 		health = maxi(1, health - dmg)
 	else:
@@ -1436,7 +1533,14 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	cryo_shatter_timer = 0.0
 	_release_grab_state()
 	_respawn_timer = RESPAWN_TIME
-	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name)
+	var assist_ids: Array = []
+	var assist_threshold: float = float(max_health) * 0.50
+	for raw_att in _damage_by_attacker.keys():
+		var att_id: int = int(raw_att)
+		if att_id != attacker_id and att_id != peer_id and float(_damage_by_attacker[raw_att]) >= assist_threshold:
+			assist_ids.append(att_id)
+	_damage_by_attacker.clear()
+	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name, assist_ids)
 
 	if NetworkManager.is_network_active():
 		announce_death_rpc.rpc()
@@ -1471,10 +1575,29 @@ func _on_death_visuals() -> void:
 func _respawn_self() -> void:
 	var spawn_pos: Vector2 = Vector2(640.0, 320.0)
 	if not _spawn_points.is_empty():
-		spawn_pos = _spawn_points[randi() % _spawn_points.size()]
+		var others: Array[Vector2] = []
+		for p in get_tree().get_nodes_in_group("players"):
+			if is_instance_valid(p) and p != self and (not p.has_method("is_alive") or p.is_alive()):
+				others.append((p as Node2D).global_position)
+		if others.is_empty():
+			spawn_pos = _spawn_points[randi() % _spawn_points.size()]
+		else:
+			var best_sp: Vector2 = _spawn_points[0]
+			var best_d: float = -1.0
+			for sp in _spawn_points:
+				var min_d: float = 1e9
+				for op in others:
+					var d: float = sp.distance_to(op)
+					if d < min_d:
+						min_d = d
+				if min_d > best_d:
+					best_d = min_d
+					best_sp = sp
+			spawn_pos = best_sp
 	global_position = spawn_pos
 	velocity = Vector2.ZERO
 	health = max_health
+	_damage_by_attacker.clear()
 	jetpack_fuel = MAX_FUEL
 	is_dead = false
 	is_reloading = false
@@ -1515,6 +1638,10 @@ func _respawn_self() -> void:
 	else:
 		ability_cooldowns[3] = 0.0 if ult_points >= 4 else 1.0
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
+	_primary_reserve_ammo = -1
+	_secondary_reserve_ammo = -1
+	_primary_saved_ammo = -1
+	_secondary_saved_ammo = -1
 	current_ammo = _weapon.mag_size
 	spawn_invuln_timer = SPAWN_INVULN_SEC
 
@@ -1642,6 +1769,19 @@ func _update_visual_state(delta: float) -> void:
 	_secondary_weapon.flip_v = flip_gun
 	if _agent_weapon_node != null:
 		_agent_weapon_node.scale.y = -1.0 if flip_gun else 1.0
+	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
+		_modular_rig.hands_z_over_weapon = 2
+		if is_dead:
+			_modular_rig.apply_weapon_arm_pose("none", aim_angle, facing_right, 0.0, -1.0)
+		elif _bomb_throw_timer > 0.0:
+			var throw_prog: float = clampf(1.0 - (_bomb_throw_timer / 0.26), 0.0, 1.0)
+			_modular_rig.apply_weapon_arm_pose("throw_bomb", aim_angle, facing_right, 0.0, throw_prog)
+		elif NetworkManager.is_agent_clash_mode():
+			_modular_rig.apply_weapon_arm_pose("rifle", aim_angle + swing_offset, facing_right, _fire_anim_timer, -1.0)
+		else:
+			var is_dual: bool = is_dual_wielding and _weapon != null and _weapon.supports_dual_wield
+			var stance: String = ModularCharacter.get_weapon_stance(current_weapon_id, is_dual)
+			_modular_rig.apply_weapon_arm_pose(stance, aim_angle, facing_right, _fire_anim_timer, -1.0)
 
 	var p_ratio: float = clampf(SettingsManager.particle_intensity, 0.0, 1.5)
 	var target_amt: int = clampi(int(round(24.0 * p_ratio)), 1, 36)
@@ -2278,8 +2418,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				bax.pierce_walls = true
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.85)
 		"barbarian_squad":
-			for bi in range(3):
-				_spawn_summon("barbarian", origin + Vector2(float(bi - 1) * 26.0, -8.0), dmg, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
+			_spawn_barbarian_squad(origin, cast_angle, dmg, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.8)
 		"ult_earth_quake_zone":
 			var tgt_ez: Node2D = _find_nearest_enemy_player(cast_pos, 900.0)
@@ -2325,8 +2464,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.35)
 		"jump_kick":
 			_fly_kick_timer = 0.36
+			var front_x: float = 1.0 if facing_right else -1.0
+			if absf(cos(cast_angle)) > 0.25:
+				front_x = 1.0 if cos(cast_angle) >= 0.0 else -1.0
+			facing_right = front_x >= 0.0
 			var kick_tgt: Node2D = null
-			var best_kick_d: float = 260.0 * 260.0
+			var best_kick_d: float = 460.0 * 460.0
+			var space_k := get_world_2d().direct_space_state
 			for p in get_tree().get_nodes_in_group("players"):
 				if not is_instance_valid(p) or int(p.get("peer_id")) == peer_id:
 					continue
@@ -2335,17 +2479,24 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
 					continue
 				var p_pos: Vector2 = (p as Node2D).global_position
-				if absf(p_pos.y - cast_pos.y) <= 44.0:
+				if (p_pos.x - cast_pos.x) * front_x < -16.0:
+					continue
+				if absf(p_pos.y - cast_pos.y) <= 150.0:
 					var d_sq: float = p_pos.distance_squared_to(cast_pos)
 					if d_sq < best_kick_d:
-						best_kick_d = d_sq
-						kick_tgt = p as Node2D
+						var ray_k := PhysicsRayQueryParameters2D.create(cast_pos, p_pos, 1)
+						var hit_k := space_k.intersect_ray(ray_k)
+						if hit_k.is_empty():
+							best_kick_d = d_sq
+							kick_tgt = p as Node2D
+			_fly_kick_target = kick_tgt
 			if kick_tgt != null:
 				_fly_kick_dir = (kick_tgt.global_position - cast_pos).normalized()
 				aim_angle = _fly_kick_dir.angle()
 				facing_right = _fly_kick_dir.x >= 0.0
 			else:
-				_fly_kick_dir = Vector2.from_angle(cast_angle)
+				_fly_kick_dir = Vector2(front_x, 0.0)
+				aim_angle = 0.0 if front_x >= 0.0 else PI
 			_fly_kick_hit_ids.clear()
 			control_lock_timer = 0.36
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 1.25)
@@ -2954,7 +3105,14 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 			velocity *= 0.25
 	if _fly_kick_timer > 0.0:
 		_fly_kick_timer = maxf(0.0, _fly_kick_timer - delta)
-		var arc_vy: float = -460.0 if _fly_kick_timer > 0.18 else 520.0
+		var close_home: bool = false
+		if is_instance_valid(_fly_kick_target) and (not _fly_kick_target.has_method("is_alive") or _fly_kick_target.is_alive()):
+			var to_t: Vector2 = _fly_kick_target.global_position - global_position
+			if to_t.length() > 4.0:
+				_fly_kick_dir = to_t.normalized()
+				facing_right = _fly_kick_dir.x >= 0.0
+			close_home = to_t.length() <= 110.0
+		var arc_vy: float = 0.0 if close_home else (-190.0 if _fly_kick_timer > 0.18 else 220.0)
 		var kick_spd: float = 860.0 if _fly_kick_timer > 0.18 else 960.0
 		velocity = _fly_kick_dir * kick_spd + Vector2(0.0, arc_vy)
 		move_and_slide()
@@ -2966,17 +3124,20 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 					if p.has_method("is_alive") and not p.is_alive():
 						continue
 					var pid: int = int(p.get("peer_id"))
-					if not (_fly_kick_hit_ids.has(pid)) and (p as Node2D).global_position.distance_to(global_position) <= 52.0:
+					if not (_fly_kick_hit_ids.has(pid)) and (p as Node2D).global_position.distance_to(global_position) <= 58.0:
 						_fly_kick_hit_ids.append(pid)
 						if p.has_method("apply_hit"):
 							p.apply_hit(50, peer_id, "Flying Kick", player_name, _fly_kick_dir * 620.0 + Vector2(0.0, -220.0))
 						_spawn_rising_particles((p as Node2D).global_position, Color(0.76, 0.44, 1.0), false, 8)
 						_play_local_sfx("res://assets/audio/hit.wav", -1.0, 1.1)
 						_fly_kick_timer = 0.0
+						_fly_kick_target = null
 						control_lock_timer = 0.0
 						velocity *= 0.25
 						break
 		if _fly_kick_timer <= 0.0:
+			_fly_kick_target = null
+			facing_right = _fly_kick_dir.x >= 0.0
 			velocity *= 0.35
 	if boar_ride_timer > 0.0:
 		boar_ride_timer = maxf(0.0, boar_ride_timer - delta)
@@ -3108,26 +3269,28 @@ func _update_dual_shotgun_visuals(show: bool) -> void:
 			_dual_shotgun_spr_2.visible = false
 
 
-	var aw: float = 2200.0
-	var ah: float = 1200.0
-	var par: Node = get_parent()
-	if par != null and "arena_width" in par:
-		aw = float(par.get("arena_width"))
-		ah = float(par.get("arena_height"))
-	if global_position.x < -24.0 or global_position.x > aw + 24.0 or global_position.y < -60.0 or global_position.y > ah + 60.0:
+	var bounds: Vector2 = _get_arena_bounds()
+	if global_position.x < -24.0 or global_position.x > bounds.x + 24.0 or global_position.y < -60.0 or global_position.y > bounds.y + 60.0:
 		if _is_controlled_locally() and not is_dead:
 			_trigger_death(0, "Out of Bounds", "Arena")
 		return
 
 
-func _clamp_to_arena(pos: Vector2) -> Vector2:
-	var aw: float = 2200.0
-	var ah: float = 1200.0
+func _get_arena_bounds() -> Vector2:
 	var par: Node = get_parent()
-	if par != null and "arena_width" in par:
-		aw = float(par.get("arena_width"))
-		ah = float(par.get("arena_height"))
-	return Vector2(clampf(pos.x, 64.0, aw - 64.0), clampf(pos.y, 64.0, ah - 64.0))
+	while par != null:
+		if "arena_width" in par and "arena_height" in par:
+			return Vector2(float(par.get("arena_width")), float(par.get("arena_height")))
+		par = par.get_parent()
+	var cs: Node = get_tree().current_scene if is_inside_tree() else null
+	if cs != null and "arena_width" in cs and "arena_height" in cs:
+		return Vector2(float(cs.get("arena_width")), float(cs.get("arena_height")))
+	return Vector2(2200.0, 1200.0)
+
+
+func _clamp_to_arena(pos: Vector2) -> Vector2:
+	var bounds: Vector2 = _get_arena_bounds()
+	return Vector2(clampf(pos.x, 64.0, bounds.x - 64.0), clampf(pos.y, 64.0, bounds.y - 64.0))
 
 
 func _spawn_custom_bullet(origin: Vector2, angle: float, spd: float, dmg: int, style: String, col: Color, w_name: String, stun_dur: float, grav: float, homing: bool, life: float, local_auth: bool) -> Node:
@@ -3930,10 +4093,10 @@ func _spawn_damage_popup(dmg: int) -> void:
 	tw.finished.connect(lbl.queue_free)
 
 
-func trigger_taunt() -> void:
+func trigger_taunt(override_taunt_id: int = -1) -> void:
 	if is_dead or _taunt_cooldown > 0.0:
 		return
-	var t_id: int = archetype_id if NetworkManager.is_agent_clash_mode() else taunt_id
+	var t_id: int = override_taunt_id if override_taunt_id >= 0 else (archetype_id if NetworkManager.is_agent_clash_mode() else taunt_id)
 	_taunt_cooldown = 2.2
 	if NetworkManager.is_network_active():
 		trigger_taunt_rpc.rpc(t_id)
@@ -3959,19 +4122,45 @@ func _play_taunt_local(t_id: int) -> void:
 		return
 	if _taunt_anim == "fart" or _taunt_anim == "burp":
 		var puff_pos: Vector2 = global_position + Vector2(-18.0 if facing_right else 18.0, 10.0)
-		_spawn_vfx_burst(puff_pos, 46.0, col)
+		_spawn_vfx_burst(puff_pos, 48.0, col)
+	elif _taunt_anim == "salute":
+		_spawn_vfx_burst(global_position + Vector2(0.0, -24.0), 42.0, Color(1.0, 0.35, 0.25))
+	elif _taunt_anim in ["dance", "disco", "hot_foot", "slap_knee", "laugh"]:
+		_spawn_vfx_burst(global_position + Vector2(0.0, -20.0), 44.0, col)
+	else:
+		_spawn_vfx_burst(global_position + Vector2(0.0, -18.0), 34.0, col)
 
 	var bubble := Label.new()
-	bubble.text = "%s %s" % [str(t["emoji"]), str(t["text"])]
-	bubble.global_position = global_position + Vector2(-48.0, -76.0)
+	var em_txt: String = str(t.get("emoji", ""))
+	var over_txt: String = "EZZ!" if t_id == 0 else str(t.get("text", ""))
+	bubble.text = "%s %s" % [em_txt, over_txt]
+	bubble.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bubble.custom_minimum_size = Vector2(140.0, 30.0)
+	bubble.global_position = global_position + Vector2(-70.0, -82.0)
+	bubble.pivot_offset = Vector2(70.0, 15.0)
+	bubble.scale = Vector2(0.55, 0.55)
 	bubble.z_index = 45
-	bubble.add_theme_font_size_override("font_size", 16)
+	bubble.add_theme_font_size_override("font_size", 20)
+	bubble.add_theme_color_override("font_outline_color", Color.BLACK)
+	bubble.add_theme_constant_override("outline_size", 5)
 	bubble.modulate = col
 	parent_node.add_child(bubble)
 	var tw := bubble.create_tween().set_parallel(true)
-	tw.tween_property(bubble, "position:y", bubble.position.y - 26.0, 1.45)
-	tw.tween_property(bubble, "modulate:a", 0.0, 1.45).set_delay(0.6)
+	tw.tween_property(bubble, "scale", Vector2(1.15, 1.15), 0.14)
+	tw.tween_property(bubble, "scale", Vector2(1.0, 1.0), 0.14).set_delay(0.14)
+	tw.tween_property(bubble, "position:y", bubble.position.y - 30.0, 1.45)
+	tw.tween_property(bubble, "modulate:a", 0.0, 1.45).set_delay(0.65)
 	tw.finished.connect(bubble.queue_free)
+
+
+func _spawn_barbarian_squad(origin: Vector2, cast_angle: float, dmg: int, dur: float, col: Color, ab_name: String, local_auth: bool) -> void:
+	var dir_x: float = 1.0 if cos(cast_angle) >= 0.0 else -1.0
+	for bi in range(3):
+		if not is_inside_tree() or is_dead:
+			return
+		_spawn_summon("barbarian", origin + Vector2(dir_x * 18.0, -8.0), dmg, dur, col, ab_name, local_auth)
+		if bi < 2:
+			await get_tree().create_timer(0.45).timeout
 
 
 func _play_taunt_sfx(kind: String) -> void:

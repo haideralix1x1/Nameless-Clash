@@ -218,6 +218,7 @@ func _build_local_player_dict(existing: Dictionary = {}) -> Dictionary:
 		"color_index": local_team if is_team_mode() else local_color_index,
 		"team": local_team,
 		"kills": int(existing.get("kills", 0)),
+		"assists": int(existing.get("assists", 0)),
 		"deaths": int(existing.get("deaths", 0)),
 		"ready": true,
 		"avatar": ProfileManager.to_dict()
@@ -513,6 +514,7 @@ func register_player(info: Dictionary) -> void:
 		"color_index": int(info.get("color_index", sender_id % TEAM_COLORS.size())),
 		"team": clampi(int(info.get("team", default_team)), 0, 1),
 		"kills": int(existing.get("kills", 0)),
+		"assists": int(existing.get("assists", 0)),
 		"deaths": int(existing.get("deaths", 0)),
 		"ready": bool(info.get("ready", true)),
 		"avatar": avatar_dict
@@ -545,21 +547,25 @@ func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int
 	go_to_arena()
 
 
-func report_kill(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String) -> void:
+func report_kill(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String, assist_ids: Array = []) -> void:
 	if is_network_active():
-		record_kill_rpc.rpc(killer_id, victim_id, weapon_name, killer_label, victim_label)
+		record_kill_rpc.rpc(killer_id, victim_id, weapon_name, killer_label, victim_label, assist_ids)
 	else:
-		_apply_kill(killer_id, victim_id, weapon_name, killer_label, victim_label)
+		_apply_kill(killer_id, victim_id, weapon_name, killer_label, victim_label, assist_ids)
 
 
 @rpc("any_peer", "call_local", "reliable")
-func record_kill_rpc(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String) -> void:
-	_apply_kill(killer_id, victim_id, weapon_name, killer_label, victim_label)
+func record_kill_rpc(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String, assist_ids: Array = []) -> void:
+	_apply_kill(killer_id, victim_id, weapon_name, killer_label, victim_label, assist_ids)
 
 
-func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String) -> void:
+func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_label: String, victim_label: String, assist_ids: Array = []) -> void:
 	if killer_id != victim_id and players.has(killer_id):
 		players[killer_id]["kills"] = int(players[killer_id].get("kills", 0)) + 1
+	for raw_aid in assist_ids:
+		var aid: int = int(raw_aid)
+		if aid != killer_id and aid != victim_id and players.has(aid):
+			players[aid]["assists"] = int(players[aid].get("assists", 0)) + 1
 	if players.has(victim_id):
 		players[victim_id]["deaths"] = int(players[victim_id].get("deaths", 0)) + 1
 	player_list_updated.emit()

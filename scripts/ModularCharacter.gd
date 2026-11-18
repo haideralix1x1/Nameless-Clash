@@ -23,6 +23,7 @@ var _anim_torso: AnimatedSprite2D
 var _anim_head: AnimatedSprite2D
 var _sprite_gear: Sprite2D
 var _sprite_hands: Sprite2D
+var _sprite_hand_far: Sprite2D
 var _sprite_shoe_throw: Sprite2D
 
 var _current_anim: String = "idle"
@@ -30,6 +31,7 @@ var _manual_sync_mode: bool = false
 var _manual_frame: int = 0
 var _flip_h: bool = false
 var _custom_full_sheet: bool = false
+var hands_z_over_weapon: int = 0
 
 var _base_colors: Dictionary = {
 	"shirt": Color.WHITE,
@@ -64,7 +66,14 @@ func _ensure_layers() -> void:
 	_anim_torso = _get_or_create_animated("AnimatedSprite2D_Torso")
 	_anim_head = _get_or_create_animated("AnimatedSprite2D_Head")
 	_sprite_gear = _get_or_create_sprite("Sprite2D_Gear")
+	_sprite_hand_far = _get_or_create_sprite("Sprite2D_HandFar")
+	_sprite_hand_far.hframes = 1
+	_sprite_hand_far.region_enabled = true
 	_sprite_hands = _get_or_create_sprite("Sprite2D_Hands")
+	_sprite_hands.hframes = 1
+	_sprite_hands.region_enabled = true
+	if _sprite_hand_far.get_index() > _sprite_hands.get_index():
+		move_child(_sprite_hand_far, _sprite_hands.get_index())
 	_sprite_shoe_throw = _get_or_create_sprite("Sprite2D_ShoeThrow")
 	if ResourceLoader.exists("res://assets/sprites/modular/shoe_throw.png"):
 		_sprite_shoe_throw.texture = load("res://assets/sprites/modular/shoe_throw.png") as Texture2D
@@ -138,6 +147,8 @@ func apply_loadout(config: Dictionary) -> void:
 		_sprite_gear.visible = false
 		_sprite_back.visible = false
 		_sprite_hands.visible = false
+		if _sprite_hand_far != null:
+			_sprite_hand_far.visible = false
 		_anim_legs.visible = true
 		_anim_torso.visible = true
 		_anim_torso.scale = Vector2(0.88, 0.88)
@@ -147,6 +158,8 @@ func apply_loadout(config: Dictionary) -> void:
 		_sprite_gear.visible = true
 		_sprite_back.visible = true
 		_sprite_hands.visible = true
+		if _sprite_hand_far != null:
+			_sprite_hand_far.visible = true
 		_anim_legs.visible = true
 		_anim_torso.scale = Vector2.ONE
 
@@ -156,6 +169,12 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_sprite_strip(_sprite_gear, gear_path)
 	_apply_sprite_strip(_sprite_back, back_path)
 	_apply_sprite_strip(_sprite_hands, hands_path)
+	_sprite_hands.hframes = 1
+	_sprite_hands.region_enabled = true
+	if _sprite_hand_far != null:
+		_sprite_hand_far.texture = _sprite_hands.texture
+		_sprite_hand_far.hframes = 1
+		_sprite_hand_far.region_enabled = true
 
 	_base_colors["shirt"] = _parse_color(config.get("shirt_color", Color.WHITE), Color.WHITE)
 	_base_colors["pants"] = _parse_color(config.get("pants_color", Color.WHITE), Color.WHITE)
@@ -198,6 +217,8 @@ func apply_layer_colors(team_tint: Color = Color.WHITE, team_blend: float = 0.0)
 	_anim_legs.modulate = pants
 	_anim_head.modulate = skin
 	_sprite_hands.modulate = skin
+	if _sprite_hand_far != null:
+		_sprite_hand_far.modulate = skin
 	_sprite_gear.modulate = helmet
 	_sprite_back.modulate = gear
 
@@ -368,15 +389,27 @@ func _sub_frame_for_sheet_frame(anim_name: String, sheet_frame: int) -> int:
 
 func _apply_sheet_frame_to_sprites(sheet_frame: int) -> void:
 	var safe := clampi(sheet_frame, 0, SHEET_FRAMES - 1)
-	for spr in [_sprite_back, _sprite_gear, _sprite_hands]:
+	for spr in [_sprite_back, _sprite_gear]:
 		if spr != null:
 			spr.frame = safe
+	if _sprite_hands != null and _sprite_hands.texture != null:
+		var fw: float = float(_sprite_hands.texture.get_width()) / float(SHEET_FRAMES)
+		var fh: float = float(_sprite_hands.texture.get_height())
+		var half_w: float = fw * 0.5
+		_sprite_hands.region_rect = Rect2(float(safe) * fw, 0.0, half_w, fh)
+		if _sprite_hand_far != null:
+			_sprite_hand_far.region_rect = Rect2(float(safe) * fw + half_w, 0.0, half_w, fh)
 
 
 func _apply_flip_to_sprites(flip_h: bool) -> void:
-	for spr in [_sprite_back, _sprite_gear, _sprite_hands]:
+	for spr in [_sprite_back, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if spr != null:
 			spr.flip_h = flip_h
+	var sign_x: float = -1.0 if flip_h else 1.0
+	if _sprite_hands != null:
+		_sprite_hands.offset = Vector2(-6.0 * sign_x, -6.0)
+	if _sprite_hand_far != null:
+		_sprite_hand_far.offset = Vector2(9.0 * sign_x, -6.0)
 
 
 func _parse_color(value: Variant, fallback: Color) -> Color:
@@ -399,7 +432,7 @@ func reset_taunt_pose() -> void:
 
 func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 	_ensure_layers()
-	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
+	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if n != null:
 			n.visible = true
 
@@ -415,8 +448,11 @@ func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 				u.position = upper_pos
 				u.rotation = upper_rot
 		if _sprite_hands != null:
-			_sprite_hands.position = Vector2(dir * 7.5 * bend, 11.0 * bend)
+			_sprite_hands.position = Vector2(dir * (-26.0 + 7.5 * bend), 6.0 + 11.0 * bend)
 			_sprite_hands.rotation = dir * 0.55 * bend
+		if _sprite_hand_far != null:
+			_sprite_hand_far.position = Vector2(dir * (23.0 + 7.5 * bend), 6.0 + 11.0 * bend)
+			_sprite_hand_far.rotation = dir * 0.55 * bend
 		if _anim_legs != null:
 			_anim_legs.position = Vector2(dir * 2.0 * bend, -2.5 * bend)
 			_anim_legs.rotation = -dir * 0.12 * bend
@@ -431,8 +467,11 @@ func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 				u.position = upper_pos
 				u.rotation = upper_rot
 		if _sprite_hands != null:
-			_sprite_hands.position = upper_pos + Vector2(dir * 4.0, -6.0 * (1.0 - throw_t))
+			_sprite_hands.position = upper_pos + Vector2(dir * (-26.0 + 4.0), 6.0 - 6.0 * (1.0 - throw_t))
 			_sprite_hands.rotation = dir * lerpf(-0.65, 0.35, throw_t)
+		if _sprite_hand_far != null:
+			_sprite_hand_far.position = upper_pos + Vector2(dir * (23.0 + 4.0), 6.0 - 6.0 * (1.0 - throw_t))
+			_sprite_hand_far.rotation = dir * lerpf(-0.65, 0.35, throw_t)
 		if _anim_legs != null:
 			_anim_legs.position = Vector2.ZERO
 			_anim_legs.rotation = 0.0
@@ -447,8 +486,91 @@ func stop_shoe_throw() -> void:
 	_ensure_layers()
 	if _sprite_shoe_throw != null:
 		_sprite_shoe_throw.visible = false
-	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands]:
+	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if n != null:
 			n.visible = true
 			n.position = Vector2.ZERO
 			n.rotation = 0.0
+	var sign_x: float = -1.0 if _flip_h else 1.0
+	if _sprite_hands != null:
+		_sprite_hands.position = Vector2(-26.0 * sign_x, 6.0)
+	if _sprite_hand_far != null:
+		_sprite_hand_far.position = Vector2(23.0 * sign_x, 6.0)
+
+
+static func get_weapon_stance(w_id: int, dual: bool = false) -> String:
+	if dual:
+		return "dual"
+	if w_id in [3, 4, 9]:
+		return "pistol"
+	if w_id in [10, 11, 12, 14]:
+		return "bazooka"
+	return "rifle"
+
+
+func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_kick: float = 0.0, throw_prog: float = -1.0) -> void:
+	if _sprite_hands == null or _custom_full_sheet:
+		return
+	var dir: float = 1.0 if facing_r else -1.0
+	if _current_anim == "dead" or stance == "none":
+		_sprite_hands.z_index = 0
+		_sprite_hands.position = Vector2(-26.0 * dir, 6.0)
+		_sprite_hands.rotation = 0.0
+		if _sprite_hand_far != null:
+			_sprite_hand_far.position = Vector2(23.0 * dir, 6.0)
+			_sprite_hand_far.rotation = 0.0
+			_sprite_hand_far.scale = Vector2.ONE
+		return
+
+	var base_ang: float = 0.0 if facing_r else PI
+	var rel_tilt: float = clampf(angle_difference(base_ang, aim_ang), -0.65, 0.65)
+
+	if stance == "throw_bomb" or throw_prog >= 0.0:
+		_sprite_hands.z_index = hands_z_over_weapon
+		var p: float = clampf(throw_prog, 0.0, 1.0)
+		if p <= 0.25:
+			var wind_t: float = p / 0.25
+			_sprite_hands.position = Vector2(-24.0 * dir, lerpf(6.0, 2.0, wind_t))
+			_sprite_hands.rotation = dir * lerpf(0.0, 2.35, wind_t)
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(20.0 * dir, 5.0)
+				_sprite_hand_far.rotation = -dir * 0.90 * wind_t
+		else:
+			var swing_t: float = (p - 0.25) / 0.75
+			_sprite_hands.position = Vector2(lerpf(-24.0, -12.0, swing_t) * dir, lerpf(2.0, 5.0, swing_t))
+			_sprite_hands.rotation = dir * lerpf(2.35, 4.65, swing_t) + rel_tilt * 0.5 * swing_t
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(20.0 * dir, 6.0)
+				_sprite_hand_far.rotation = -dir * lerpf(0.90, 0.30, swing_t)
+		return
+
+	# Keep the near arm anchored at the real shoulder socket, resting over the gun grip
+	_sprite_hands.z_index = hands_z_over_weapon
+	if _sprite_hand_far != null:
+		_sprite_hand_far.scale = Vector2(0.82, 0.82)
+	match stance:
+		"pistol":
+			_sprite_hands.position = Vector2(-17.0 * dir, 6.0)
+			_sprite_hands.rotation = -dir * 1.20 + rel_tilt * 0.18
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(21.0 * dir, 6.0)
+				_sprite_hand_far.rotation = -dir * 0.15
+		"bazooka":
+			_sprite_hands.position = Vector2(-18.0 * dir, 3.0)
+			_sprite_hands.rotation = -dir * 1.28 + rel_tilt * 0.18
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(18.0 * dir, 5.0)
+				_sprite_hand_far.rotation = -dir * 0.35
+		"dual":
+			_sprite_hands.position = Vector2(-17.0 * dir, 6.0)
+			_sprite_hands.rotation = -dir * 1.18 + rel_tilt * 0.18
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(17.0 * dir, 5.0)
+				_sprite_hand_far.rotation = -dir * 0.90 + rel_tilt * 0.18
+		_:
+			# "rifle" — anchored at shoulder (-18, 6), forearm & fist resting over gun
+			_sprite_hands.position = Vector2(-18.0 * dir, 6.0)
+			_sprite_hands.rotation = -dir * 1.18 + rel_tilt * 0.15
+			if _sprite_hand_far != null:
+				_sprite_hand_far.position = Vector2(20.0 * dir, 6.0)
+				_sprite_hand_far.rotation = -dir * 0.22

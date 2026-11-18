@@ -7,6 +7,7 @@ signal interact_requested(inter_idx: int)
 
 const UIStyle = preload("res://scripts/UIStyle.gd")
 const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
 const PRESET_SELECT_DURATION: float = 5.0
@@ -50,6 +51,7 @@ var _dual_badge: Label
 var _net_status_label: Label
 var _map_mode_label: Label
 var _scoreboard_label: Label
+var _kad_label: Label
 var _killfeed_label: RichTextLabel
 var _diag_label: Label
 var _respawn_panel: PanelContainer
@@ -80,6 +82,7 @@ var _chat_lines: Array[String] = []
 var _chat_toast_label: RichTextLabel
 var _chat_toast_items: Array[Dictionary] = []
 
+var _preset_backdrop: ColorRect
 var _preset_overlay: PanelContainer
 var _preset_timer_label: Label
 var _preset_cards: Array[Button] = []
@@ -896,6 +899,22 @@ func _build_ui() -> void:
 	right_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(right_spacer)
 
+	var kad_pill := PanelContainer.new()
+	kad_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var kad_sb := StyleBoxFlat.new()
+	kad_sb.bg_color = Color(0.11, 0.14, 0.21, 0.88)
+	kad_sb.border_color = Color(0.88, 0.92, 0.98, 0.85)
+	kad_sb.set_border_width_all(2)
+	kad_sb.set_corner_radius_all(14)
+	kad_sb.set_content_margin_all(8)
+	kad_pill.add_theme_stylebox_override("panel", kad_sb)
+	top_bar.add_child(kad_pill)
+	_kad_label = Label.new()
+	_kad_label.text = "K:0  A:0  D:0"
+	_kad_label.add_theme_font_size_override("font_size", 15)
+	_kad_label.modulate = Color(1.0, 0.90, 0.45)
+	kad_pill.add_child(_kad_label)
+
 	_chat_toggle_btn = Button.new()
 	_chat_toggle_btn.text = "💬 CHAT"
 	_chat_toggle_btn.custom_minimum_size = Vector2(148, 50)
@@ -1086,11 +1105,11 @@ func _build_ui() -> void:
 	var emoji_row := HBoxContainer.new()
 	emoji_row.add_theme_constant_override("separation", 6)
 	chat_vbox.add_child(emoji_row)
-	for em in ["😜", "😂", "💨", "🖕", "❓"]:
+	for em in ["😜", "😂", "💨", "🖕", "❓", "🔥", "💀"]:
 		var eb := Button.new()
 		eb.text = em
 		eb.focus_mode = Control.FOCUS_NONE
-		eb.custom_minimum_size = Vector2(68, 36)
+		eb.custom_minimum_size = Vector2(46, 36)
 		eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		UIStyle.style_layer_button(eb, "blue", "", 8, 5)
 		eb.add_theme_font_size_override("font_size", 18)
@@ -1123,9 +1142,7 @@ func _build_ui() -> void:
 			_chat_toggle_btn.text = "💬 CHAT"
 		if is_instance_valid(_chat_toast_label):
 			_chat_toast_label.visible = (not _chat_panel.visible) and (not _chat_toast_items.is_empty())
-		if is_instance_valid(_killfeed_label):
-			_killfeed_label.offset_top = 324 if _chat_panel.visible else 154
-			_killfeed_label.offset_bottom = _killfeed_label.offset_top + 100
+		_update_killfeed_offset()
 	)
 
 	# Floating borderless chat lines under CHAT button (no box, fades away)
@@ -1156,8 +1173,8 @@ func _build_ui() -> void:
 	_killfeed_label.anchor_right = 1.0
 	_killfeed_label.offset_left = -300
 	_killfeed_label.offset_right = -12
-	_killfeed_label.offset_top = 42
-	_killfeed_label.offset_bottom = 142
+	_killfeed_label.offset_top = 74
+	_killfeed_label.offset_bottom = 174
 	_killfeed_label.add_theme_font_size_override("normal_font_size", 13)
 	add_child(_killfeed_label)
 
@@ -1342,11 +1359,20 @@ func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 			_ammo_label.text = "RELOADING..."
 		_ammo_label.modulate = Color(1.0, 0.45, 0.25)
 	else:
-		if _active_weapon != null and _active_weapon.unlimited_reserve:
+		var res_ammo: int = int(local_player.get_active_reserve_ammo()) if (local_player != null and local_player.has_method("get_active_reserve_ammo")) else -1
+		if res_ammo >= 0:
+			if current <= 0 and res_ammo <= 0:
+				_ammo_label.text = "0 / %d (EMPTY)" % mag_size
+				_ammo_label.modulate = Color(1.0, 0.35, 0.30)
+			else:
+				_ammo_label.text = "%d / %d" % [current, mag_size]
+				_ammo_label.modulate = Color(1.0, 0.88, 0.4)
+		elif _active_weapon != null and _active_weapon.unlimited_reserve:
 			_ammo_label.text = "%d / ∞" % current
+			_ammo_label.modulate = Color(1.0, 0.88, 0.4)
 		else:
 			_ammo_label.text = "%d / %d" % [current, mag_size]
-		_ammo_label.modulate = Color(1.0, 0.88, 0.4)
+			_ammo_label.modulate = Color(1.0, 0.88, 0.4)
 
 
 func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
@@ -1356,11 +1382,23 @@ func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 		return
 	_weapon_name_label.text = weapon_data.display_name
 	_dual_badge.visible = dual_wield and weapon_data.supports_dual_wield
-	var atlas: AtlasTexture = _weapon_icon.texture as AtlasTexture
 	var skin_row: int = local_player.weapon_skin_id if local_player != null else 0
-	if atlas != null:
-		atlas.region = Rect2(weapon_data.sprite_frame * 64, skin_row * 32, 64, 32)
+	_set_weapon_icon_texture(_weapon_icon, weapon_data, skin_row)
 	_refresh_top_info_pill()
+
+
+func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
+	if not is_instance_valid(icon_rect) or w_data == null:
+		return
+	if w_data.id == 11:
+		icon_rect.texture = TEX_FLAMETHROWER
+		return
+	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
+	if atlas == null:
+		atlas = AtlasTexture.new()
+		atlas.atlas = WEAPONS_TEX
+		icon_rect.texture = atlas
+	atlas.region = Rect2(w_data.sprite_frame * 64, skin_row * 32, 64, 32)
 
 
 func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
@@ -1440,10 +1478,8 @@ func _refresh_top_info_pill() -> void:
 		var other_id: int = sec_id if cur_id != sec_id else prim_id
 		var skin_row: int = int(local_player.get("weapon_skin_id"))
 		if is_instance_valid(_secondary_weapon_icon):
-			var s_atlas: AtlasTexture = _secondary_weapon_icon.texture as AtlasTexture
-			if s_atlas != null:
-				var other_w: WeaponData = WeaponData.get_weapon(other_id, skin_row, 0)
-				s_atlas.region = Rect2(other_w.sprite_frame * 64, skin_row * 32, 64, 32)
+			var other_w: WeaponData = WeaponData.get_weapon(other_id, skin_row, 0)
+			_set_weapon_icon_texture(_secondary_weapon_icon, other_w, skin_row)
 		if is_instance_valid(_bomb_hud_label):
 			_bomb_hud_label.text = "💣 %d" % maxi(0, int(local_player.get("bomb_count")))
 
@@ -1498,6 +1534,27 @@ func _on_held_prop_changed(prop_kind: String) -> void:
 		_btn_throw_prop.visible = true
 
 
+func _taunt_id_for_chat(txt: String) -> int:
+	var low: String = txt.to_lower()
+	if txt.contains("😜") or low.contains("ezz") or low == "ez" or low.contains(" ez"):
+		return 0
+	if txt.contains("😂") or low.contains("lmao") or low.contains("lol"):
+		return 17
+	if txt.contains("💨"):
+		return 12
+	if txt.contains("🖕"):
+		return 3
+	if txt.contains("❓") or low == "huh" or low == "??":
+		return 11
+	if txt.contains("🔥"):
+		return 21
+	if txt.contains("💀") or low == "rip":
+		return 13
+	if txt.contains("🤢"):
+		return 20
+	return -1
+
+
 func _send_chat_text() -> void:
 	if not is_instance_valid(_chat_input):
 		return
@@ -1507,17 +1564,15 @@ func _send_chat_text() -> void:
 	_chat_input.text = ""
 	_chat_input.release_focus()
 	NetworkManager.send_chat_message(txt)
-	for em in ["😜", "😂", "💨", "🖕", "❓"]:
-		if txt.contains(em):
-			if local_player != null and local_player.has_method("trigger_taunt"):
-				local_player.trigger_taunt()
-			break
+	var mapped_id: int = _taunt_id_for_chat(txt)
+	if mapped_id >= 0 and local_player != null and local_player.has_method("trigger_taunt"):
+		local_player.trigger_taunt(mapped_id)
 
 
 func _send_tease_emoji(em: String) -> void:
 	NetworkManager.send_chat_message(em)
 	if local_player != null and local_player.has_method("trigger_taunt"):
-		local_player.trigger_taunt()
+		local_player.trigger_taunt(_taunt_id_for_chat(em))
 
 
 func _on_chat_message_received(sender_name: String, message: String) -> void:
@@ -1562,6 +1617,19 @@ func _render_chat_toasts() -> void:
 	_chat_toast_label.modulate.a = 1.0
 	var show_toasts: bool = (not _chat_toast_items.is_empty()) and (not is_instance_valid(_chat_panel) or not _chat_panel.visible)
 	_chat_toast_label.visible = show_toasts
+	_update_killfeed_offset()
+
+
+func _update_killfeed_offset() -> void:
+	if not is_instance_valid(_killfeed_label):
+		return
+	var top_y: float = 74.0
+	if is_instance_valid(_chat_panel) and _chat_panel.visible:
+		top_y = 324.0
+	elif is_instance_valid(_chat_toast_label) and _chat_toast_label.visible:
+		top_y = 156.0
+	_killfeed_label.offset_top = top_y
+	_killfeed_label.offset_bottom = top_y + 100.0
 
 
 func _on_killfeed_event(killer_name: String, victim_name: String, weapon_name: String) -> void:
@@ -1623,8 +1691,13 @@ func _refresh_scoreboard() -> void:
 		var team_tag: String = ""
 		if NetworkManager.is_team_mode():
 			team_tag = "[BLUE] " if int(p.get("team", 0)) == 0 else "[RED] "
-		rows.append("%s%s  |  K:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("deaths", 0))])
+		rows.append("%s%s  |  K:%d  A:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("assists", 0)), int(p.get("deaths", 0))])
 	_scoreboard_label.text = "\n".join(rows)
+	if is_instance_valid(_kad_label):
+		var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else (multiplayer.get_unique_id() if NetworkManager.is_network_active() else 1)
+		if NetworkManager.players.has(local_pid):
+			var lp: Dictionary = NetworkManager.players[local_pid]
+			_kad_label.text = "K:%d  A:%d  D:%d" % [int(lp.get("kills", 0)), int(lp.get("assists", 0)), int(lp.get("deaths", 0))]
 
 	var cur_bots: int = NetworkManager.test_bot_count if NetworkManager.is_test_mode() else NetworkManager.bot_count
 	var min_bots: int = 1 if NetworkManager.is_test_mode() else 0
@@ -1762,6 +1835,14 @@ func _on_zoom_changed(zoom_level: int, max_zoom: int) -> void:
 
 
 func _build_preset_overlay() -> void:
+	_preset_backdrop = ColorRect.new()
+	_preset_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_preset_backdrop.color = Color(0.02, 0.04, 0.08, 0.58)
+	_preset_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_preset_backdrop.z_index = 40
+	_preset_backdrop.visible = false
+	add_child(_preset_backdrop)
+
 	_preset_overlay = PanelContainer.new()
 	_preset_overlay.anchor_left = 0.5
 	_preset_overlay.anchor_right = 0.5
@@ -1773,7 +1854,11 @@ func _build_preset_overlay() -> void:
 	_preset_overlay.offset_bottom = 215
 	_preset_overlay.visible = false
 	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 16, 14))
-	add_child(_preset_overlay)
+	_preset_overlay.visibility_changed.connect(func():
+		if is_instance_valid(_preset_backdrop):
+			_preset_backdrop.visible = _preset_overlay.visible
+	)
+	_preset_backdrop.add_child(_preset_overlay)
 
 	var pv := VBoxContainer.new()
 	pv.add_theme_constant_override("separation", 8)

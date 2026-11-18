@@ -20,6 +20,7 @@ var can_deal_damage: bool = true
 var max_lifetime: float = 1.6
 var damage_falloff_start: float = 9999.0
 var min_damage_ratio: float = 1.0
+var close_lethal_dist: float = 0.0
 var stun_duration: float = 0.0
 var visual_style: String = "bullet"
 var spin_speed: float = 0.0
@@ -486,6 +487,8 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 
 
 func _compute_falloff_damage() -> int:
+	if close_lethal_dist > 0.0 and _distance_traveled <= close_lethal_dist:
+		return maxi(damage, 250)
 	if min_damage_ratio >= 0.999 or _distance_traveled <= damage_falloff_start:
 		return damage
 	var falloff_span: float = maxf(85.0, damage_falloff_start * 0.85)
@@ -581,9 +584,13 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, _visual_spin, Vector2.ONE)
 	match visual_style:
 		"fireball":
-			draw_circle(Vector2.ZERO, 12.0, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.35))
-			draw_circle(Vector2.ZERO, 8.5, bullet_color)
-			draw_circle(Vector2(2.0, 0.0), 4.5, Color(1.0, 0.96, 0.72))
+			var life_t: float = clampf(_age / maxf(max_lifetime, 0.01), 0.0, 1.0)
+			var bs: float = lerpf(1.25, 2.85, life_t)
+			var fade_a: float = clampf(1.0 - maxf(0.0, (life_t - 0.65) / 0.35), 0.15, 1.0)
+			draw_circle(Vector2(-6.0 * bs, 0.0), 15.0 * bs, Color(0.95, 0.24, 0.06, 0.30 * fade_a))
+			draw_circle(Vector2.ZERO, 13.5 * bs, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.45 * fade_a))
+			draw_circle(Vector2(2.0 * bs, 0.0), 9.5 * bs, Color(1.0, 0.52, 0.12, 0.90 * fade_a))
+			draw_circle(Vector2(4.0 * bs, 0.0), 5.5 * bs, Color(1.0, 0.94, 0.58, fade_a))
 		"acid_glob":
 			draw_circle(Vector2.ZERO, 11.5, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.38))
 			draw_circle(Vector2(-2.0, 1.0), 7.2, bullet_color)

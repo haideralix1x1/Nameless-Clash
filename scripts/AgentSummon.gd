@@ -22,10 +22,10 @@ var _attack_anim_timer: float = 0.0
 var _attack_dir: Vector2 = Vector2.RIGHT
 
 const SUMMON_TEXTURES: Dictionary = {
-	"winged_lion": preload("res://assets/sprites/summons/winged_lion.png"),
+	"winged_lion": preload("res://assets/sprites/summons/winged_lion_sheet.png"),
 	"flash_bird": preload("res://assets/sprites/summons/bird.png"),
 	"bat": preload("res://assets/sprites/summons/bat.png"),
-	"barbarian": preload("res://assets/sprites/summons/barbarian.png"),
+	"barbarian": preload("res://assets/sprites/summons/barbarian_sheet.png"),
 	"zombie_dog": preload("res://assets/sprites/summons/zombie_dog.png"),
 	"bomb_eagle": preload("res://assets/sprites/summons/eagle.png"),
 	"shadow_mummy": preload("res://assets/sprites/summons/mummy.png"),
@@ -36,10 +36,10 @@ const SUMMON_TEXTURES: Dictionary = {
 }
 
 const SUMMON_SCALES: Dictionary = {
-	"winged_lion": 0.72,
+	"winged_lion": 0.44,
 	"flash_bird": 0.44,
 	"bat": 0.44,
-	"barbarian": 0.50,
+	"barbarian": 0.42,
 	"zombie_dog": 0.52,
 	"bomb_eagle": 0.58,
 	"shadow_mummy": 0.54,
@@ -93,6 +93,10 @@ func _ready() -> void:
 		_base_scale = float(SUMMON_SCALES.get(summon_kind, 0.5))
 		_sprite = Sprite2D.new()
 		_sprite.texture = SUMMON_TEXTURES[summon_kind]
+		if summon_kind == "barbarian":
+			_sprite.hframes = 10
+		elif summon_kind == "winged_lion":
+			_sprite.hframes = 16
 		_sprite.scale = Vector2(_base_scale, _base_scale)
 		_sprite.flip_h = move_dir_x < 0.0
 		_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
@@ -165,10 +169,24 @@ func _physics_process(delta: float) -> void:
 				target = _find_nearest_enemy(detect_r)
 			if target != null:
 				var dir: Vector2 = (target.global_position - global_position).normalized()
-				global_position += dir * spd * delta
+				if summon_kind == "giant_snake":
+					var g_space := get_world_2d().direct_space_state
+					var g_step: Vector2 = dir * spd * delta
+					var g_hit := g_space.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, global_position + g_step + dir * 18.0, 1))
+					if g_hit.is_empty():
+						global_position += g_step
+					else:
+						global_position = (g_hit["position"] as Vector2) - dir * 18.0
+				else:
+					global_position += dir * spd * delta
 				if is_instance_valid(_sprite):
 					_sprite.flip_h = dir.x < 0.0
-					if summon_kind in ["flash_bird", "winged_lion", "bat"]:
+					if summon_kind == "winged_lion" and _sprite.hframes == 16:
+						_sprite.frame = int(_phase * 1.32) % 16
+						_sprite.position.y = sin(_phase * 1.8) * 5.0
+						_sprite.scale = Vector2(_base_scale, _base_scale)
+						_sprite.rotation = clampf(dir.y * 0.35, -0.30, 0.30) * (-1.0 if _sprite.flip_h else 1.0)
+					elif summon_kind in ["flash_bird", "winged_lion", "bat"]:
 						_sprite.position.y = sin(_phase * 1.8) * 6.5
 						var flap: float = sin(_phase * 2.6)
 						_sprite.scale = Vector2(_base_scale + flap * 0.04, _base_scale - flap * 0.05)
@@ -182,12 +200,26 @@ func _physics_process(delta: float) -> void:
 						target.apply_hit(damage, owner_peer_id, weapon_name, owner_name, dir * 180.0)
 			else:
 				var fwd: Vector2 = flight_dir.normalized() if flight_dir.length_squared() > 0.01 else Vector2(move_dir_x, 0.0)
-				global_position += fwd * spd * delta
+				if summon_kind == "giant_snake":
+					var g_space2 := get_world_2d().direct_space_state
+					var g_step2: Vector2 = fwd * spd * delta
+					var g_hit2 := g_space2.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, global_position + g_step2 + fwd * 18.0, 1))
+					if g_hit2.is_empty():
+						global_position += g_step2
+					else:
+						global_position = (g_hit2["position"] as Vector2) - fwd * 18.0
+				else:
+					global_position += fwd * spd * delta
 				if is_instance_valid(_sprite):
 					_sprite.flip_h = fwd.x < 0.0
-					_sprite.position.y = sin(_phase * 1.8) * 5.5
-					var flap2: float = sin(_phase * 2.6)
-					_sprite.scale = Vector2(_base_scale + flap2 * 0.04, _base_scale - flap2 * 0.05)
+					if summon_kind == "winged_lion" and _sprite.hframes == 16:
+						_sprite.frame = int(_phase * 1.32) % 16
+						_sprite.position.y = sin(_phase * 1.8) * 5.0
+						_sprite.scale = Vector2(_base_scale, _base_scale)
+					else:
+						_sprite.position.y = sin(_phase * 1.8) * 5.5
+						var flap2: float = sin(_phase * 2.6)
+						_sprite.scale = Vector2(_base_scale + flap2 * 0.04, _base_scale - flap2 * 0.05)
 					_sprite.rotation = clampf(fwd.y * 0.35, -0.30, 0.30) * (-1.0 if _sprite.flip_h else 1.0)
 		"bee":
 			var b_target: Node2D = _find_nearest_enemy(420.0)
@@ -217,11 +249,22 @@ func _physics_process(delta: float) -> void:
 			if not hit.is_empty() and vel.y > 0.0:
 				global_position.y = (hit["position"] as Vector2).y - 16.0
 				vel.y = 0.0
+			if summon_kind in ["barbarian", "small_snake"]:
+				var h_ray := PhysicsRayQueryParameters2D.create(global_position, global_position + Vector2(move_dir_x * 20.0, 0.0), 1)
+				var h_hit := space.intersect_ray(h_ray)
+				if not h_hit.is_empty():
+					global_position.x = (h_hit["position"] as Vector2).x - move_dir_x * 16.0
+					vel.x = 0.0
 			global_position += vel * delta
 			if is_instance_valid(_sprite):
 				_sprite.flip_h = move_dir_x < 0.0
-				_sprite.position.y = -absf(sin(_phase * 2.5)) * 5.5
-				_sprite.rotation = sin(_phase * 2.5) * 0.09
+				if summon_kind == "barbarian" and _sprite.hframes == 10:
+					_sprite.frame = int(_phase * 2.25) % 10
+					_sprite.position.y = 0.0
+					_sprite.rotation = 0.0
+				else:
+					_sprite.position.y = -absf(sin(_phase * 2.5)) * 5.5
+					_sprite.rotation = sin(_phase * 2.5) * 0.09
 		"bomb_eagle":
 			var e_target: Node2D = _find_nearest_enemy(900.0)
 			if e_target != null:
@@ -382,9 +425,6 @@ func _draw() -> void:
 				var slash_a: float = clampf(_attack_anim_timer / 0.35, 0.0, 1.0)
 				draw_arc(Vector2(_attack_dir.x * 26.0, 0.0), 34.0, -0.9, 0.9, 14, Color(1.0, 0.88, 0.25, slash_a), 4.5)
 				draw_arc(Vector2(_attack_dir.x * 32.0, -6.0), 28.0, -0.7, 0.7, 12, Color(1.0, 1.0, 1.0, slash_a * 0.9), 3.0)
-			else:
-				var w_off: float = sin(_phase * 2.6) * 8.0
-				draw_arc(Vector2(-24.0 * (1.0 if (is_instance_valid(_sprite) and not _sprite.flip_h) else -1.0), -10.0 + w_off), 18.0, 0.4, 2.5, 10, Color(1.0, 0.92, 0.55, 0.45), 2.5)
 		"bat":
 			draw_circle(Vector2.ZERO, 9.0, Color(0.55, 0.10, 0.25))
 			draw_line(Vector2(-14, -4), Vector2(14, -4), Color(0.88, 0.18, 0.35), 3.0)

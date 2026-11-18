@@ -28,13 +28,13 @@ func trigger(kind: String, col: Color, rig: Node2D) -> void:
 				r.play_state("firing", false)
 	match kind:
 		"ult_winged_lion":
-			_tex = load("res://assets/sprites/summons/winged_lion.png")
+			_tex = load("res://assets/sprites/summons/winged_lion_sheet.png")
 		"flash_bird":
 			_tex = load("res://assets/sprites/summons/bird.png")
 		"boar_ride":
 			_tex = load("res://assets/sprites/summons/boar.png")
 		"barbarian_squad":
-			_tex = load("res://assets/sprites/summons/barbarian.png")
+			_tex = load("res://assets/sprites/summons/barbarian_sheet.png")
 		"bat_swarm", "ult_bat_execute":
 			_tex = load("res://assets/sprites/summons/bat.png")
 		"zombie_dog":
@@ -106,7 +106,18 @@ func _draw() -> void:
 			pos_y = 14.0 - absf(sin(_phase)) * 4.0
 		elif _active_kind == "ult_bat_execute":
 			pos_x = sin(t * PI) * 72.0
-		draw_texture_rect(_tex, Rect2(Vector2(pos_x, pos_y) - sz * 0.5, sz), false)
+		if _active_kind == "barbarian_squad":
+			var f_idx: int = int(_phase * 0.8) % 10
+			var fw: float = float(_tex.get_width()) / 10.0
+			var fh: float = float(_tex.get_height())
+			draw_texture_rect_region(_tex, Rect2(Vector2(pos_x, 4.0) - sz * 0.5, sz), Rect2(float(f_idx) * fw, 0.0, fw, fh))
+		elif _active_kind == "ult_winged_lion":
+			var lf_idx: int = int(_phase * 0.90) % 16
+			var lfw: float = float(_tex.get_width()) / 16.0
+			var lfh: float = float(_tex.get_height())
+			draw_texture_rect_region(_tex, Rect2(Vector2(pos_x, pos_y) - sz * 0.5, sz), Rect2(float(lf_idx) * lfw, 0.0, lfw, lfh))
+		else:
+			draw_texture_rect(_tex, Rect2(Vector2(pos_x, pos_y) - sz * 0.5, sz), false)
 		return
 
 	match _active_kind:
