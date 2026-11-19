@@ -1385,7 +1385,29 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 				bomb_count = mini(max_bombs, bomb_count + 1)
 				if is_local_human:
 					bombs_changed.emit(bomb_count, bomb_type)
+			_spawn_pickup_name_popup(picked_w.display_name)
 	_play_local_sfx("res://assets/audio/pickup.wav", -2.0)
+
+
+func _spawn_pickup_name_popup(gun_name: String) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null or gun_name.is_empty():
+		return
+	var lbl := Label.new()
+	lbl.text = gun_name
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.custom_minimum_size = Vector2(160.0, 26.0)
+	lbl.global_position = global_position + Vector2(-80.0, -78.0)
+	lbl.z_index = 45
+	lbl.add_theme_font_size_override("font_size", 15)
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 4)
+	lbl.modulate = Color(0.45, 1.0, 0.65)
+	parent_node.add_child(lbl)
+	var tw := lbl.create_tween().set_parallel(true)
+	tw.tween_property(lbl, "position:y", lbl.position.y - 22.0, 1.0)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.5).set_delay(0.5)
+	tw.finished.connect(lbl.queue_free)
 
 
 func set_nearby_weapon(crate_idx: int, w_id: int) -> void:
@@ -1491,7 +1513,7 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 		return
 
 	velocity += knockback
-	if attacker_id > 0 and attacker_id != peer_id and deathless_timer <= 0.0:
+	if attacker_id != 0 and attacker_id != peer_id and deathless_timer <= 0.0:
 		var dealt_hp: int = mini(health, dmg)
 		if dealt_hp > 0:
 			_damage_by_attacker[attacker_id] = int(_damage_by_attacker.get(attacker_id, 0)) + dealt_hp
@@ -2596,10 +2618,9 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				ps.status_effect_dur = float(ab.get("duration", 4.0))
 			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 0.95)
 		"jelly_slowmo":
-			var jb := _spawn_custom_bullet(origin, cast_angle, 760.0, dmg, "acid_glob", col, ab_name, 0.0, 0.0, false, 1.4, local_auth)
+			var jb := _spawn_custom_bullet(origin, cast_angle, 780.0, dmg, "acid_glob", col, ab_name, 0.0, 0.0, false, 1.6, local_auth)
 			if jb != null:
-				jb.radius_scale = 1.5
-				jb.detonate_distance = 120.0
+				jb.radius_scale = 1.65
 				jb.status_effect_name = "slow_mo"
 				jb.status_effect_dur = float(ab.get("duration", 4.0))
 				jb.on_hit_effect_kind = "jelly_aoe"

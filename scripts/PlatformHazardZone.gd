@@ -97,6 +97,8 @@ func _process(delta: float) -> void:
 		elif dist <= radius:
 			if zone_kind == "earth_quake_zone" and p.has_method("apply_status"):
 				p.apply_status("earth_shake", 0.45)
+			elif zone_kind == "jelly_slowmo" and p.has_method("apply_status"):
+				p.apply_status("slow_mo", 1.5)
 			if dps > 0 and p.has_method("apply_hit"):
 				p.apply_hit(maxi(1, int(round(float(dps) * 0.25))), shooter_id, weapon_name, shooter_name, Vector2.ZERO)
 

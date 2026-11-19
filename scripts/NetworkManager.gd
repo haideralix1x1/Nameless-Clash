@@ -35,7 +35,7 @@ const MAP_NAMES: Array[String] = [
 	"Bunker Base",
 	"Factory Ruins",
 	"Desert Outpost",
-	"Catacombs Maze",
+	"Dungeon",
 	"Outpost Towers",
 	"Soarin Islands",
 	"Pharaoh Pyramid",
@@ -719,8 +719,8 @@ func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_lab
 		kp["combo_streak"] = streak
 		kp["combo_timer"] = COMBO_WINDOW_SEC
 		if streak >= 2:
-			kp["combos"] = int(kp.get("combos", 0)) + 1
 			kp["max_combo"] = maxi(int(kp.get("max_combo", 0)), streak)
+			kp["combos"] = int(kp["max_combo"])
 			combo_achieved.emit(killer_id, killer_label, streak)
 	for raw_aid in assist_ids:
 		var aid: int = int(raw_aid)
@@ -730,6 +730,8 @@ func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_lab
 	var vp: Dictionary = _get_participant_stats(victim_id)
 	if not vp.is_empty():
 		vp["deaths"] = int(vp.get("deaths", 0)) + 1
+		vp["combo_streak"] = 0
+		vp["combo_timer"] = 0.0
 	player_list_updated.emit()
 	killfeed_event.emit(killer_label, victim_label, weapon_name)
 	kill_scored.emit(killer_id, victim_id)

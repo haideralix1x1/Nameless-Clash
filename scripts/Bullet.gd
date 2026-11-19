@@ -332,6 +332,10 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 		return
 
 	if collider != null and collider.is_in_group("players"):
+		if collider.has_method("is_alive") and not collider.is_alive():
+			_finished = false
+			global_position = hit_pos + velocity.normalized() * 10.0
+			return
 		if int(collider.get("peer_id")) == shooter_peer_id:
 			_finished = false
 			global_position = hit_pos + velocity.normalized() * 10.0
@@ -426,6 +430,21 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 		"jelly_aoe":
 			_spawn_impact_flash(hit_pos, bullet_color)
 			var parent_n: Node = get_parent()
+			if parent_n != null:
+				var j_zone := Node2D.new()
+				j_zone.set_script(load("res://scripts/PlatformHazardZone.gd"))
+				j_zone.set("zone_kind", "jelly_slowmo")
+				j_zone.set("global_position", hit_pos)
+				j_zone.set("time_left", maxf(3.0, status_effect_dur))
+				j_zone.set("radius", 135.0)
+				j_zone.set("dps", 0)
+				j_zone.set("shooter_id", shooter_peer_id)
+				j_zone.set("shooter_team", shooter_team)
+				j_zone.set("shooter_name", shooter_name)
+				j_zone.set("weapon_name", weapon_name)
+				j_zone.set("zone_color", bullet_color)
+				j_zone.set("can_deal", can_deal_damage)
+				parent_n.add_child(j_zone)
 			var b_scene: PackedScene = load("res://scenes/Bullet.tscn") as PackedScene
 			for p in get_tree().get_nodes_in_group("players"):
 				if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
@@ -435,7 +454,7 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 				if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
 					continue
 				var dist: float = (p as Node2D).global_position.distance_to(hit_pos)
-				if dist <= 130.0:
+				if dist <= 145.0:
 					if p.has_method("apply_status"):
 						p.apply_status("slow_mo", status_effect_dur)
 					if can_deal_damage and damage > 0 and p.has_method("apply_hit"):

@@ -506,10 +506,10 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Zombie Dog",
 				"kind": "zombie_dog",
-				"damage": 35,
+				"damage": 80,
 				"duration": 5.0,
 				"color": Color(0.58, 0.88, 0.32),
-				"desc": "Spawn a physics zombie dog for 5s that runs forward and attacks."
+				"desc": "Spawn a physics zombie dog for 5s that runs forward and deals 80% damage on hit."
 			}
 		],
 		"ultimate": {

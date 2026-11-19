@@ -322,6 +322,27 @@ func _build_map_geometry() -> void:
 			_add_platform(Rect2(1560, 740, 440, 36), 2)
 			_add_platform(Rect2(860, 660, 520, 40), 3)
 			_add_platform(Rect2(740, 960, 760, 36), 1)
+			# 20 extra open-access tactical cover walls & short barriers for Outpost Towers (never sealing any room)
+			_add_platform(Rect2(140, 500, 160, 32), 1)
+			_add_platform(Rect2(1940, 500, 160, 32), 1)
+			_add_platform(Rect2(360, 860, 36, 72), 0)
+			_add_platform(Rect2(1844, 860, 36, 72), 0)
+			_add_platform(Rect2(580, 1110, 36, 68), 0)
+			_add_platform(Rect2(1624, 1110, 36, 68), 0)
+			_add_platform(Rect2(880, 1110, 36, 68), 0)
+			_add_platform(Rect2(1324, 1110, 36, 68), 0)
+			_add_platform(Rect2(320, 620, 36, 68), 0)
+			_add_platform(Rect2(1884, 620, 36, 68), 0)
+			_add_platform(Rect2(760, 520, 36, 72), 0)
+			_add_platform(Rect2(1444, 520, 36, 72), 0)
+			_add_platform(Rect2(900, 780, 36, 72), 0)
+			_add_platform(Rect2(1304, 780, 36, 72), 0)
+			_add_platform(Rect2(1010, 490, 220, 32), 2)
+			_add_platform(Rect2(420, 240, 180, 32), 1)
+			_add_platform(Rect2(1640, 240, 180, 32), 1)
+			_add_platform(Rect2(760, 190, 36, 72), 0)
+			_add_platform(Rect2(1444, 190, 36, 72), 0)
+			_add_platform(Rect2(1102, 540, 36, 72), 0)
 		5:
 			# Map 5: Soarin Islands (DOUBLE SIZE 4480x2496)
 			_spawn_points = [
@@ -555,10 +576,18 @@ func _build_pickup_crates() -> void:
 		]
 	else:
 		var allowed_ws: Array[int] = WeaponData.get_pickup_weapon_ids()
+		var w_space := get_world_2d().direct_space_state
 		for sp_idx in range(_spawn_points.size()):
 			var w_id: int = allowed_ws[randi() % allowed_ws.size()]
+			var sp: Vector2 = _spawn_points[sp_idx]
 			var off_x: float = randf_range(-60.0, 60.0)
-			crate_specs.append({"pos": _spawn_points[sp_idx] + Vector2(off_x, 0.0), "type": "weapon", "val": w_id})
+			var w_pos: Vector2 = sp + Vector2(off_x, 0.0)
+			var w_hit := w_space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, w_pos + Vector2(signf(off_x) * 22.0, 0.0), 1))
+			if not w_hit.is_empty():
+				var alt_pos: Vector2 = sp - Vector2(off_x, 0.0)
+				var alt_hit := w_space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, alt_pos - Vector2(signf(off_x) * 22.0, 0.0), 1))
+				w_pos = alt_pos if alt_hit.is_empty() else sp
+			crate_specs.append({"pos": w_pos, "type": "weapon", "val": w_id})
 		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.52), "type": "health", "val": 45})
 		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.20), "type": "health", "val": 50})
 
@@ -572,7 +601,7 @@ func _build_pickup_crates() -> void:
 
 		var cs := CollisionShape2D.new()
 		var box := RectangleShape2D.new()
-		box.size = Vector2(34, 34) if str(spec["type"]) == "throwable" else Vector2(30, 30)
+		box.size = Vector2(56, 42) if str(spec["type"]) == "weapon" else (Vector2(34, 34) if str(spec["type"]) == "throwable" else Vector2(30, 30))
 		cs.shape = box
 		area.add_child(cs)
 
@@ -615,36 +644,172 @@ func _build_pickup_crates() -> void:
 
 func _build_interactables() -> void:
 	_interactables.clear()
-	var fan_specs: Array[Dictionary] = [
-		{
-			"fan_pos": Vector2(arena_width * 0.25, arena_height - 76.0),
-			"button_pos": Vector2(arena_width * 0.25 - 120.0, arena_height - 104.0),
-			"push_dir": Vector2.UP,
-			"beam_len": 420.0
-		},
-		{
-			"fan_pos": Vector2(68.0, arena_height * 0.50),
-			"button_pos": Vector2(76.0, arena_height * 0.50 + 78.0),
-			"push_dir": Vector2.RIGHT,
-			"beam_len": 440.0
-		},
-		{
-			"fan_pos": Vector2(arena_width * 0.75, arena_height - 76.0),
-			"button_pos": Vector2(arena_width * 0.75 + 120.0, arena_height - 104.0),
-			"push_dir": Vector2.UP,
-			"beam_len": 420.0
-		}
-	]
-	for i in range(fan_specs.size()):
-		var spec: Dictionary = fan_specs[i]
-		var fan := InteractableFan.new()
-		fan.inter_idx = _interactables.size()
-		fan.fan_pos = spec["fan_pos"]
-		fan.button_pos = spec["button_pos"]
-		fan.push_dir = spec["push_dir"]
-		fan.beam_length = float(spec["beam_len"])
-		_world_geometry.add_child(fan)
-		_interactables.append(fan)
+	var map_id: int = NetworkManager.selected_map_id
+	if map_id == 0:
+		# Map 0 (Bunker Base): Wind Fans + Red Switches (exclusive to Bunker Base)
+		var fan_specs: Array[Dictionary] = [
+			{
+				"fan_pos": Vector2(arena_width * 0.25, arena_height - 76.0),
+				"button_pos": Vector2(arena_width * 0.25 - 120.0, arena_height - 104.0),
+				"push_dir": Vector2.UP,
+				"beam_len": 420.0
+			},
+			{
+				"fan_pos": Vector2(68.0, arena_height * 0.50),
+				"button_pos": Vector2(76.0, arena_height * 0.50 + 78.0),
+				"push_dir": Vector2.RIGHT,
+				"beam_len": 440.0
+			},
+			{
+				"fan_pos": Vector2(arena_width * 0.75, arena_height - 76.0),
+				"button_pos": Vector2(arena_width * 0.75 + 120.0, arena_height - 104.0),
+				"push_dir": Vector2.UP,
+				"beam_len": 420.0
+			}
+		]
+		for spec in fan_specs:
+			var fan := InteractableFan.new()
+			fan.inter_idx = _interactables.size()
+			fan.fan_pos = spec["fan_pos"]
+			fan.button_pos = spec["button_pos"]
+			fan.push_dir = spec["push_dir"]
+			fan.beam_length = float(spec["beam_len"])
+			_world_geometry.add_child(fan)
+			_interactables.append(fan)
+	elif map_id == 1:
+		# Map 1 (Factory Ruins): Industrial Steam Jump Pads
+		for px in [arena_width * 0.24, arena_width * 0.76]:
+			var pad := InteractableJumpPad.new()
+			pad.position = _snap_to_floor(Vector2(px, arena_height - 120.0), 14.0)
+			pad.pad_color = Color(1.0, 0.52, 0.16)
+			pad.launch_vel = Vector2(0.0, -1080.0)
+			_world_geometry.add_child(pad)
+	elif map_id == 2:
+		# Map 2 (Desert Outpost): Paired Sand Teleporters
+		var p_a := _snap_to_floor(Vector2(arena_width * 0.18, arena_height - 120.0), 26.0)
+		var p_b := _snap_to_floor(Vector2(arena_width * 0.82, arena_height - 120.0), 26.0)
+		for pair in [[p_a, p_b], [p_b, p_a]]:
+			var tp := InteractableTeleporter.new()
+			tp.inter_idx = _interactables.size()
+			tp.position = pair[0]
+			tp.target_pos = pair[1]
+			tp.portal_color = Color(1.0, 0.78, 0.20)
+			_world_geometry.add_child(tp)
+			_interactables.append(tp)
+	elif map_id == 3:
+		# Map 3 (Dungeon): Toggleable Iron Dungeon Doors + Toggle-Activated Steel Spike Spawners
+		for dx in [arena_width * 0.26, arena_width * 0.74]:
+			var door := InteractableDoor.new()
+			door.inter_idx = _interactables.size()
+			door.door_pos = _snap_to_floor(Vector2(dx, arena_height - 140.0), 90.0)
+			door.button_pos = door.door_pos + Vector2(-72.0 if dx < arena_width * 0.5 else 72.0, 56.0)
+			_world_geometry.add_child(door)
+			_interactables.append(door)
+		for sx in [arena_width * 0.40, arena_width * 0.60]:
+			var trap := InteractableSpikeTrap.new()
+			trap.inter_idx = _interactables.size()
+			trap.trap_pos = _snap_to_floor(Vector2(sx, arena_height - 120.0), 8.0)
+			trap.button_pos = trap.trap_pos + Vector2(-104.0, -24.0)
+			_world_geometry.add_child(trap)
+			_interactables.append(trap)
+	elif map_id == 4:
+		# Map 4 (Outpost Towers): Switch-Activated Laser Gate + 3+ Auto-Respawning Proximity Mines
+		var lg := InteractableSwitchHazard.new()
+		lg.inter_idx = _interactables.size()
+		lg.hazard_kind = "laser"
+		lg.hazard_color = Color(1.0, 0.22, 0.45)
+		lg.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height - 120.0), 18.0)
+		_world_geometry.add_child(lg)
+		_interactables.append(lg)
+		var mine_mgr := ArenaAutoMineManager.new()
+		mine_mgr.arena_ref = self
+		mine_mgr.target_mines = 3
+		_world_geometry.add_child(mine_mgr)
+	elif map_id == 5:
+		# Map 5 (Soarin Islands): Emerald Sky-Wind Launch Geysers
+		for px in [arena_width * 0.26, arena_width * 0.74]:
+			var gey := InteractableJumpPad.new()
+			gey.position = _snap_to_floor(Vector2(px, arena_height - 140.0), 14.0)
+			gey.pad_color = Color(0.24, 0.92, 0.45)
+			gey.launch_vel = Vector2(0.0, -920.0)
+			_world_geometry.add_child(gey)
+	elif map_id == 6:
+		# Map 6 (Pharaoh Pyramid): Solar Flare Shockwave Altar
+		var sol := InteractableSwitchHazard.new()
+		sol.inter_idx = _interactables.size()
+		sol.hazard_kind = "solar_flare"
+		sol.hazard_color = Color(1.0, 0.82, 0.22)
+		sol.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height - 120.0), 22.0)
+		_world_geometry.add_child(sol)
+		_interactables.append(sol)
+	elif map_id == 7:
+		# Map 7 (Snow Blind): Cryo Freeze Vent Switch
+		for cx in [arena_width * 0.28, arena_width * 0.72]:
+			var cry := InteractableSwitchHazard.new()
+			cry.inter_idx = _interactables.size()
+			cry.hazard_kind = "cryo_vent"
+			cry.hazard_color = Color(0.35, 0.90, 1.0)
+			cry.position = _snap_to_floor(Vector2(cx, arena_height - 120.0), 18.0)
+			_world_geometry.add_child(cry)
+			_interactables.append(cry)
+	elif map_id == 8:
+		# Map 8 (Substructure): Automated Defense Sentry Switch
+		var sen := InteractableSwitchHazard.new()
+		sen.inter_idx = _interactables.size()
+		sen.hazard_kind = "sentry"
+		sen.hazard_color = Color(0.28, 0.82, 1.0)
+		sen.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height - 120.0), 22.0)
+		_world_geometry.add_child(sen)
+		_interactables.append(sen)
+	elif map_id == 9:
+		# Map 9 (High Tower): Speed Boost Shrine
+		for sx in [arena_width * 0.26, arena_width * 0.74]:
+			var sh := InteractableBoostShrine.new()
+			sh.inter_idx = _interactables.size()
+			sh.position = _snap_to_floor(Vector2(sx, arena_height - 120.0), 24.0)
+			sh.shrine_kind = "speed"
+			sh.shrine_color = Color(0.74, 0.36, 1.0)
+			_world_geometry.add_child(sh)
+			_interactables.append(sh)
+	elif map_id == 10:
+		# Map 10 (Ring Arena): Ammo & Fuel Supply Dispenser
+		for sx in [arena_width * 0.22, arena_width * 0.78]:
+			var sup := InteractableBoostShrine.new()
+			sup.inter_idx = _interactables.size()
+			sup.position = _snap_to_floor(Vector2(sx, arena_height - 120.0), 24.0)
+			sup.shrine_kind = "ammo"
+			sup.shrine_color = Color(0.28, 0.88, 1.0)
+			_world_geometry.add_child(sup)
+			_interactables.append(sup)
+	elif map_id == 11:
+		# Map 11 (Lunar Station): Zero-G Pulse Core + Warp Portals
+		var zg := InteractableSwitchHazard.new()
+		zg.inter_idx = _interactables.size()
+		zg.hazard_kind = "low_g"
+		zg.hazard_color = Color(0.55, 0.78, 1.0)
+		zg.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height - 140.0), 22.0)
+		_world_geometry.add_child(zg)
+		_interactables.append(zg)
+		var lp_a := _snap_to_floor(Vector2(arena_width * 0.14, arena_height - 120.0), 26.0)
+		var lp_b := _snap_to_floor(Vector2(arena_width * 0.86, arena_height - 120.0), 26.0)
+		for pair in [[lp_a, lp_b], [lp_b, lp_a]]:
+			var ltp := InteractableTeleporter.new()
+			ltp.inter_idx = _interactables.size()
+			ltp.position = pair[0]
+			ltp.target_pos = pair[1]
+			ltp.portal_color = Color(0.32, 0.84, 1.0)
+			_world_geometry.add_child(ltp)
+			_interactables.append(ltp)
+	else:
+		# Map 12 (Jungle Cliff): Venom Spore Pod Switch
+		for jx in [arena_width * 0.25, arena_width * 0.75]:
+			var pod := InteractableSwitchHazard.new()
+			pod.inter_idx = _interactables.size()
+			pod.hazard_kind = "spore_cloud"
+			pod.hazard_color = Color(0.36, 0.96, 0.28)
+			pod.position = _snap_to_floor(Vector2(jx, arena_height - 140.0), 20.0)
+			_world_geometry.add_child(pod)
+			_interactables.append(pod)
 
 	var heal := InteractableHealStation.new()
 	heal.inter_idx = _interactables.size()
@@ -709,6 +874,41 @@ func _on_interact_requested(inter_idx: int) -> void:
 						p.set_nearby_interactable(-1, "")
 					break
 			NetworkManager.toggle_interactable(inter_idx, true)
+	elif node is InteractableTeleporter:
+		var tp := node as InteractableTeleporter
+		if tp.cooldown_left <= 0.0:
+			for p in get_tree().get_nodes_in_group("players"):
+				if is_instance_valid(p) and p.get("is_local_human") == true and p.has_method("is_alive") and p.is_alive():
+					(p as Node2D).global_position = tp.target_pos + Vector2(0.0, -10.0)
+					if p.has_method("set_nearby_interactable"):
+						p.set_nearby_interactable(-1, "")
+					break
+			NetworkManager.toggle_interactable(inter_idx, true)
+	elif node is InteractableBoostShrine:
+		var sh := node as InteractableBoostShrine
+		if sh.cooldown_left <= 0.0:
+			for p in get_tree().get_nodes_in_group("players"):
+				if is_instance_valid(p) and p.get("is_local_human") == true and p.has_method("is_alive") and p.is_alive():
+					if sh.shrine_kind == "speed":
+						p.set("speed_boost_timer", 5.0)
+						p.set("speed_boost_mult", 1.45)
+					else:
+						p.set("jetpack_fuel", 100.0)
+						p.apply_pickup("health", 25)
+					if p.has_method("set_nearby_interactable"):
+						p.set_nearby_interactable(-1, "")
+					break
+			NetworkManager.toggle_interactable(inter_idx, true)
+	elif node is InteractableSwitchHazard:
+		var hz := node as InteractableSwitchHazard
+		if hz.cooldown_left <= 0.0 and not hz.is_active:
+			NetworkManager.toggle_interactable(inter_idx, true)
+	elif node is InteractableDoor:
+		var dr := node as InteractableDoor
+		NetworkManager.toggle_interactable(inter_idx, not dr.is_open)
+	elif node is InteractableSpikeTrap:
+		var st := node as InteractableSpikeTrap
+		NetworkManager.toggle_interactable(inter_idx, not st.is_on)
 
 
 func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
@@ -721,6 +921,16 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 		(node as InteractableHealStation).trigger_cooldown()
 	elif node is InteractableProp:
 		(node as InteractableProp).pick_up_prop()
+	elif node is InteractableTeleporter:
+		(node as InteractableTeleporter).trigger_cooldown()
+	elif node is InteractableBoostShrine:
+		(node as InteractableBoostShrine).trigger_cooldown()
+	elif node is InteractableSwitchHazard:
+		(node as InteractableSwitchHazard).activate_hazard()
+	elif node is InteractableDoor:
+		(node as InteractableDoor).set_door_state(new_state)
+	elif node is InteractableSpikeTrap:
+		(node as InteractableSpikeTrap).set_trap_state(new_state)
 
 
 func _random_ground_throwable_id() -> int:
@@ -1506,9 +1716,10 @@ class InteractableProp extends Node2D:
 				draw_line(Vector2(-22, -24), Vector2(22, -24), Color(0.95, 0.76, 0.20), 6.0)
 				draw_line(Vector2(-22, -2), Vector2(22, -2), Color(0.30, 0.34, 0.40), 4.5)
 			"pot":
-				draw_circle(Vector2(0, 2), 9.5, Color(0.74, 0.42, 0.24))
-				draw_rect(Rect2(-6, -11, 12, 6), Color(0.64, 0.35, 0.19))
-				draw_rect(Rect2(-7, -12, 14, 3), Color(0.86, 0.54, 0.32))
+				draw_circle(Vector2(0, 2), 10.5, Color(0.10, 0.14, 0.20))
+				draw_circle(Vector2(0, 2), 9.0, Color(0.16, 0.62, 0.72))
+				draw_rect(Rect2(-6, -11, 12, 6), Color(0.12, 0.48, 0.58))
+				draw_rect(Rect2(-7, -12, 14, 3.5), Color(0.96, 0.78, 0.24))
 			"stone":
 				draw_rect(Rect2(-11, -9, 22, 18), Color(0.54, 0.52, 0.48))
 				draw_rect(Rect2(-11, -9, 22, 18), Color(0.30, 0.28, 0.25), false, 2.0)
@@ -1561,3 +1772,487 @@ class UltPointPickup extends Area2D:
 			var r: float = 11.0 if i % 2 == 0 else 5.0
 			pts.append(Vector2.from_angle(ang) * r)
 		draw_colored_polygon(pts, Color(1.0, 0.88, 0.30, 0.98))
+
+
+class InteractableJumpPad extends Area2D:
+	var pad_color: Color = Color(1.0, 0.52, 0.16)
+	var launch_vel: Vector2 = Vector2(0.0, -860.0)
+	var _pulse: float = 0.0
+	var _cd_by_body: Dictionary = {}
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var box := RectangleShape2D.new()
+		box.size = Vector2(64, 24)
+		cs.shape = box
+		add_child(cs)
+		body_entered.connect(_on_body_entered)
+
+	func _process(delta: float) -> void:
+		_pulse += delta * 5.0
+		for k in _cd_by_body.keys():
+			_cd_by_body[k] = float(_cd_by_body[k]) - delta
+			if float(_cd_by_body[k]) <= 0.0:
+				_cd_by_body.erase(k)
+		queue_redraw()
+
+	func _on_body_entered(body: Node2D) -> void:
+		if not body.is_in_group("players") or (body.has_method("is_alive") and not body.is_alive()):
+			return
+		var id: int = body.get_instance_id()
+		if _cd_by_body.has(id):
+			return
+		_cd_by_body[id] = 0.45
+		if body is CharacterBody2D:
+			(body as CharacterBody2D).velocity.y = launch_vel.y
+			(body as CharacterBody2D).velocity.x += launch_vel.x
+		_pulse = 0.0
+
+	func _draw() -> void:
+		var glow: float = 0.65 + 0.35 * sin(_pulse)
+		draw_rect(Rect2(-30, -4, 60, 12), Color(0.16, 0.19, 0.26))
+		draw_rect(Rect2(-30, -4, 60, 12), pad_color, false, 2.0)
+		draw_rect(Rect2(-24, -10, 48, 6), Color(pad_color.r, pad_color.g, pad_color.b, 0.88 * glow))
+		draw_line(Vector2(-12, -16 - 4.0 * glow), Vector2(0, -24 - 4.0 * glow), pad_color, 2.5)
+		draw_line(Vector2(12, -16 - 4.0 * glow), Vector2(0, -24 - 4.0 * glow), pad_color, 2.5)
+
+
+class InteractableTeleporter extends Area2D:
+	var inter_idx: int = 0
+	var target_pos: Vector2 = Vector2.ZERO
+	var portal_color: Color = Color(1.0, 0.78, 0.20)
+	var cooldown_left: float = 0.0
+	var _pulse: float = 0.0
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 30.0
+		cs.shape = circ
+		add_child(cs)
+		body_entered.connect(_on_body_entered)
+		body_exited.connect(_on_body_exited)
+
+	func trigger_cooldown() -> void:
+		cooldown_left = 3.0
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_pulse += delta * 4.5
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(0.0, cooldown_left - delta)
+		queue_redraw()
+
+	func _on_body_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(inter_idx, "USE\nTELEPORT" if cooldown_left <= 0.0 else "CHARGING...")
+
+	func _on_body_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		var ready_col: Color = portal_color if cooldown_left <= 0.0 else Color(0.42, 0.46, 0.54)
+		draw_circle(Vector2.ZERO, 24.0, Color(ready_col.r, ready_col.g, ready_col.b, 0.22 + 0.12 * sin(_pulse)))
+		draw_arc(Vector2.ZERO, 22.0, 0.0, TAU, 24, ready_col, 3.0)
+		draw_arc(Vector2.ZERO, 13.0, _pulse, _pulse + PI * 1.35, 16, Color.WHITE, 2.2)
+
+
+class InteractableBoostShrine extends Area2D:
+	var inter_idx: int = 0
+	var shrine_kind: String = "speed"
+	var shrine_color: Color = Color(0.74, 0.36, 1.0)
+	var cooldown_left: float = 0.0
+	var _pulse: float = 0.0
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 30.0
+		cs.shape = circ
+		add_child(cs)
+		body_entered.connect(_on_body_entered)
+		body_exited.connect(_on_body_exited)
+
+	func trigger_cooldown() -> void:
+		cooldown_left = 10.0
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_pulse += delta * 3.5
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(0.0, cooldown_left - delta)
+		queue_redraw()
+
+	func _on_body_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			var lbl: String = "USE\nSPEED" if shrine_kind == "speed" else "USE\nSUPPLY"
+			body.set_nearby_interactable(inter_idx, lbl if cooldown_left <= 0.0 else "CHARGING...")
+
+	func _on_body_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		var c: Color = shrine_color if cooldown_left <= 0.0 else Color(0.40, 0.44, 0.50)
+		draw_rect(Rect2(-16, -22, 32, 44), Color(0.12, 0.15, 0.22, 0.92))
+		draw_rect(Rect2(-16, -22, 32, 44), c, false, 2.5)
+		draw_circle(Vector2(0, -4), 9.0 + 1.5 * sin(_pulse), Color(c.r, c.g, c.b, 0.85))
+
+
+class InteractableSwitchHazard extends Area2D:
+	var inter_idx: int = 0
+	var hazard_kind: String = "spikes"
+	var hazard_color: Color = Color(0.95, 0.30, 0.28)
+	var is_active: bool = false
+	var active_left: float = 0.0
+	var cooldown_left: float = 0.0
+	var _pulse: float = 0.0
+	var _tick_accum: float = 0.0
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 44.0
+		cs.shape = circ
+		add_child(cs)
+		body_entered.connect(_on_body_entered)
+		body_exited.connect(_on_body_exited)
+
+	func activate_hazard() -> void:
+		is_active = true
+		active_left = 3.5
+		cooldown_left = 8.0
+		_tick_accum = 0.0
+		_apply_hazard_pulse()
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_pulse += delta * 5.0
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(0.0, cooldown_left - delta)
+		if is_active:
+			active_left -= delta
+			_tick_accum += delta
+			if _tick_accum >= 0.45:
+				_tick_accum = 0.0
+				_apply_hazard_pulse()
+			if active_left <= 0.0:
+				is_active = false
+		queue_redraw()
+
+	func _apply_hazard_pulse() -> void:
+		var rad: float = 190.0 if hazard_kind in ["solar_flare", "low_g", "sentry"] else 135.0
+		for p in get_tree().get_nodes_in_group("players"):
+			if not is_instance_valid(p) or (p.has_method("is_alive") and not p.is_alive()):
+				continue
+			var d: float = global_position.distance_to((p as Node2D).global_position)
+			if d > rad:
+				continue
+			match hazard_kind:
+				"spikes":
+					if p.has_method("apply_hit"):
+						p.apply_hit(22, 0, "Spike Trap", "Arena", Vector2(0.0, -240.0))
+				"laser":
+					if p.has_method("apply_hit"):
+						p.apply_hit(26, 0, "Laser Gate", "Arena", Vector2(0.0, -140.0))
+				"solar_flare":
+					var push_d: Vector2 = ((p as Node2D).global_position - global_position).normalized()
+					if p.has_method("apply_hit"):
+						p.apply_hit(20, 0, "Solar Altar", "Arena", push_d * 420.0 + Vector2(0.0, -180.0))
+				"cryo_vent":
+					if p.has_method("apply_status"):
+						p.apply_status("freeze", 2.0)
+				"sentry":
+					if p.has_method("apply_hit"):
+						p.apply_hit(24, 0, "Sentry Turret", "Arena", Vector2(0.0, -120.0))
+				"low_g":
+					if p is CharacterBody2D:
+						(p as CharacterBody2D).velocity.y = -520.0
+				"spore_cloud":
+					if p.has_method("apply_status"):
+						p.apply_status("poison", 3.0)
+
+	func _on_body_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			var lbl: String = "USE\n" + hazard_kind.replace("_", " ").to_upper()
+			body.set_nearby_interactable(inter_idx, lbl if (cooldown_left <= 0.0 and not is_active) else "CHARGING...")
+
+	func _on_body_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		var c: Color = hazard_color if (is_active or cooldown_left <= 0.0) else Color(0.42, 0.46, 0.54)
+		draw_rect(Rect2(-18, -14, 36, 28), Color(0.12, 0.14, 0.20, 0.92))
+		draw_rect(Rect2(-18, -14, 36, 28), c, false, 2.5)
+		draw_circle(Vector2(0, -4), 6.0, c if is_active else Color(0.95, 0.24, 0.24))
+		if is_active:
+			var rad: float = 190.0 if hazard_kind in ["solar_flare", "low_g", "sentry"] else 135.0
+			draw_circle(Vector2.ZERO, rad, Color(c.r, c.g, c.b, 0.16 + 0.08 * sin(_pulse)))
+			draw_arc(Vector2.ZERO, rad, 0.0, TAU, 32, Color(c.r, c.g, c.b, 0.85), 3.0)
+
+
+class InteractableDoor extends Node2D:
+	var inter_idx: int = 0
+	var door_pos: Vector2 = Vector2.ZERO
+	var button_pos: Vector2 = Vector2.ZERO
+	var is_open: bool = false
+
+	var _door_body: StaticBody2D
+	var _door_shape: CollisionShape2D
+	var _btn_area: Area2D
+	var _open_anim: float = 0.0
+
+	func _ready() -> void:
+		_door_body = StaticBody2D.new()
+		_door_body.position = door_pos
+		_door_body.collision_layer = 1
+		_door_body.collision_mask = 0
+		_door_shape = CollisionShape2D.new()
+		var box := RectangleShape2D.new()
+		box.size = Vector2(36, 180)
+		_door_shape.shape = box
+		_door_body.add_child(_door_shape)
+		add_child(_door_body)
+
+		_btn_area = Area2D.new()
+		_btn_area.position = button_pos
+		_btn_area.collision_layer = 0
+		_btn_area.collision_mask = 2
+		var b_cs := CollisionShape2D.new()
+		var b_box := RectangleShape2D.new()
+		b_box.size = Vector2(54, 54)
+		b_cs.shape = b_box
+		_btn_area.add_child(b_cs)
+		_btn_area.body_entered.connect(_on_btn_entered)
+		_btn_area.body_exited.connect(_on_btn_exited)
+		add_child(_btn_area)
+
+	func set_door_state(open_state: bool) -> void:
+		is_open = open_state
+		if is_instance_valid(_door_shape):
+			_door_shape.set_deferred("disabled", is_open)
+		for b in _btn_area.get_overlapping_bodies():
+			if b.is_in_group("players") and b.get("is_local_human") == true and b.has_method("set_nearby_interactable"):
+				b.set_nearby_interactable(inter_idx, "USE\nCLOSE DOOR" if is_open else "USE\nOPEN DOOR")
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		var target: float = 1.0 if is_open else 0.0
+		if absf(_open_anim - target) > 0.01:
+			_open_anim = move_toward(_open_anim, target, delta * 3.5)
+			queue_redraw()
+
+	func _on_btn_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(inter_idx, "USE\nCLOSE DOOR" if is_open else "USE\nOPEN DOOR")
+
+	func _on_btn_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		draw_line(button_pos, door_pos, Color(0.24, 0.28, 0.36, 0.85), 3.0)
+		# Door frame
+		draw_rect(Rect2(door_pos.x - 22, door_pos.y - 96, 44, 10), Color(0.22, 0.24, 0.30))
+		# Sliding dungeon gate
+		var gate_h: float = 180.0 * (1.0 - _open_anim * 0.88)
+		var gate_rect := Rect2(door_pos.x - 18, door_pos.y - 90, 36, gate_h)
+		draw_rect(gate_rect, Color(0.28, 0.20, 0.14))
+		draw_rect(gate_rect, Color(0.55, 0.60, 0.68), false, 3.0)
+		for bx in [-10.0, 0.0, 10.0]:
+			draw_line(Vector2(door_pos.x + bx, door_pos.y - 90), Vector2(door_pos.x + bx, door_pos.y - 90 + gate_h), Color(0.62, 0.68, 0.76), 2.5)
+		# Switch box
+		draw_rect(Rect2(button_pos.x - 14, button_pos.y - 20, 28, 40), Color(0.18, 0.20, 0.26))
+		draw_rect(Rect2(button_pos.x - 14, button_pos.y - 20, 28, 40), Color(0.65, 0.72, 0.85), false, 2.0)
+		draw_circle(button_pos + Vector2(0, -6), 7.5, Color(0.22, 0.95, 0.42) if is_open else Color(0.95, 0.24, 0.24))
+
+
+class InteractableSpikeTrap extends Node2D:
+	var inter_idx: int = 0
+	var trap_pos: Vector2 = Vector2.ZERO
+	var button_pos: Vector2 = Vector2.ZERO
+	var is_on: bool = false
+
+	var _spike_area: Area2D
+	var _btn_area: Area2D
+	var _extend: float = 0.0
+	var _hit_cd_by_body: Dictionary = {}
+
+	func _ready() -> void:
+		_spike_area = Area2D.new()
+		_spike_area.position = trap_pos + Vector2(0, -14)
+		_spike_area.collision_layer = 0
+		_spike_area.collision_mask = 2
+		var s_cs := CollisionShape2D.new()
+		var s_box := RectangleShape2D.new()
+		s_box.size = Vector2(144, 34)
+		s_cs.shape = s_box
+		_spike_area.add_child(s_cs)
+		add_child(_spike_area)
+
+		_btn_area = Area2D.new()
+		_btn_area.position = button_pos
+		_btn_area.collision_layer = 0
+		_btn_area.collision_mask = 2
+		var b_cs := CollisionShape2D.new()
+		var b_box := RectangleShape2D.new()
+		b_box.size = Vector2(54, 54)
+		b_cs.shape = b_box
+		_btn_area.add_child(b_cs)
+		_btn_area.body_entered.connect(_on_btn_entered)
+		_btn_area.body_exited.connect(_on_btn_exited)
+		add_child(_btn_area)
+
+	func set_trap_state(on_state: bool) -> void:
+		is_on = on_state
+		for b in _btn_area.get_overlapping_bodies():
+			if b.is_in_group("players") and b.get("is_local_human") == true and b.has_method("set_nearby_interactable"):
+				b.set_nearby_interactable(inter_idx, "USE\nSPIKES OFF" if is_on else "USE\nSPIKES ON")
+		queue_redraw()
+
+	func _physics_process(delta: float) -> void:
+		var target: float = 1.0 if is_on else 0.0
+		if absf(_extend - target) > 0.01:
+			_extend = move_toward(_extend, target, delta * 5.0)
+			queue_redraw()
+		for k in _hit_cd_by_body.keys():
+			_hit_cd_by_body[k] = float(_hit_cd_by_body[k]) - delta
+			if float(_hit_cd_by_body[k]) <= 0.0:
+				_hit_cd_by_body.erase(k)
+		if not is_on or _extend < 0.35:
+			return
+		for body in _spike_area.get_overlapping_bodies():
+			if not body.is_in_group("players") or (body.has_method("is_alive") and not body.is_alive()):
+				continue
+			var bid: int = body.get_instance_id()
+			if _hit_cd_by_body.has(bid):
+				continue
+			_hit_cd_by_body[bid] = 0.55
+			if body.has_method("apply_hit"):
+				body.apply_hit(28, 0, "Dungeon Spikes", "Arena", Vector2(0.0, -340.0))
+
+	func _on_btn_entered(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(inter_idx, "USE\nSPIKES OFF" if is_on else "USE\nSPIKES ON")
+
+	func _on_btn_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		draw_line(button_pos, trap_pos, Color(0.24, 0.28, 0.36, 0.85), 3.0)
+		# Floor spike base plate
+		draw_rect(Rect2(trap_pos.x - 74, trap_pos.y - 4, 148, 10), Color(0.20, 0.22, 0.28))
+		draw_rect(Rect2(trap_pos.x - 74, trap_pos.y - 4, 148, 10), Color(0.50, 0.54, 0.62), false, 2.0)
+		# Actual sharp steel triangular spikes emerging when toggled ON
+		var sp_h: float = 28.0 * _extend
+		if sp_h > 1.0:
+			for i in range(8):
+				var cx: float = trap_pos.x - 63.0 + float(i) * 18.0
+				var base_y: float = trap_pos.y - 4.0
+				var tip_y: float = base_y - sp_h
+				draw_colored_polygon(PackedVector2Array([
+					Vector2(cx - 7.5, base_y), Vector2(cx, tip_y), Vector2(cx + 7.5, base_y)
+				]), Color(0.76, 0.80, 0.88))
+				draw_colored_polygon(PackedVector2Array([
+					Vector2(cx - 2.5, lerpf(base_y, tip_y, 0.65)), Vector2(cx, tip_y), Vector2(cx + 2.5, lerpf(base_y, tip_y, 0.65))
+				]), Color(0.92, 0.24, 0.24))
+		# Switch box
+		draw_rect(Rect2(button_pos.x - 14, button_pos.y - 20, 28, 40), Color(0.18, 0.20, 0.26))
+		draw_rect(Rect2(button_pos.x - 14, button_pos.y - 20, 28, 40), Color(0.65, 0.72, 0.85), false, 2.0)
+		draw_circle(button_pos + Vector2(0, -6), 7.5, Color(0.22, 0.95, 0.42) if is_on else Color(0.95, 0.24, 0.24))
+
+
+class ArenaAutoMineManager extends Node2D:
+	var arena_ref: Node = null
+	var target_mines: int = 3
+	var _mines: Array[Node2D] = []
+	var _check_accum: float = 0.2
+
+	func _ready() -> void:
+		call_deferred("_ensure_mines")
+
+	func _process(delta: float) -> void:
+		_check_accum -= delta
+		if _check_accum <= 0.0:
+			_check_accum = 0.5
+			_ensure_mines()
+
+	func _ensure_mines() -> void:
+		if arena_ref == null:
+			return
+		for i in range(_mines.size() - 1, -1, -1):
+			if not is_instance_valid(_mines[i]):
+				_mines.remove_at(i)
+		while _mines.size() < target_mines:
+			var m := ArenaAutoMine.new()
+			var w: float = float(arena_ref.get("arena_width"))
+			var h: float = float(arena_ref.get("arena_height"))
+			var raw := Vector2(randf_range(160.0, w - 160.0), randf_range(220.0, h - 120.0))
+			m.position = arena_ref.call("_snap_to_floor", raw, 8.0)
+			add_child(m)
+			_mines.append(m)
+
+
+class ArenaAutoMine extends Area2D:
+	const EXPLOSION_RES: PackedScene = preload("res://scenes/Explosion.tscn")
+	var _arm_timer: float = 0.8
+	var _pulse: float = 0.0
+	var _detonated: bool = false
+
+	func _ready() -> void:
+		collision_layer = 0
+		collision_mask = 2
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = 28.0
+		cs.shape = circ
+		add_child(cs)
+
+	func _physics_process(delta: float) -> void:
+		if _detonated:
+			return
+		_pulse += delta * 8.0
+		if _arm_timer > 0.0:
+			_arm_timer = maxf(0.0, _arm_timer - delta)
+			queue_redraw()
+			return
+		for body in get_overlapping_bodies():
+			if body.is_in_group("players") and (not body.has_method("is_alive") or body.is_alive()):
+				_detonate()
+				return
+		queue_redraw()
+
+	func _detonate() -> void:
+		if _detonated:
+			return
+		_detonated = true
+		var parent_node: Node = get_parent()
+		if parent_node != null:
+			var exp := EXPLOSION_RES.instantiate()
+			exp.global_position = global_position
+			exp.explosion_radius = 125.0
+			exp.max_damage = 68
+			exp.shooter_peer_id = 0
+			exp.shooter_name = "Outpost Mine"
+			exp.weapon_name = "Proximity Mine"
+			exp.can_deal_damage = true
+			exp.allow_self_damage = true
+			parent_node.add_child(exp)
+		queue_free()
+
+	func _draw() -> void:
+		draw_rect(Rect2(-11, -3, 22, 6), Color(0.22, 0.24, 0.28))
+		draw_rect(Rect2(-11, -3, 22, 6), Color(0.75, 0.55, 0.20), false, 1.8)
+		var led_on: bool = _arm_timer <= 0.0 and sin(_pulse) > 0.0
+		draw_circle(Vector2(0, -4), 3.5, Color(1.0, 0.25, 0.18) if led_on else Color(0.95, 0.68, 0.20))

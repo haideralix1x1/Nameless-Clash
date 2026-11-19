@@ -1127,7 +1127,7 @@ func _build_match_settings_overlay() -> void:
 	g_lbl.modulate = Color(0.75, 0.88, 1.0)
 	g_row.add_child(g_lbl)
 	_ms_grav_slider = HSlider.new()
-	_ms_grav_slider.min_value = 0.2
+	_ms_grav_slider.min_value = 0.0
 	_ms_grav_slider.max_value = 1.0
 	_ms_grav_slider.step = 0.05
 	_ms_grav_slider.value = NetworkManager.gravity_scale
@@ -1135,6 +1135,7 @@ func _build_match_settings_overlay() -> void:
 	_ms_grav_slider.custom_minimum_size = Vector2(0, 32)
 	_ms_grav_slider.value_changed.connect(func(v: float):
 		NetworkManager.gravity_scale = v
+		SettingsManager.gravity_scale = v
 		if is_instance_valid(_ms_grav_val_lbl):
 			_ms_grav_val_lbl.text = "%.2fx" % v
 	)

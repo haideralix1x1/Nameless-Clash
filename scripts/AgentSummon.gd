@@ -347,6 +347,8 @@ func _physics_process(delta: float) -> void:
 				if can_deal:
 					for p in get_tree().get_nodes_in_group("players"):
 						if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
+							if p.has_method("is_alive") and not p.is_alive():
+								continue
 							if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
 								continue
 							if absf((p as Node2D).global_position.x - global_position.x) <= 70.0 and absf((p as Node2D).global_position.y - global_position.y) <= 90.0:
@@ -361,6 +363,8 @@ func _drop_eagle_bomb() -> void:
 		return
 	for p in get_tree().get_nodes_in_group("players"):
 		if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
+			if p.has_method("is_alive") and not p.is_alive():
+				continue
 			if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
 				continue
 			if (p as Node2D).global_position.distance_to(global_position) <= 135.0 and p.has_method("apply_hit"):
@@ -387,6 +391,8 @@ func _blast_ghost_clone() -> void:
 
 func _on_body_entered(body: Node) -> void:
 	if body == null or not body.is_in_group("players"):
+		return
+	if body.has_method("is_alive") and not body.is_alive():
 		return
 	if int(body.get("peer_id")) == owner_peer_id:
 		return

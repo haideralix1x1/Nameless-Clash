@@ -43,6 +43,7 @@ var _agent_hat_overlay: TextureRect
 var _target_portrait: TextureRect
 var _target_hat_overlay: TextureRect
 var _secondary_weapon_icon: TextureRect
+var _bomb_hud_icon: BombHudIcon
 var _bomb_hud_label: Label
 var _weapon_name_label: Label
 var _ammo_label: Label
@@ -59,7 +60,7 @@ var _match_timer_label: Label
 var _combo_banner_label: Label
 var _match_end_overlay: Control
 var _match_end_title: Label
-var _match_end_rows: Label
+var _match_end_table: VBoxContainer
 var _respawn_panel: PanelContainer
 var _respawn_label: Label
 var _add_bot_btn: Button
@@ -873,11 +874,19 @@ func _build_ui() -> void:
 	sec_atlas.region = Rect2(0, 0, 64, 32)
 	_secondary_weapon_icon = TextureRect.new()
 	_secondary_weapon_icon.texture = sec_atlas
-	_secondary_weapon_icon.custom_minimum_size = Vector2(34, 18)
+	_secondary_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_secondary_weapon_icon.custom_minimum_size = Vector2(30, 16)
+	_secondary_weapon_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_secondary_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_secondary_weapon_icon.modulate = Color(0.85, 0.90, 0.96, 0.82)
 	_secondary_weapon_icon.visible = false
 	w_row.add_child(_secondary_weapon_icon)
+
+	_bomb_hud_icon = BombHudIcon.new()
+	_bomb_hud_icon.custom_minimum_size = Vector2(18, 18)
+	_bomb_hud_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_bomb_hud_icon.visible = false
+	w_row.add_child(_bomb_hud_icon)
 
 	_bomb_hud_label = Label.new()
 	_bomb_hud_label.text = "3"
@@ -998,7 +1007,7 @@ func _build_ui() -> void:
 	add_child(_btn_shoe)
 
 	_btn_pickup = Button.new()
-	_btn_pickup.text = "PICK\nGUN"
+	_btn_pickup.text = "PICKUP\nGUN"
 	_btn_pickup.focus_mode = Control.FOCUS_NONE
 	_btn_pickup.visible = false
 	_style_circle_btn(_btn_pickup, Color(0.10, 0.36, 0.22, 0.88), Color(0.45, 1.0, 0.65, 0.95), 78, 13)
@@ -1100,7 +1109,7 @@ func _build_ui() -> void:
 	_chat_panel = PanelContainer.new()
 	_chat_panel.anchor_left = 1.0
 	_chat_panel.anchor_right = 1.0
-	_chat_panel.offset_left = -430
+	_chat_panel.offset_left = -452
 	_chat_panel.offset_right = -12
 	_chat_panel.offset_top = 64
 	_chat_panel.offset_bottom = 318
@@ -1121,16 +1130,16 @@ func _build_ui() -> void:
 	chat_vbox.add_child(_chat_log)
 
 	var emoji_row := HBoxContainer.new()
-	emoji_row.add_theme_constant_override("separation", 6)
+	emoji_row.add_theme_constant_override("separation", 4)
 	chat_vbox.add_child(emoji_row)
 	for em in ["HAHA", "GG", "NICE", "OUCH", "WHAT?!", "BOOM", "RIP"]:
 		var eb := Button.new()
 		eb.text = em
 		eb.focus_mode = Control.FOCUS_NONE
-		eb.custom_minimum_size = Vector2(46, 36)
+		eb.custom_minimum_size = Vector2(0, 32)
 		eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UIStyle.style_layer_button(eb, "blue", "", 8, 5)
-		eb.add_theme_font_size_override("font_size", 18)
+		UIStyle.style_layer_button(eb, "blue", "", 8, 4)
+		eb.add_theme_font_size_override("font_size", 12)
 		eb.pressed.connect(_send_tease_emoji.bind(em))
 		emoji_row.add_child(eb)
 
@@ -1189,10 +1198,10 @@ func _build_ui() -> void:
 	_killfeed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_killfeed_label.anchor_left = 1.0
 	_killfeed_label.anchor_right = 1.0
-	_killfeed_label.offset_left = -300
+	_killfeed_label.offset_left = -440
 	_killfeed_label.offset_right = -12
-	_killfeed_label.offset_top = 74
-	_killfeed_label.offset_bottom = 174
+	_killfeed_label.offset_top = 82
+	_killfeed_label.offset_bottom = 212
 	_killfeed_label.add_theme_font_size_override("normal_font_size", 13)
 	add_child(_killfeed_label)
 
@@ -1448,6 +1457,8 @@ func _refresh_top_info_pill() -> void:
 		_agent_portrait.visible = is_agent
 	if is_instance_valid(_secondary_weapon_icon):
 		_secondary_weapon_icon.visible = not is_agent
+	if is_instance_valid(_bomb_hud_icon):
+		_bomb_hud_icon.visible = (not is_agent) and NetworkManager.allow_explosives
 	if is_instance_valid(_bomb_hud_label):
 		_bomb_hud_label.visible = (not is_agent) and NetworkManager.allow_explosives
 
@@ -1508,6 +1519,9 @@ func _refresh_top_info_pill() -> void:
 		if is_instance_valid(_secondary_weapon_icon):
 			var other_w: WeaponData = WeaponData.get_weapon(other_id, skin_row, 0)
 			_set_weapon_icon_texture(_secondary_weapon_icon, other_w, skin_row)
+		if is_instance_valid(_bomb_hud_icon):
+			_bomb_hud_icon.bomb_type = str(local_player.get("bomb_type"))
+			_bomb_hud_icon.queue_redraw()
 		if is_instance_valid(_bomb_hud_label):
 			_bomb_hud_label.text = "%d" % maxi(0, int(local_player.get("bomb_count")))
 
@@ -1535,7 +1549,7 @@ func _on_nearby_weapon_changed(crate_idx: int, w_id: int) -> void:
 		_btn_pickup.visible = false
 		return
 	var w_name: String = WeaponData.get_weapon(w_id, 0, 0).display_name
-	_btn_pickup.text = "PICK\n%s" % w_name.substr(0, 7).to_upper()
+	_btn_pickup.text = "PICKUP\nGUN"
 	_btn_pickup.visible = true
 	_update_stick_and_button_positions()
 
@@ -1566,17 +1580,21 @@ func _taunt_id_for_chat(txt: String) -> int:
 	var low: String = txt.to_lower()
 	if txt.contains("😜") or low.contains("ezz") or low == "ez" or low.contains(" ez"):
 		return 0
-	if txt.contains("😂") or low.contains("lmao") or low.contains("lol"):
-		return 17
-	if txt.contains("💨"):
+	if txt.contains("😂") or low.contains("haha") or low.contains("lmao") or low.contains("lol"):
+		return 9
+	if low == "gg" or low.contains(" gg"):
+		return 1
+	if low == "nice" or low.contains("nice"):
+		return 22
+	if low == "ouch" or txt.contains("💨"):
 		return 12
 	if txt.contains("🖕"):
 		return 3
-	if txt.contains("❓") or low == "huh" or low == "??":
+	if txt.contains("❓") or low.contains("what") or low == "huh" or low == "??":
 		return 11
-	if txt.contains("🔥"):
+	if txt.contains("🔥") or low == "boom" or low.contains("boom"):
 		return 21
-	if txt.contains("💀") or low == "rip":
+	if txt.contains("💀") or low == "rip" or low.contains("rip"):
 		return 13
 	if txt.contains("🤢"):
 		return 20
@@ -1651,13 +1669,13 @@ func _render_chat_toasts() -> void:
 func _update_killfeed_offset() -> void:
 	if not is_instance_valid(_killfeed_label):
 		return
-	var top_y: float = 74.0
+	var top_y: float = 82.0
 	if is_instance_valid(_chat_panel) and _chat_panel.visible:
 		top_y = 324.0
 	elif is_instance_valid(_chat_toast_label) and _chat_toast_label.visible:
 		top_y = 156.0
 	_killfeed_label.offset_top = top_y
-	_killfeed_label.offset_bottom = top_y + 100.0
+	_killfeed_label.offset_bottom = top_y + 130.0
 
 
 func _on_killfeed_event(killer_name: String, victim_name: String, weapon_name: String) -> void:
@@ -1672,8 +1690,8 @@ func _on_killfeed_event(killer_name: String, victim_name: String, weapon_name: S
 		bb_line = "[right][bgcolor=#164a22][color=#66ff88] %s (%s) → %s [/color][/bgcolor][/right]" % [k_esc, w_esc, v_esc]
 	else:
 		bb_line = "[right][color=#d4dce8]%s (%s) → %s[/color][/right]" % [k_esc, w_esc, v_esc]
-	_killfeed_lines.append({"text": bb_line, "ttl": 5.5})
-	if _killfeed_lines.size() > 4:
+	_killfeed_lines.append({"text": bb_line, "ttl": 1.0})
+	if _killfeed_lines.size() > 5:
 		_killfeed_lines.remove_at(0)
 	_render_killfeed()
 
@@ -1849,6 +1867,9 @@ func _on_bombs_changed(count: int, bomb_type: String) -> void:
 	var label_type: String = "FRAG" if bomb_type.is_empty() else bomb_type.to_upper()
 	_btn_bomb.text = "%s\nx%d" % [label_type, maxi(0, count)]
 	_btn_bomb.visible = (not NetworkManager.is_agent_clash_mode()) and NetworkManager.allow_explosives
+	if is_instance_valid(_bomb_hud_icon):
+		_bomb_hud_icon.bomb_type = bomb_type
+		_bomb_hud_icon.queue_redraw()
 	if is_instance_valid(_bomb_hud_label):
 		_bomb_hud_label.text = "%d" % maxi(0, count)
 	_btn_bomb.modulate = Color.WHITE if count > 0 else Color(0.55, 0.58, 0.65)
@@ -2174,7 +2195,7 @@ func _build_match_end_overlay() -> void:
 	_match_end_overlay.add_child(center)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(560, 0)
+	card.custom_minimum_size = Vector2(640, 0)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
 	sb.border_color = Color(0.98, 0.76, 0.22, 0.95)
@@ -2194,18 +2215,47 @@ func _build_match_end_overlay() -> void:
 	_match_end_title.modulate = Color(1.0, 0.84, 0.24)
 	vb.add_child(_match_end_title)
 
+	var hdr_panel := PanelContainer.new()
+	var hdr_sb := StyleBoxFlat.new()
+	hdr_sb.bg_color = Color(0.11, 0.16, 0.26, 0.96)
+	hdr_sb.set_corner_radius_all(8)
+	hdr_sb.set_content_margin_all(8)
+	hdr_panel.add_theme_stylebox_override("panel", hdr_sb)
+	vb.add_child(hdr_panel)
+
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", 6)
+	hdr_panel.add_child(hdr_row)
+	var col_specs: Array = [
+		["RANK", 62, Color(0.76, 0.82, 0.94), HORIZONTAL_ALIGNMENT_CENTER],
+		["PLAYER", 0, Color(0.76, 0.82, 0.94), HORIZONTAL_ALIGNMENT_LEFT],
+		["KILLS", 68, Color(0.45, 0.96, 0.56), HORIZONTAL_ALIGNMENT_CENTER],
+		["ASSISTS", 74, Color(0.42, 0.86, 1.0), HORIZONTAL_ALIGNMENT_CENTER],
+		["DEATHS", 70, Color(1.0, 0.48, 0.46), HORIZONTAL_ALIGNMENT_CENTER],
+		["COMBOS", 78, Color(1.0, 0.84, 0.35), HORIZONTAL_ALIGNMENT_CENTER]
+	]
+	for spec in col_specs:
+		var h_lbl := Label.new()
+		h_lbl.text = str(spec[0])
+		if int(spec[1]) > 0:
+			h_lbl.custom_minimum_size = Vector2(float(spec[1]), 0)
+		else:
+			h_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h_lbl.horizontal_alignment = spec[3]
+		h_lbl.add_theme_font_size_override("font_size", 13)
+		h_lbl.modulate = spec[2]
+		hdr_row.add_child(h_lbl)
+
 	var rows_scroll := ScrollContainer.new()
-	rows_scroll.custom_minimum_size = Vector2(540, 220)
+	rows_scroll.custom_minimum_size = Vector2(600, 240)
 	rows_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	rows_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vb.add_child(rows_scroll)
 
-	_match_end_rows = Label.new()
-	_match_end_rows.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_match_end_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_match_end_rows.add_theme_font_size_override("font_size", 18)
-	_match_end_rows.modulate = Color(0.90, 0.94, 1.0)
-	rows_scroll.add_child(_match_end_rows)
+	_match_end_table = VBoxContainer.new()
+	_match_end_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_match_end_table.add_theme_constant_override("separation", 6)
+	rows_scroll.add_child(_match_end_table)
 
 	var btn_row := HBoxContainer.new()
 	btn_row.add_theme_constant_override("separation", 12)
@@ -2271,21 +2321,65 @@ func _on_combo_achieved(killer_id: int, killer_name: String, combo_count: int) -
 
 
 func _on_match_ended(winner_text: String, rankings: Array) -> void:
-	if not is_instance_valid(_match_end_overlay):
+	if not is_instance_valid(_match_end_overlay) or not is_instance_valid(_match_end_table):
 		return
 	_match_end_title.text = winner_text
-	var lines: PackedStringArray = PackedStringArray()
+	for ch in _match_end_table.get_children():
+		ch.queue_free()
+
+	var local_name: String = str(local_player.get("player_name")) if (local_player != null and is_instance_valid(local_player)) else NetworkManager.local_player_name
 	for i in range(rankings.size()):
 		var r: Dictionary = rankings[i] as Dictionary
-		lines.append("#%d  %s   —   K:%d   A:%d   D:%d   Combos:%d" % [
-			i + 1,
-			str(r.get("name", "Player")),
-			int(r.get("kills", 0)),
-			int(r.get("assists", 0)),
-			int(r.get("deaths", 0)),
-			int(r.get("combos", 0))
-		])
-	_match_end_rows.text = "\n".join(lines)
+		var p_name: String = str(r.get("name", "Player"))
+		var is_local: bool = (p_name == local_name)
+		var is_first: bool = (i == 0)
+
+		var row_panel := PanelContainer.new()
+		var r_sb := StyleBoxFlat.new()
+		if is_first:
+			r_sb.bg_color = Color(0.22, 0.17, 0.07, 0.92)
+			r_sb.border_color = Color(1.0, 0.82, 0.26, 0.90)
+			r_sb.set_border_width_all(2)
+		elif is_local:
+			r_sb.bg_color = Color(0.10, 0.19, 0.30, 0.92)
+			r_sb.border_color = Color(0.35, 0.78, 1.0, 0.90)
+			r_sb.set_border_width_all(2)
+		else:
+			r_sb.bg_color = Color(0.09, 0.13, 0.21, 0.88) if (i % 2 == 0) else Color(0.07, 0.10, 0.17, 0.88)
+			r_sb.border_color = Color(0.22, 0.28, 0.40, 0.45)
+			r_sb.set_border_width_all(1)
+		r_sb.set_corner_radius_all(8)
+		r_sb.set_content_margin_all(8)
+		row_panel.add_theme_stylebox_override("panel", r_sb)
+		_match_end_table.add_child(row_panel)
+
+		var row_hb := HBoxContainer.new()
+		row_hb.add_theme_constant_override("separation", 6)
+		row_panel.add_child(row_hb)
+
+		var rank_col: Color = Color(1.0, 0.86, 0.28) if i == 0 else (Color(0.84, 0.88, 0.96) if i == 1 else (Color(0.88, 0.62, 0.38) if i == 2 else Color(0.68, 0.74, 0.86)))
+		var rank_txt: String = ("🏆 #1" if i == 0 else "#%d" % [i + 1])
+		var cells: Array = [
+			[rank_txt, 62, rank_col, HORIZONTAL_ALIGNMENT_CENTER],
+			[p_name + (" (YOU)" if is_local else ""), 0, Color(0.45, 0.90, 1.0) if is_local else Color(0.94, 0.96, 1.0), HORIZONTAL_ALIGNMENT_LEFT],
+			[str(int(r.get("kills", 0))), 68, Color(0.48, 0.98, 0.58), HORIZONTAL_ALIGNMENT_CENTER],
+			[str(int(r.get("assists", 0))), 74, Color(0.46, 0.88, 1.0), HORIZONTAL_ALIGNMENT_CENTER],
+			[str(int(r.get("deaths", 0))), 70, Color(1.0, 0.50, 0.48), HORIZONTAL_ALIGNMENT_CENTER],
+			[str(int(r.get("combos", 0))), 78, Color(1.0, 0.86, 0.38), HORIZONTAL_ALIGNMENT_CENTER]
+		]
+		for cell in cells:
+			var c_lbl := Label.new()
+			c_lbl.text = str(cell[0])
+			if int(cell[1]) > 0:
+				c_lbl.custom_minimum_size = Vector2(float(cell[1]), 0)
+			else:
+				c_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				c_lbl.clip_text = true
+			c_lbl.horizontal_alignment = cell[3]
+			c_lbl.add_theme_font_size_override("font_size", 16)
+			c_lbl.modulate = cell[2]
+			row_hb.add_child(c_lbl)
+
 	_match_end_overlay.visible = true
 
 
@@ -2414,3 +2508,29 @@ func _move_hud_layout_handle(key: String, center_screen_pos: Vector2) -> void:
 	SettingsManager.set_touch_element_pos(key, norm)
 	if is_instance_valid(ctrl):
 		ctrl.position = _clamp_control_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)
+
+
+class BombHudIcon extends Control:
+	var bomb_type: String = "frag"
+
+	func _draw() -> void:
+		var c := Vector2(size.x * 0.5, size.y * 0.55)
+		match bomb_type:
+			"cluster":
+				draw_circle(c, 6.5, Color(1.0, 0.45, 0.16))
+				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.12, 0.14, 0.18), 1.8)
+				draw_circle(c + Vector2(0, -6.5), 2.0, Color(1.0, 0.85, 0.30))
+			"sticky":
+				draw_circle(c, 6.5, Color(0.24, 0.78, 1.0))
+				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.88, 0.98, 1.0), 1.8)
+			"time":
+				draw_rect(Rect2(c - Vector2(6, 5), Vector2(12, 10)), Color(0.95, 0.28, 0.24))
+				draw_rect(Rect2(c - Vector2(6, 5), Vector2(12, 10)), Color(1.0, 0.82, 0.35), false, 1.5)
+				draw_circle(c, 2.0, Color.WHITE)
+			"mine":
+				draw_rect(Rect2(c + Vector2(-7, 1), Vector2(14, 4)), Color(0.96, 0.62, 0.18))
+				draw_circle(c + Vector2(0, -1), 3.0, Color(1.0, 0.25, 0.22))
+			_:
+				draw_circle(c, 6.5, Color(0.26, 0.88, 0.42))
+				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.12, 0.16, 0.14), 1.8)
+				draw_line(c + Vector2(0, -6), c + Vector2(3, -9), Color(1.0, 0.80, 0.28), 2.0)
