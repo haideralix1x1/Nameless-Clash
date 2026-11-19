@@ -341,6 +341,28 @@ func _physics_process(delta: float) -> void:
 		"mirror_clone":
 			if is_instance_valid(linked_target):
 				global_position = global_position.lerp(linked_target.global_position + Vector2(48.0 * move_dir_x, 0.0), clampf(delta * 4.0, 0.0, 1.0))
+		"tornado":
+			var t_tgt: Node2D = _find_nearest_enemy(780.0)
+			if t_tgt != null:
+				var to_t: Vector2 = t_tgt.global_position - global_position
+				if to_t.length() > 8.0:
+					global_position += to_t.normalized() * 255.0 * delta
+			else:
+				global_position.x += move_dir_x * 235.0 * delta
+			_attack_cd -= delta
+			if _attack_cd <= 0.0:
+				_attack_cd = 0.10
+				if can_deal:
+					for p in get_tree().get_nodes_in_group("players"):
+						if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
+							if p.has_method("is_alive") and not p.is_alive():
+								continue
+							if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
+								continue
+							if (p as Node2D).global_position.distance_to(global_position) <= 68.0 and p.has_method("apply_hit"):
+								var pull_dir: Vector2 = (global_position - (p as Node2D).global_position).normalized()
+								p.apply_hit(10, owner_peer_id, weapon_name, owner_name, pull_dir * 95.0 + Vector2(0.0, -70.0))
+			queue_redraw()
 		"crush_walls":
 			_wall_gap = maxf(0.0, _wall_gap - 360.0 * delta)
 			if _wall_gap <= 6.0:
@@ -389,6 +411,24 @@ func _blast_ghost_clone() -> void:
 	parent_node.add_child(exp)
 
 
+func _blast_bomb_eagle() -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var exp := preload("res://scenes/Explosion.tscn").instantiate()
+	exp.global_position = global_position
+	exp.explosion_radius = 135.0
+	exp.max_damage = damage
+	exp.shooter_peer_id = owner_peer_id
+	exp.shooter_team = owner_team
+	exp.shooter_name = owner_name
+	exp.weapon_name = weapon_name
+	exp.ring_color = Color(0.95, 0.78, 0.35)
+	exp.can_deal_damage = can_deal
+	exp.allow_self_damage = false
+	parent_node.add_child(exp)
+
+
 func _on_body_entered(body: Node) -> void:
 	if body == null or not body.is_in_group("players"):
 		return
@@ -402,7 +442,11 @@ func _on_body_entered(body: Node) -> void:
 		_blast_ghost_clone()
 		queue_free()
 		return
-	if summon_kind in ["shadow_mummy", "turret", "mirror_clone", "crush_walls", "bomb_eagle", "dragon_strike"]:
+	if summon_kind == "bomb_eagle":
+		_blast_bomb_eagle()
+		queue_free()
+		return
+	if summon_kind in ["shadow_mummy", "turret", "mirror_clone", "crush_walls", "dragon_strike", "tornado"]:
 		return
 	if summon_kind == "barbarian":
 		if _barb_attacking:
@@ -500,6 +544,18 @@ func _draw() -> void:
 				draw_arc(Vector2(slash_x, -4.0), 22.0, -0.8 if move_dir_x > 0 else (PI - 0.8), 0.8 if move_dir_x > 0 else (PI + 0.8), 10, Color(0.75, 0.96, 1.0, 0.85), 3.0)
 		"mirror_clone":
 			draw_arc(Vector2.ZERO, 28.0, 0.0, TAU, 20, Color(0.95, 0.75, 1.0, 0.65), 2.5)
+		"tornado":
+			# Huge swirling tornado funnel
+			for i in range(9):
+				var frac: float = float(i) / 8.0
+				var ry: float = lerpf(58.0, -96.0, frac)
+				var rx_w: float = lerpf(16.0, 68.0, frac)
+				var sway: float = sin(_phase * 4.5 + frac * 4.0) * (10.0 + frac * 8.0)
+				var col_ring: Color = Color(0.76, 0.64, 1.0, 0.55 + frac * 0.25) if i % 2 == 0 else Color(0.88, 0.94, 1.0, 0.52)
+				draw_set_transform(Vector2(sway, ry), 0.0, Vector2(1.0, 0.34))
+				draw_circle(Vector2.ZERO, rx_w, Color(0.62, 0.50, 0.88, 0.22))
+				draw_arc(Vector2.ZERO, rx_w, 0.0, TAU, 24, col_ring, 5.0)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		"crush_walls":
 			draw_rect(Rect2(-_wall_gap - 24.0, -76.0, 26.0, 152.0), Color(0.98, 0.44, 0.84, 0.85))
 			draw_rect(Rect2(_wall_gap - 2.0, -76.0, 26.0, 152.0), Color(0.98, 0.44, 0.84, 0.85))

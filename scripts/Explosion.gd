@@ -90,14 +90,15 @@ func _apply_splash_damage() -> void:
 			continue
 		if node.has_method("is_alive") and not node.is_alive():
 			continue
+		var is_barrel: bool = (weapon_name == "Explosive Barrel")
 		var is_self: bool = (int(node.get("peer_id")) == shooter_peer_id)
-		if is_self and not allow_self_damage:
+		if is_self and not allow_self_damage and not is_barrel:
 			continue
-		if not is_self and NetworkManager.is_team_mode() and int(node.get("team_id")) == shooter_team:
+		if not is_barrel and not is_self and NetworkManager.is_team_mode() and int(node.get("team_id")) == shooter_team:
 			continue
 		var dist: float = global_position.distance_to(node.global_position)
 		if dist <= explosion_radius:
-			var falloff: float = clampf(1.0 - (dist / explosion_radius) * 0.65, 0.25, 1.0)
+			var falloff: float = 1.0 if (is_barrel and dist <= explosion_radius * 0.55) else clampf(1.0 - (dist / explosion_radius) * 0.65, 0.25, 1.0)
 			var dir: Vector2 = (node.global_position - global_position).normalized()
 			if dir.length_squared() < 0.01:
 				dir = Vector2.UP

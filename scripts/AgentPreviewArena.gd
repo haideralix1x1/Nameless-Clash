@@ -223,6 +223,21 @@ func cast_slot(slot_i: int) -> void:
 								it.queue_free()
 						)
 		)
+	elif ab_kind == "ult_time_slow" and is_instance_valid(dummy_bot) and not dummy_bot.is_dead:
+		_hero_return_delay = 0.85
+		dummy_bot.time_stop_timer = 0.0
+		dummy_bot.velocity.y = -430.0
+		var tf_tw := create_tween()
+		tf_tw.tween_interval(0.24)
+		tf_tw.finished.connect(func():
+			if is_instance_valid(hero) and not hero.is_dead:
+				var pm: int = NetworkManager.match_mode
+				NetworkManager.match_mode = 2
+				hero.ult_points = 4
+				hero.ability_cooldowns.assign([0.0, 0.0, 0.0, 0.0])
+				hero.use_agent_ability(slot_i)
+				NetworkManager.match_mode = pm
+		)
 	else:
 		if ab_kind == "ult_homing_bazooka":
 			hero.aim_angle = -0.95
@@ -364,7 +379,7 @@ func _process(delta: float) -> void:
 		if (hero_defending or bot_slowed) and dummy_bot.stun_timer <= 0.0 and dummy_bot.freeze_timer <= 0.0:
 			_bot_attack_timer -= delta
 			if _bot_attack_timer <= 0.0:
-				_bot_attack_timer = 1.15 if bot_slowed else 0.32
+				_bot_attack_timer = 1.60 if bot_slowed else 0.32
 				var shoot_origin: Vector2 = dummy_bot.global_position + Vector2(-12.0, -4.0)
 				var shoot_angle: float = (hero.global_position - shoot_origin).angle()
 				if hero.invis_timer > 0.0:

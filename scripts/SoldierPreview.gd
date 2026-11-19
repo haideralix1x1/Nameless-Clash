@@ -52,9 +52,11 @@ func refresh_from_profile() -> void:
 
 	var w_id: int = ProfileManager.primary_weapon_id
 	if shuffle_guns:
-		var next_w: int = randi() % 11
+		const BIG_GUN_IDS: Array[int] = [0, 1, 2, 5, 6, 7, 8, 10]
+		var next_w: int = BIG_GUN_IDS[randi() % BIG_GUN_IDS.size()]
 		if next_w == _preview_weapon_id:
-			next_w = (next_w + 1) % 11
+			var idx: int = BIG_GUN_IDS.find(next_w)
+			next_w = BIG_GUN_IDS[(idx + 1) % BIG_GUN_IDS.size()]
 		w_id = next_w
 	_apply_preview_weapon(w_id)
 

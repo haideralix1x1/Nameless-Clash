@@ -225,7 +225,7 @@ const RAIL_MOD_NAMES: Array[String] = ["Iron Sights", "Suppressor", "Tactical Sc
 const ARCHETYPE_ROLES: Array[String] = [
 	"Infantry Trooper", "Field Adventurer", "Outback Marksman", "Evil Being",
 	"Tactical Breacher", "Northern Raider", "Vampire Lord",
-	"Shadow Assassin", "Undead Brawler", "Cursed Warrior", "Spectral Phantom",
+	"Shadow Assassin", "Undead Brawler", "Skull Skeleton", "Spectral Phantom",
 	"Tomb Guardian", "Heavy Automaton", "Bio Specialist", "Feline Striker",
 	"Blade Hero", "Ogre Warlord", "Lava Colossus", "Quartz Elemental",
 	"Martial Master", "Dark Mystic", "Agile Elf Prodigy", "Heavyweight Boxer"

@@ -40,7 +40,10 @@ var status_effect_dur: float = 0.0
 var on_hit_effect_kind: String = ""
 var boomerang_owner: Node2D = null
 var boomerang_return_time: float = 0.0
-var radius_scale: float = 1.0
+var radius_scale: float = 1.0:
+	set(v):
+		radius_scale = v
+		scale = Vector2(radius_scale, radius_scale)
 var detonate_distance: float = 0.0
 var _pierced_rids: Array[RID] = []
 var _boomerang_returned: bool = false
@@ -157,8 +160,8 @@ func _physics_process(delta: float) -> void:
 	if detonate_distance > 0.0 and _distance_traveled >= detonate_distance:
 		_handle_collision(null, next_pos, Vector2.UP)
 		return
-	if wall_bounces_left > 0 or radius_scale >= 1.3:
-		var hit_r: float = (9.5 * radius_scale) if visual_style == "big_blade" else ((13.0 * radius_scale + 4.0) if visual_style == "thrown_stone" else (18.0 * radius_scale + 8.0))
+	if wall_bounces_left > 0 or radius_scale >= 1.3 or visual_style.begins_with("prop_"):
+		var hit_r: float = 34.0 if visual_style.begins_with("prop_") else ((9.5 * radius_scale) if visual_style == "big_blade" else ((13.0 * radius_scale + 4.0) if visual_style == "thrown_stone" else (18.0 * radius_scale + 8.0)))
 		for p in get_tree().get_nodes_in_group("players"):
 			if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
 				continue
@@ -352,6 +355,11 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner) and collider.has_method("start_hook_pull"):
 				var stop_off: float = 42.0 if (collider as Node2D).global_position.x > boomerang_owner.global_position.x else -42.0
 				collider.start_hook_pull(boomerang_owner.global_position + Vector2(stop_off, -8.0))
+			elif on_hit_effect_kind == "hook_gun" and is_instance_valid(boomerang_owner) and collider.has_method("request_hook_pull"):
+				var stop_off: float = 42.0 if (collider as Node2D).global_position.x > boomerang_owner.global_position.x else -42.0
+				collider.request_hook_pull(boomerang_owner.global_position + Vector2(stop_off, -8.0))
+			elif on_hit_effect_kind == "bubble_trap" and collider.has_method("apply_bubble_trap"):
+				collider.apply_bubble_trap(10.0, 60)
 			if stun_duration > 0.0 and collider.has_method("apply_stun"):
 				collider.apply_stun(stun_duration, shooter_peer_id)
 			if reverse_controls_dur > 0.0 and collider.has_method("apply_reverse_controls"):
@@ -391,10 +399,10 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			if stop_on_vertical_wall:
 				velocity *= 0.74
 			rotation = velocity.angle()
-			global_position = hit_pos + n * 8.0
+			global_position = hit_pos + n * maxf(8.0, 10.0 * radius_scale)
 			_spawn_impact_flash(hit_pos, bullet_color)
 			return
-		if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner) and boomerang_owner.has_method("start_hook_pull"):
+		if (on_hit_effect_kind == "hook_drag" or on_hit_effect_kind == "hook_gun") and is_instance_valid(boomerang_owner) and boomerang_owner.has_method("start_hook_pull"):
 			_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
 			boomerang_owner.start_hook_pull(hit_pos + hit_norm * 24.0)
 		elif on_hit_effect_kind == "ice_platform":
@@ -731,6 +739,21 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(-6.0, -6.0), Vector2(4.0, -7.0), Vector2(6.0, 1.0), Vector2(-3.0, 2.0)
 			]), bullet_color.lightened(0.28))
+		"fiery_hand":
+			# Outer roaring flame aura
+			draw_circle(Vector2(-2.0, 0.0), 16.0, Color(1.0, 0.28, 0.05, 0.38))
+			draw_circle(Vector2(2.0, 0.0), 12.5, Color(1.0, 0.58, 0.12, 0.65))
+			# Skeletal palm
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-10.0, -5.0), Vector2(2.0, -7.0), Vector2(6.0, 0.0),
+				Vector2(2.0, 7.0), Vector2(-10.0, 5.0)
+			]), Color(0.95, 0.92, 0.86))
+			# 4 forward clawed fingers + thumb covered in fire
+			for fy in [-6.0, -2.0, 2.0, 6.0]:
+				draw_line(Vector2(3.0, fy), Vector2(13.0, fy * 1.15), Color(1.0, 0.55, 0.10), 4.0)
+				draw_line(Vector2(3.0, fy), Vector2(12.0, fy * 1.1), Color(0.96, 0.94, 0.88), 2.2)
+			draw_line(Vector2(-2.0, -6.0), Vector2(3.0, -12.0), Color(1.0, 0.68, 0.15), 3.2)
+			draw_circle(Vector2(-6.0, 0.0), 4.5, Color(1.0, 0.90, 0.35, 0.85))
 		"mummy_head":
 			draw_circle(Vector2.ZERO, 12.5, Color(0.14, 0.12, 0.10))
 			draw_circle(Vector2.ZERO, 10.5, Color(0.84, 0.78, 0.62))
@@ -743,6 +766,28 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 10.5, Color(0.18, 0.24, 0.20))
 			draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 20, bullet_color, 2.8)
 			draw_circle(Vector2(-3.0, -3.0), 3.0, Color(1.0, 1.0, 1.0, 0.45))
+		"hook_gun_claw":
+			if is_instance_valid(boomerang_owner):
+				draw_line(Vector2.ZERO, to_local(boomerang_owner.global_position), Color(0.88, 0.72, 0.32, 0.85), 2.5)
+			draw_line(Vector2(-8.0, 0.0), Vector2(6.0, 0.0), Color(0.88, 0.72, 0.32), 4.0)
+			draw_line(Vector2(2.0, -8.0), Vector2(11.0, -4.0), Color(0.95, 0.82, 0.38), 3.0)
+			draw_line(Vector2(2.0, 8.0), Vector2(11.0, 4.0), Color(0.95, 0.82, 0.38), 3.0)
+			draw_circle(Vector2(6.0, 0.0), 3.5, Color(1.0, 0.92, 0.55))
+		"bubble_trap_orb":
+			draw_circle(Vector2.ZERO, 14.0, Color(0.32, 0.88, 1.0, 0.32))
+			draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 24, Color(0.65, 0.96, 1.0, 0.95), 2.8)
+			draw_arc(Vector2.ZERO, 10.5, -2.3, -1.0, 10, Color(1.0, 1.0, 1.0, 0.85), 2.0)
+			draw_arc(Vector2.ZERO, 11.0, 0.4, 1.4, 10, Color(1.0, 0.58, 0.92, 0.7), 1.8)
+		"heavy_forge":
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			# Heavy blacksmith anvil/forge falling straight down
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-24, -14), Vector2(20, -14), Vector2(30, -8),
+				Vector2(14, -4), Vector2(12, 8), Vector2(20, 16),
+				Vector2(-20, 16), Vector2(-12, 8), Vector2(-14, -4), Vector2(-26, -6)
+			]), Color(0.24, 0.27, 0.34))
+			draw_rect(Rect2(-20, -14, 40, 5), Color(0.58, 0.64, 0.76))
+			draw_rect(Rect2(-18, 12, 36, 4), Color(0.14, 0.16, 0.20))
 		"prop_chair":
 			draw_line(Vector2(-16, -28), Vector2(-16, 20), Color(0.55, 0.60, 0.68), 6.0)
 			draw_line(Vector2(-16, -2), Vector2(18, -2), Color(0.55, 0.60, 0.68), 6.0)
@@ -806,10 +851,11 @@ func _draw() -> void:
 			draw_circle(Vector2(11, -1.5), 1.0, Color.WHITE)
 		"smoke_orb":
 			var pulse: float = 1.0 + sin(_age * 10.0) * 0.08
-			draw_circle(Vector2.ZERO, 46.0 * pulse, Color(0.12, 0.08, 0.20, 0.42))
-			draw_circle(Vector2(-14, -10), 28.0 * pulse, Color(0.16, 0.10, 0.26, 0.72))
-			draw_circle(Vector2(15, 10), 26.0 * pulse, Color(0.08, 0.06, 0.14, 0.78))
-			draw_circle(Vector2(12, -14), 22.0 * pulse, Color(0.22, 0.12, 0.36, 0.68))
-			draw_circle(Vector2(-12, 14), 24.0 * pulse, Color(0.10, 0.07, 0.18, 0.72))
-			draw_arc(Vector2.ZERO, 38.0 * pulse, 0.0, TAU, 28, Color(0.68, 0.32, 0.98, 0.65), 3.0)
+			var bc: Color = bullet_color
+			draw_circle(Vector2.ZERO, 46.0 * pulse, Color(bc.r * 0.22, bc.g * 0.22, bc.b * 0.22, 0.42))
+			draw_circle(Vector2(-14, -10), 28.0 * pulse, Color(bc.r * 0.30, bc.g * 0.30, bc.b * 0.30, 0.72))
+			draw_circle(Vector2(15, 10), 26.0 * pulse, Color(bc.r * 0.16, bc.g * 0.16, bc.b * 0.16, 0.78))
+			draw_circle(Vector2(12, -14), 22.0 * pulse, Color(bc.r * 0.40, bc.g * 0.40, bc.b * 0.40, 0.68))
+			draw_circle(Vector2(-12, 14), 24.0 * pulse, Color(bc.r * 0.20, bc.g * 0.20, bc.b * 0.20, 0.72))
+			draw_arc(Vector2.ZERO, 38.0 * pulse, 0.0, TAU, 28, Color(bc.r, bc.g, bc.b, 0.78), 3.0)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

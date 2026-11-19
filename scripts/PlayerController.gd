@@ -118,6 +118,8 @@ var _bot_want_jetpack: bool = false
 var _bot_allow_fire: bool = true
 var _bot_aim_error: float = 0.0
 var _spawn_points: Array[Vector2] = []
+var _net_sync_accum: float = 0.0
+var _ability_recharge_timer: float = 0.0
 
 const GRAB_PLAYER_RANGE: float = 92.0
 const THROW_PLAYER_SPEED: float = 980.0
@@ -158,6 +160,12 @@ var flashbang_timer: float = 0.0
 var invincible_timer: float = 0.0
 var damage_reduction_timer: float = 0.0
 var slow_mo_timer: float = 0.0
+var time_stop_timer: float = 0.0
+var touch_teleport_timer: float = 0.0
+var touch_fire_timer: float = 0.0
+var touch_banish_timer: float = 0.0
+var bubble_trap_timer: float = 0.0
+var bubble_trap_hp: int = 0
 var deathless_timer: float = 0.0
 var zoom_out_timer: float = 0.0
 var gradual_heal_timer: float = 0.0
@@ -172,6 +180,13 @@ var _bat_ult_timer: float = 0.0
 var _bat_ult_target: Node2D = null
 var _bat_ult_hit_done: bool = false
 var _bat_ult_sprite: Sprite2D = null
+var _contra_ult_shots_left: int = 0
+var _contra_ult_shot_timer: float = 0.0
+var _contra_ult_dmg: int = 0
+var _contra_ult_col: Color = Color(1.0, 0.35, 0.20)
+var _contra_ult_name: String = "Target-Follow Bazooka"
+var _contra_ult_local: bool = false
+var _magnet_timer: float = 0.0
 var _fly_kick_timer: float = 0.0
 var _fly_kick_dir: Vector2 = Vector2.RIGHT
 var _fly_kick_target: Node2D = null
@@ -297,6 +312,8 @@ func setup_player(
 	secondary_weapon_id = WeaponData.sanitize_weapon_id(int(av["secondary_weapon_id"]))
 	_equipped_primary_id = primary_weapon_id
 	current_weapon_id = primary_weapon_id
+	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
+	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	max_bombs = 3 if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
 	weapon_skin_id = int(av["weapon_skin_id"])
@@ -390,6 +407,13 @@ func _roll_ray_lina_random_kit() -> void:
 	]
 
 
+func _has_locked_ability_or_ult() -> bool:
+	for i in range(3):
+		if ability_cooldowns[i] > 0.0:
+			return true
+	return ult_points < 4 or ability_cooldowns[3] > 0.0
+
+
 func _grant_ability_or_ult_reward() -> void:
 	for offset in range(3):
 		var candidate: int = (_next_unlock_slot + offset) % 3
@@ -421,10 +445,13 @@ func _on_kill_scored(killer_id: int, victim_id: int) -> void:
 	if killer_id != peer_id or victim_id == peer_id:
 		return
 	if _is_agent_logic_active():
-		ability_kill_progress += 1
-		if ability_kill_progress >= 2:
+		if not _has_locked_ability_or_ult():
 			ability_kill_progress = 0
-			_grant_ability_or_ult_reward()
+		else:
+			ability_kill_progress += 1
+			if ability_kill_progress >= 2:
+				ability_kill_progress = 0
+				_grant_ability_or_ult_reward()
 		if is_local_human:
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 	if not AgentData.is_ray_lina(archetype_id):
@@ -470,6 +497,34 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 	skin_color = ProfileManager.skin_color
 	helmet_color = ProfileManager.helmet_color
 	gear_color = ProfileManager.gear_color
+	auto_mg_timer = 0.0
+	electric_laser_timer = 0.0
+	dual_shotgun_timer = 0.0
+	dual_shotgun_shots = 0
+	_update_dual_shotgun_visuals(false)
+	personal_shield_hp = 0
+	personal_shield_timer = 0.0
+	boar_ride_timer = 0.0
+	speed_boost_timer = 0.0
+	speed_boost_mult = 1.0
+	invis_timer = 0.0
+	invincible_timer = 0.0
+	damage_reduction_timer = 0.0
+	deathless_timer = 0.0
+	zoom_out_timer = 0.0
+	gradual_heal_timer = 0.0
+	_contra_ult_shots_left = 0
+	_contra_ult_shot_timer = 0.0
+	_magnet_timer = 0.0
+	touch_teleport_timer = 0.0
+	touch_fire_timer = 0.0
+	touch_banish_timer = 0.0
+	_bat_ult_timer = 0.0
+	_fly_kick_timer = 0.0
+	_shadow_dash_timer = 0.0
+	_flurry_state = 0
+	_flurry_timer = 0.0
+	queue_redraw()
 	_init_agent_kit()
 	_apply_modular_textures()
 	_apply_team_visuals()
@@ -572,6 +627,20 @@ func _physics_process(delta: float) -> void:
 		damage_reduction_timer = maxf(0.0, damage_reduction_timer - delta)
 	if slow_mo_timer > 0.0:
 		slow_mo_timer = maxf(0.0, slow_mo_timer - delta)
+	if time_stop_timer > 0.0:
+		time_stop_timer = maxf(0.0, time_stop_timer - delta)
+	if touch_teleport_timer > 0.0:
+		touch_teleport_timer = maxf(0.0, touch_teleport_timer - delta)
+	if touch_fire_timer > 0.0:
+		touch_fire_timer = maxf(0.0, touch_fire_timer - delta)
+	if touch_banish_timer > 0.0:
+		touch_banish_timer = maxf(0.0, touch_banish_timer - delta)
+		queue_redraw()
+	if bubble_trap_timer > 0.0:
+		bubble_trap_timer = maxf(0.0, bubble_trap_timer - delta)
+		if bubble_trap_timer <= 0.0:
+			bubble_trap_hp = 0
+		queue_redraw()
 	if deathless_timer > 0.0:
 		deathless_timer = maxf(0.0, deathless_timer - delta)
 	if zoom_out_timer > 0.0:
@@ -596,8 +665,19 @@ func _physics_process(delta: float) -> void:
 	if _shake_amount > 0.0:
 		_shake_amount = maxf(0.0, _shake_amount - delta * 18.0)
 	if is_local_human and is_instance_valid(_camera):
+		var bounds: Vector2 = _get_arena_bounds()
+		if zoom_out_timer > 0.0:
+			_camera.limit_left = 0
+			_camera.limit_top = 0
+			_camera.limit_right = int(bounds.x)
+			_camera.limit_bottom = int(bounds.y)
+		else:
+			_camera.limit_left = 0
+			_camera.limit_top = -76
+			_camera.limit_right = int(bounds.x)
+			_camera.limit_bottom = int(bounds.y) + 170
 		var s: float = _shake_amount * SettingsManager.screen_shake_intensity
-		var base_off := Vector2(0.0, 24.0)
+		var base_off := Vector2.ZERO if zoom_out_timer > 0.0 else Vector2(0.0, 24.0)
 		var target_off: Vector2 = base_off + (Vector2(randf_range(-s, s), randf_range(-s, s)) if s > 0.05 else Vector2.ZERO)
 		_camera.offset = _camera.offset.lerp(target_off, 0.45)
 		var target_zoom_val: float = get_target_camera_zoom()
@@ -609,6 +689,11 @@ func _physics_process(delta: float) -> void:
 			_process_dead(delta)
 		else:
 			_process_alive(delta)
+		if NetworkManager.is_network_active():
+			_net_sync_accum += delta
+			if _net_sync_accum >= 0.05:
+				_net_sync_accum = 0.0
+				_sync_net_state_rpc.rpc(global_position, velocity, aim_angle, facing_right, is_jetpacking, is_crouching, is_dead, health, anim_frame)
 	else:
 		_apply_weapon_visuals()
 
@@ -631,16 +716,22 @@ func _process_dead(delta: float) -> void:
 
 
 func _process_alive(delta: float) -> void:
+	if time_stop_timer > 0.0:
+		velocity = Vector2.ZERO
+		is_jetpacking = false
+		_jetpack_particles.emitting = false
+		return
+	var act_delta: float = delta * (0.20 if slow_mo_timer > 0.0 else 1.0)
 	if _fire_cooldown > 0.0:
-		_fire_cooldown = maxf(0.0, _fire_cooldown - delta)
+		_fire_cooldown = maxf(0.0, _fire_cooldown - act_delta)
 	if _bomb_cooldown > 0.0:
-		_bomb_cooldown = maxf(0.0, _bomb_cooldown - delta)
+		_bomb_cooldown = maxf(0.0, _bomb_cooldown - act_delta)
 	if _bomb_throw_timer > 0.0:
-		_bomb_throw_timer = maxf(0.0, _bomb_throw_timer - delta)
+		_bomb_throw_timer = maxf(0.0, _bomb_throw_timer - act_delta)
 	if shoe_cooldown_timer > 0.0:
-		shoe_cooldown_timer = maxf(0.0, shoe_cooldown_timer - delta)
+		shoe_cooldown_timer = maxf(0.0, shoe_cooldown_timer - act_delta)
 	if _shoe_windup_timer > 0.0:
-		_shoe_windup_timer = maxf(0.0, _shoe_windup_timer - delta)
+		_shoe_windup_timer = maxf(0.0, _shoe_windup_timer - act_delta)
 		if is_instance_valid(_modular_rig):
 			var prog: float = clampf(1.0 - (_shoe_windup_timer / SHOE_WINDUP_SEC), 0.0, 1.0)
 			_modular_rig.play_shoe_throw_frame(prog, not facing_right)
@@ -656,30 +747,57 @@ func _process_alive(delta: float) -> void:
 			else:
 				_throw_item_local(DEFAULT_SHOE_ITEM_ID, safe_m, aim_angle)
 
+	if _hook_pull_timer > 0.0:
+		_hook_pull_timer = maxf(0.0, _hook_pull_timer - delta)
+		var to_hook: Vector2 = _hook_pull_target - global_position
+		if to_hook.length() <= 42.0 or _hook_pull_timer <= 0.0:
+			_hook_pull_timer = 0.0
+			velocity *= 0.35
+		else:
+			velocity = to_hook.normalized() * 1250.0
+			if is_on_floor() and velocity.y >= -40.0:
+				velocity.y = -140.0
+			move_and_slide()
+			queue_redraw()
+			return
+
 	if _is_agent_logic_active():
 		if stun_timer > 0.0:
 			stun_timer = maxf(0.0, stun_timer - delta)
 		if _grab_cooldown > 0.0:
-			_grab_cooldown = maxf(0.0, _grab_cooldown - delta)
+			_grab_cooldown = maxf(0.0, _grab_cooldown - act_delta)
 		if speed_boost_timer > 0.0:
 			speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
 			if speed_boost_timer <= 0.0:
 				speed_boost_mult = 1.0
 		_tick_agent_buffs_and_dots(delta)
-		if _hook_pull_timer > 0.0:
-			_hook_pull_timer = maxf(0.0, _hook_pull_timer - delta)
-			var to_hook: Vector2 = _hook_pull_target - global_position
-			if to_hook.length() <= 42.0 or _hook_pull_timer <= 0.0:
-				_hook_pull_timer = 0.0
-				velocity *= 0.35
-			else:
-				velocity = to_hook.normalized() * 1250.0
-				if is_on_floor() and velocity.y >= -40.0:
-					velocity.y = -140.0
-				move_and_slide()
-				queue_redraw()
-				return
+		if _contra_ult_shots_left > 0:
+			_contra_ult_shot_timer -= delta
+			if _contra_ult_shot_timer <= 0.0:
+				_contra_ult_shots_left -= 1
+				_contra_ult_shot_timer = 0.24
+				_fire_contra_ult_missile()
+		if _magnet_timer > 0.0:
+			_magnet_timer = maxf(0.0, _magnet_timer - delta)
+			if _is_controlled_locally():
+				for pk in get_tree().get_nodes_in_group("throwable_pickups"):
+					if is_instance_valid(pk) and (pk as Node2D).visible:
+						var p2 := pk as Node2D
+						var to_me: Vector2 = global_position - p2.global_position
+						var dist: float = to_me.length()
+						if dist <= 680.0 and dist > 6.0:
+							p2.global_position += (to_me / dist) * minf(dist, 560.0 * delta)
 		_agent_hud_sync_accum += delta
+		if not is_preview_dummy and NetworkManager.is_agent_clash_mode():
+			if _has_locked_ability_or_ult():
+				_ability_recharge_timer += delta
+				if _ability_recharge_timer >= 10.0:
+					_ability_recharge_timer -= 10.0
+					_grant_ability_or_ult_reward()
+					if is_local_human:
+						agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+			else:
+				_ability_recharge_timer = 0.0
 		if is_local_human and _agent_hud_sync_accum >= 0.08:
 			_agent_hud_sync_accum = 0.0
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
@@ -738,7 +856,7 @@ func _process_alive(delta: float) -> void:
 			return
 
 	if not NetworkManager.is_agent_clash_mode() and is_reloading:
-		_reload_timer -= delta
+		_reload_timer -= act_delta
 		if _reload_timer <= 0.0:
 			var res_ammo: int = get_active_reserve_ammo()
 			if _weapon.single_shell_reload:
@@ -862,6 +980,46 @@ func _process_alive(delta: float) -> void:
 
 	facing_right = cos(aim_angle) >= 0.0
 
+	if bubble_trap_timer > 0.0:
+		is_crouching = false
+		_update_crouch_collider(false)
+		is_jetpacking = false
+		var float_t: float = Time.get_ticks_msec() * 0.001
+		var target_vy: float = -72.0 + sin(float_t * 3.1 + float(peer_id)) * 34.0
+		velocity.y = move_toward(velocity.y, target_vy, 240.0 * delta)
+		var drift_vx: float = move_dir * 75.0 + cos(float_t * 2.2 + float(peer_id)) * 22.0
+		velocity.x = move_toward(velocity.x, drift_vx, 140.0 * delta)
+		var pre_vel: Vector2 = velocity
+		move_and_slide()
+		if get_slide_collision_count() > 0:
+			var col := get_slide_collision(0)
+			if col != null:
+				var n: Vector2 = col.get_normal()
+				velocity = pre_vel.bounce(n) * 0.85
+				if n.y < -0.5:
+					velocity.y = minf(velocity.y, -110.0)
+		for p in get_tree().get_nodes_in_group("players"):
+			if is_instance_valid(p) and p != self and (not p.has_method("is_alive") or p.is_alive()):
+				var diff: Vector2 = global_position - (p as Node2D).global_position
+				var dist: float = diff.length()
+				if dist < 50.0 and dist > 0.01:
+					var push_dir: Vector2 = diff / dist
+					velocity = push_dir * 340.0 + Vector2(0.0, -85.0)
+					break
+		if want_fire and _fire_cooldown <= 0.0 and not is_stunned:
+			if _is_agent_logic_active():
+				_fire_agent_base_weapon()
+			else:
+				if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
+					is_reloading = false
+					_emit_ammo()
+				if not is_reloading:
+					if current_ammo <= 0:
+						start_reload()
+					else:
+						_fire_weapon()
+		return
+
 	is_crouching = want_crouch and is_on_floor() and not want_jet and not is_stunned
 	_update_crouch_collider(is_crouching)
 
@@ -871,7 +1029,7 @@ func _process_alive(delta: float) -> void:
 	if boar_ride_timer > 0.0:
 		speed_mult *= 1.68
 	if slow_mo_timer > 0.0:
-		speed_mult *= 0.30
+		speed_mult *= 0.20
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		speed_mult *= (0.72 if bot_diff == 0 else (0.86 if bot_diff == 1 else 1.0))
@@ -895,7 +1053,7 @@ func _process_alive(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, fric * delta)
 
 	if want_jump:
-		var j_mult: float = 0.30 if slow_mo_timer > 0.0 else 1.0
+		var j_mult: float = 0.20 if slow_mo_timer > 0.0 else 1.0
 		if is_on_floor():
 			velocity.y = JUMP_VELOCITY * j_mult
 			_play_local_sfx("res://assets/audio/jump.wav", -6.0)
@@ -909,7 +1067,8 @@ func _process_alive(delta: float) -> void:
 	var has_fuel: bool = NetworkManager.unlimited_jetpack or (jetpack_fuel > 0.5)
 	if want_jet and has_fuel and not is_crouching:
 		is_jetpacking = true
-		velocity.y = maxf(velocity.y - JETPACK_THRUST * delta, JETPACK_MAX_UP_SPEED)
+		var max_up_spd: float = JETPACK_MAX_UP_SPEED * (0.35 if slow_mo_timer > 0.0 else 1.0)
+		velocity.y = maxf(velocity.y - JETPACK_THRUST * act_delta, max_up_spd)
 		if NetworkManager.unlimited_jetpack:
 			jetpack_fuel = MAX_FUEL
 		else:
@@ -1047,6 +1206,14 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 	rng.seed = rng_seed
 
 	var deal_damage: bool = _is_controlled_locally()
+	if bubble_trap_timer > 0.0:
+		if deal_damage:
+			damage_bubble(maxi(10, w.damage))
+		_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
+		_muzzle_flash.visible = w.muzzle_flash_scale > 0.05
+		_flash_timer = 0.055
+		_fire_anim_timer = 0.14
+		return
 	var spread_rad: float = deg_to_rad(w.spread_deg)
 
 	for m_pos in muzzles:
@@ -1081,6 +1248,12 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 					b.close_lethal_dist = 135.0
 			else:
 				b.max_lifetime = w.custom_lifetime
+			if w.id == 15:
+				b.boomerang_owner = self
+				b.on_hit_effect_kind = "hook_gun"
+			elif w.id == 16:
+				b.on_hit_effect_kind = "bubble_trap"
+				b.radius_scale = 1.65
 			parent_node.add_child(b)
 
 	_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
@@ -1157,8 +1330,8 @@ func apply_gun_preset(preset_idx: int) -> void:
 	primary_weapon_id = int(preset["primary"])
 	secondary_weapon_id = int(preset["secondary"])
 	_equipped_primary_id = primary_weapon_id
-	_primary_reserve_ammo = -1
-	_secondary_reserve_ammo = -1
+	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
+	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
 	bomb_type = str(preset.get("bomb_type", "frag"))
@@ -1281,7 +1454,12 @@ func get_max_zoom_level() -> int:
 
 func get_target_camera_zoom() -> float:
 	if zoom_out_timer > 0.0:
-		return 0.28
+		var bounds: Vector2 = _get_arena_bounds()
+		var vp_size: Vector2 = get_viewport_rect().size if is_inside_tree() else Vector2(1280.0, 720.0)
+		if vp_size.x > 0.0 and vp_size.y > 0.0 and bounds.x > 0.0 and bounds.y > 0.0:
+			var full_map_zoom: float = maxf(vp_size.x / bounds.x, vp_size.y / bounds.y)
+			return clampf(full_map_zoom, 0.15, 1.05)
+		return 0.58
 	if NetworkManager.is_agent_clash_mode() or is_dead or _weapon == null:
 		return 1.05
 	var lvl: int = clampi(current_zoom_level, 1, get_max_zoom_level())
@@ -1298,6 +1476,8 @@ func cycle_zoom() -> void:
 
 
 const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
+const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
+const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 var _weapons_sheet_tex: Texture2D = null
 var _weapons_base_scale: Vector2 = Vector2.ONE
 
@@ -1332,6 +1512,22 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.scale = _weapons_base_scale * 0.52
 		_secondary_weapon.visible = false
 		return
+	if current_weapon_id == 15:
+		_primary_weapon.texture = TEX_HOOK_GUN
+		_primary_weapon.hframes = 1
+		_primary_weapon.vframes = 1
+		_primary_weapon.frame = 0
+		_primary_weapon.scale = _weapons_base_scale * 0.56
+		_secondary_weapon.visible = false
+		return
+	if current_weapon_id == 16:
+		_primary_weapon.texture = TEX_BUBBLE_GUN
+		_primary_weapon.hframes = 1
+		_primary_weapon.vframes = 1
+		_primary_weapon.frame = 0
+		_primary_weapon.scale = _weapons_base_scale * 0.56
+		_secondary_weapon.visible = false
+		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
 		_primary_weapon.texture = _weapons_sheet_tex
 		_primary_weapon.hframes = 11
@@ -1352,6 +1548,8 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 		return
 	if pickup_type == "health":
 		health = mini(max_health, health + value)
+		if health >= max_health:
+			_damage_by_attacker.clear()
 		if is_local_human:
 			health_changed.emit(health, max_health)
 	elif pickup_type == "throwable":
@@ -1365,28 +1563,29 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 		if not NetworkManager.is_agent_clash_mode():
 			var new_w_id: int = WeaponData.sanitize_weapon_id(value)
 			var picked_w: WeaponData = WeaponData.get_weapon(new_w_id, weapon_skin_id, m4a1_rail_mod)
+			var pickup_res: int = 3 if (new_w_id == 10 or new_w_id == 12) else picked_w.mag_size
 			if new_w_id == _equipped_primary_id and _primary_reserve_ammo >= 0:
 				_primary_saved_ammo = picked_w.mag_size
-				_primary_reserve_ammo = picked_w.mag_size
+				_primary_reserve_ammo = pickup_res
 				if not _is_using_secondary_slot():
 					current_ammo = picked_w.mag_size
 					is_reloading = false
 					_emit_ammo()
 			elif new_w_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id and _secondary_reserve_ammo >= 0:
 				_secondary_saved_ammo = picked_w.mag_size
-				_secondary_reserve_ammo = picked_w.mag_size
+				_secondary_reserve_ammo = pickup_res
 				if _is_using_secondary_slot():
 					current_ammo = picked_w.mag_size
 					is_reloading = false
 					_emit_ammo()
 			elif _is_using_secondary_slot():
 				secondary_weapon_id = new_w_id
-				_secondary_reserve_ammo = picked_w.mag_size
+				_secondary_reserve_ammo = pickup_res
 				_secondary_saved_ammo = picked_w.mag_size
 				set_weapon(secondary_weapon_id)
 			else:
 				_equipped_primary_id = new_w_id
-				_primary_reserve_ammo = picked_w.mag_size
+				_primary_reserve_ammo = pickup_res
 				_primary_saved_ammo = picked_w.mag_size
 				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
@@ -1444,13 +1643,27 @@ func throw_held_prop() -> void:
 		return
 	var kind: String = held_prop_kind
 	set_held_prop("")
+	var aim_dir: Vector2 = Vector2.from_angle(aim_angle)
+	var spawn_pos: Vector2 = global_position + aim_dir * 26.0 + Vector2(0, -8.0)
+	var vel: Vector2 = aim_dir.normalized() * 760.0 + Vector2(0, -120.0)
+	if NetworkManager.is_network_active():
+		throw_held_prop_rpc.rpc(kind, spawn_pos, vel)
+	else:
+		_throw_held_prop_local(kind, spawn_pos, vel)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func throw_held_prop_rpc(kind: String, spawn_pos: Vector2, vel: Vector2) -> void:
+	_throw_held_prop_local(kind, spawn_pos, vel)
+
+
+func _throw_held_prop_local(kind: String, spawn_pos: Vector2, vel: Vector2) -> void:
 	var parent_node: Node = get_parent()
 	if parent_node == null:
 		return
-	var aim_dir: Vector2 = Vector2.from_angle(aim_angle)
 	var b := BULLET_SCENE.instantiate()
-	b.global_position = global_position + aim_dir * 26.0 + Vector2(0, -8.0)
-	b.velocity = aim_dir.normalized() * 760.0 + Vector2(0, -120.0)
+	b.global_position = spawn_pos
+	b.velocity = vel
 	b.damage = 38
 	b.shooter_peer_id = peer_id
 	b.shooter_team = team_id
@@ -1461,8 +1674,8 @@ func throw_held_prop() -> void:
 	b.visual_style = "prop_" + kind
 	if kind == "barrel":
 		b.is_explosive = true
-		b.explosion_radius = 140.0
-		b.damage = 65
+		b.explosion_radius = 150.0
+		b.damage = 120
 		b.bullet_color = Color(1.0, 0.45, 0.14)
 	b.spin_speed = 9.5
 	b.gravity_mult = 0.58
@@ -1495,7 +1708,7 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 	if is_dead or spawn_invuln_timer > 0.0:
 		return
 	if _is_agent_logic_active():
-		if attacker_id == peer_id:
+		if attacker_id == peer_id and weapon_name != "Explosive Barrel":
 			return
 		if invincible_timer > 0.0 or deathless_timer > 0.0 or (invis_timer > 0.0 and str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Soulless"):
 			return
@@ -1553,6 +1766,12 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	invincible_timer = 0.0
 	damage_reduction_timer = 0.0
 	slow_mo_timer = 0.0
+	time_stop_timer = 0.0
+	touch_teleport_timer = 0.0
+	touch_fire_timer = 0.0
+	touch_banish_timer = 0.0
+	bubble_trap_timer = 0.0
+	bubble_trap_hp = 0
 	deathless_timer = 0.0
 	zoom_out_timer = 0.0
 	gradual_heal_timer = 0.0
@@ -1569,6 +1788,9 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	poison_dot_timer = 0.0
 	cryo_shatter_timer = 0.0
 	_fly_kick_timer = 0.0
+	_contra_ult_shots_left = 0
+	_contra_ult_shot_timer = 0.0
+	_magnet_timer = 0.0
 	_flurry_state = 0
 	_flurry_timer = 0.0
 	_flurry_target = null
@@ -1599,10 +1821,12 @@ func announce_death_rpc() -> void:
 
 func _on_death_visuals() -> void:
 	is_dead = true
+	health = 0
 	_weapon_pivot.visible = false
 	if is_instance_valid(_modular_rig):
 		_modular_rig.stop_shoe_throw()
 	_jetpack_particles.emitting = false
+	_update_overhead_ui()
 	var parent_node: Node = get_parent()
 	if parent_node != null:
 		var exp := EXPLOSION_SCENE.instantiate()
@@ -1625,15 +1849,25 @@ func _respawn_self() -> void:
 		else:
 			var best_sp: Vector2 = _spawn_points[0]
 			var best_d: float = -1.0
+			var space := get_world_2d().direct_space_state
 			for sp in _spawn_points:
-				var min_d: float = 1e9
-				for op in others:
-					var d: float = sp.distance_to(op)
-					if d < min_d:
-						min_d = d
-				if min_d > best_d:
-					best_d = min_d
-					best_sp = sp
+				for off_x in [0.0, 140.0, -140.0, 280.0, -280.0]:
+					var cand: Vector2 = sp + Vector2(off_x, 0.0)
+					if absf(off_x) > 1.0:
+						var wall_hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, cand + Vector2(signf(off_x) * 24.0, 0.0), 1))
+						if not wall_hit.is_empty():
+							continue
+						var floor_hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(cand, cand + Vector2(0.0, 64.0), 1))
+						if floor_hit.is_empty():
+							continue
+					var min_d: float = 1e9
+					for op in others:
+						var d: float = cand.distance_to(op)
+						if d < min_d:
+							min_d = d
+					if min_d > best_d:
+						best_d = min_d
+						best_sp = cand
 			spawn_pos = best_sp
 	global_position = spawn_pos
 	velocity = Vector2.ZERO
@@ -1653,6 +1887,12 @@ func _respawn_self() -> void:
 	invincible_timer = 0.0
 	damage_reduction_timer = 0.0
 	slow_mo_timer = 0.0
+	time_stop_timer = 0.0
+	touch_teleport_timer = 0.0
+	touch_fire_timer = 0.0
+	touch_banish_timer = 0.0
+	bubble_trap_timer = 0.0
+	bubble_trap_hp = 0
 	deathless_timer = 0.0
 	zoom_out_timer = 0.0
 	gradual_heal_timer = 0.0
@@ -1673,6 +1913,9 @@ func _respawn_self() -> void:
 	shoe_cooldown_timer = 0.0
 	_shoe_windup_timer = 0.0
 	_fly_kick_timer = 0.0
+	_contra_ult_shots_left = 0
+	_contra_ult_shot_timer = 0.0
+	_magnet_timer = 0.0
 	_flurry_state = 0
 	_flurry_timer = 0.0
 	_flurry_target = null
@@ -1683,8 +1926,8 @@ func _respawn_self() -> void:
 	else:
 		ability_cooldowns[3] = 0.0 if ult_points >= 4 else 1.0
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
-	_primary_reserve_ammo = -1
-	_secondary_reserve_ammo = -1
+	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
+	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
 	current_ammo = _weapon.mag_size
@@ -1708,8 +1951,27 @@ func announce_respawn_rpc(spawn_pos: Vector2) -> void:
 
 func _on_respawn_visuals() -> void:
 	is_dead = false
+	velocity = Vector2.ZERO
+	health = max_health
 	_weapon_pivot.visible = true
 	_apply_weapon_visuals()
+	_update_overhead_ui()
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _sync_net_state_rpc(pos: Vector2, vel: Vector2, ang: float, f_right: bool, jet: bool, crouch: bool, dead: bool, hp: int, frame_idx: int) -> void:
+	if _is_controlled_locally():
+		return
+	global_position = pos
+	velocity = vel
+	aim_angle = ang
+	facing_right = f_right
+	is_jetpacking = jet
+	is_crouching = crouch
+	is_dead = dead
+	health = hp
+	anim_frame = frame_idx
+	_weapon_pivot.visible = not is_dead
 
 
 func _update_visual_state(delta: float) -> void:
@@ -1721,7 +1983,8 @@ func _update_visual_state(delta: float) -> void:
 		elif is_crouching or _fire_anim_timer > 0.0:
 			anim_frame = 6
 		elif absf(velocity.x) > 25.0:
-			_anim_timer += delta * clampf(absf(velocity.x) / 170.0, 0.8, 2.0)
+			var anim_slow: float = 0.20 if slow_mo_timer > 0.0 else 1.0
+			_anim_timer += delta * anim_slow * clampf(absf(velocity.x) / 170.0, 0.8, 2.0)
 			var run_frames: Array[int] = [2, 3, 4, 3]
 			anim_frame = run_frames[int(_anim_timer * 7.0) % run_frames.size()]
 		else:
@@ -1860,6 +2123,22 @@ func _update_overhead_ui() -> void:
 	elif ag_active and stun_timer > 0.0:
 		_name_label.text = "STUNNED %.1fs" % stun_timer
 		_name_label.modulate = Color(0.45, 0.95, 1.0)
+	elif ag_active and time_stop_timer > 0.0:
+		_name_label.visible = true
+		_name_label.text = "TIME FROZEN %.1fs" % time_stop_timer
+		_name_label.modulate = Color(0.32, 0.78, 1.0)
+	elif ag_active and touch_teleport_timer > 0.0 and is_local_human:
+		_name_label.visible = true
+		_name_label.text = "TAP TO TELEPORT %.1fs" % touch_teleport_timer
+		_name_label.modulate = Color(0.32, 0.86, 1.0)
+	elif ag_active and touch_fire_timer > 0.0 and is_local_human:
+		_name_label.visible = true
+		_name_label.text = "TAP ENEMY TO BURN %.1fs" % touch_fire_timer
+		_name_label.modulate = Color(1.0, 0.45, 0.16)
+	elif ag_active and touch_banish_timer > 0.0:
+		_name_label.visible = true
+		_name_label.text = ("TAP ENEMY TO TELEPORT %.1fs" % touch_banish_timer) if is_local_human else ("BANISH TARGETING %.1fs" % touch_banish_timer)
+		_name_label.modulate = Color(0.84, 0.52, 1.0)
 	elif ag_active and ability_lock_timer > 0.0:
 		_name_label.text = "SUPPRESSED %.1fs" % ability_lock_timer
 		_name_label.modulate = Color(0.86, 0.42, 1.0)
@@ -2092,6 +2371,9 @@ func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
 	if is_dead or invincible_timer > 0.0 or deathless_timer > 0.0 or (attacker_id != 0 and attacker_id == peer_id):
 		return
 	_fly_kick_timer = 0.0
+	_contra_ult_shots_left = 0
+	_contra_ult_shot_timer = 0.0
+	_magnet_timer = 0.0
 	_flurry_state = 0
 	_flurry_timer = 0.0
 	_flurry_target = null
@@ -2123,8 +2405,6 @@ func _fire_agent_base_weapon() -> void:
 	var cd: float = float(bw["cooldown"])
 	if speed_boost_timer > 0.0:
 		cd *= 0.72
-	if slow_mo_timer > 0.0:
-		cd *= 2.4
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		cd *= (1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0))
@@ -2220,8 +2500,29 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, 1, local_auth, p_style)
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -4.0, 1.15)
 		"flame_wave":
-			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, int(ab.get("shots", 3)), local_auth, "fireball")
-			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.3)
+			var fw_rng := RandomNumberGenerator.new()
+			fw_rng.seed = hash(str(peer_id) + "_" + str(int(cast_pos.x)) + "_" + str(int(cast_pos.y)))
+			var shot_cnt: int = int(ab.get("shots", 3))
+			var blast_rad: float = 115.0
+			for _fi in range(shot_cnt):
+				var pos_ang: float = fw_rng.randf_range(0.0, TAU)
+				var pos_dist: float = fw_rng.randf_range(52.0, 135.0)
+				var spawn_p: Vector2 = cast_pos + Vector2.from_angle(pos_ang) * pos_dist
+				_spawn_vfx_burst(spawn_p, blast_rad, col)
+				_spawn_rising_particles(spawn_p, col, false, 6)
+				if local_auth:
+					for p in get_tree().get_nodes_in_group("players"):
+						if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+							if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+								continue
+							if p.has_method("is_alive") and not p.is_alive():
+								continue
+							if (p as Node2D).global_position.distance_to(spawn_p) <= blast_rad and p.has_method("apply_hit"):
+								var kb: Vector2 = ((p as Node2D).global_position - spawn_p).normalized() * 240.0
+								p.apply_hit(dmg, peer_id, ab_name, player_name, kb)
+								gain_ult_charge(2.0)
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.15)
 		"lava_bomb":
 			_cast_lava_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth, str(ab.get("proj_style", "fireball")))
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 0.95)
@@ -2256,6 +2557,8 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			speed_boost_mult = float(ab.get("speed_mult", 1.8))
 			if local_auth:
 				health = mini(max_health, health + 15)
+				if health >= max_health:
+					_damage_by_attacker.clear()
 				if is_local_human:
 					health_changed.emit(health, max_health)
 			_spawn_vfx_burst(cast_pos, 65.0, col)
@@ -2323,13 +2626,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				ig.radius_scale = 1.25
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.15)
 		"ult_homing_bazooka":
-			var bz := _spawn_custom_bullet(origin, cast_angle, 820.0, dmg, "fireball", col, ab_name, 0.0, 0.0, true, 4.0, local_auth)
-			if bz != null:
-				bz.is_explosive = true
-				bz.explosion_radius = 165.0
-				bz.homing_turn_rate = 9.0
-			add_screen_shake(2.5)
-			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -1.0, 0.85)
+			_contra_ult_dmg = dmg
+			_contra_ult_col = col
+			_contra_ult_name = ab_name
+			_contra_ult_local = local_auth
+			_contra_ult_shots_left = 2
+			_contra_ult_shot_timer = 0.24
+			_fire_contra_ult_missile()
 		"hook_drag":
 			var hk := _spawn_custom_bullet(origin, cast_angle, 1240.0, dmg, "grapple_hook", col, ab_name, 0.2, 0.0, false, 0.45, local_auth)
 			if hk != null:
@@ -2387,10 +2690,10 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_vfx_burst(cast_pos, 270.0, col)
 			add_screen_shake(2.8)
 			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
-		"push_circle", "scream_wave":
-			var rad: float = 320.0 if kind == "push_circle" else 240.0
-			var push_force: float = 1480.0 if kind == "push_circle" else 920.0
-			var lift_force: float = -420.0 if kind == "push_circle" else -240.0
+		"push_circle":
+			var rad: float = 320.0
+			var push_force: float = 1480.0
+			var lift_force: float = -420.0
 			if local_auth:
 				for p in get_tree().get_nodes_in_group("players"):
 					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
@@ -2405,6 +2708,23 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 								p.apply_stun(stun_dur, peer_id)
 			_spawn_air_wave_circle(cast_pos, rad, Color(0.55, 0.90, 1.0))
 			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.35)
+		"scream_wave":
+			var sw_rad: float = 340.0
+			var sw_half_cone: float = deg_to_rad(48.0)
+			if local_auth:
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+							continue
+						var diff_v: Vector2 = (p as Node2D).global_position - cast_pos
+						if diff_v.length() <= sw_rad and absf(wrapf(diff_v.angle() - cast_angle, -PI, PI)) <= sw_half_cone and p.has_method("apply_hit"):
+							var push_d: Vector2 = Vector2.from_angle(cast_angle)
+							p.apply_hit(dmg, peer_id, ab_name, player_name, push_d * 1380.0 + Vector2(0.0, -340.0))
+							if stun_dur > 0.0 and p.has_method("apply_stun"):
+								p.apply_stun(stun_dur, peer_id)
+			_spawn_scream_wave_vfx(cast_pos, cast_angle, sw_rad, col)
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.35)
 		"ability_lock_smoke":
 			var sm := _spawn_custom_bullet(origin, cast_angle, 860.0, dmg, "smoke_orb", col, ab_name, 0.0, 0.0, false, 1.3, local_auth)
 			if sm != null:
@@ -2443,13 +2763,21 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_hazard_zone(kind, cast_pos, float(ab.get("duration", 5.0)), 145.0, dmg, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.3)
 		"ult_cryo_shatter":
-			var tgt_cs: Node2D = _find_nearest_enemy_player(cast_pos, 420.0)
-			if tgt_cs != null:
-				if local_auth:
-					if tgt_cs.has_method("apply_status"):
-						tgt_cs.apply_status("freeze", 3.0)
-						tgt_cs.apply_status("cryo_shatter", 3.0, float(peer_id))
-				_spawn_rising_particles(tgt_cs.global_position, Color(0.45, 0.90, 1.0), false, 12)
+			var cs_rad: float = 420.0
+			_spawn_vfx_burst(cast_pos, cs_rad, Color(0.25, 0.76, 1.0, 0.65))
+			_spawn_air_wave_circle(cast_pos, cs_rad, Color(0.45, 0.92, 1.0))
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or p == self:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+					continue
+				if (p as Node2D).global_position.distance_to(cast_pos) <= cs_rad:
+					if local_auth and p.has_method("apply_status"):
+						p.apply_status("freeze", 3.0)
+						p.apply_status("cryo_shatter", 3.0, float(peer_id))
+					_spawn_rising_particles((p as Node2D).global_position, Color(0.45, 0.90, 1.0), false, 12)
 			add_screen_shake(1.8)
 			_play_local_sfx("res://assets/audio/shoot_vector.wav", -1.0, 0.85)
 		"boar_ride":
@@ -2550,14 +2878,45 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_fly_kick_hit_ids.clear()
 			control_lock_timer = 0.36
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 1.25)
-		"spinning_blade", "slow_spin_axe":
-			var b_spd: float = 135.0 if kind == "spinning_blade" else 220.0
-			var b_scale: float = 4.6 if kind == "spinning_blade" else 2.2
-			var sb := _spawn_custom_bullet(origin, cast_angle, b_spd, dmg, "big_blade" if kind == "spinning_blade" else "thrown_axe", col, ab_name, 0.0, 0.0, false, float(ab.get("duration", 4.0)), local_auth)
+		"spinning_blade":
+			var sb := _spawn_custom_bullet(origin, cast_angle, 135.0, dmg, "big_blade", col, ab_name, 0.0, 0.0, false, float(ab.get("duration", 4.0)), local_auth)
 			if sb != null:
 				sb.spin_speed = 18.0
-				sb.radius_scale = b_scale
+				sb.radius_scale = 4.6
 			_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.9)
+		"slow_spin_axe":
+			var fwd_x: float = 1.0 if cos(cast_angle) >= 0.0 else -1.0
+			var tgt_fg: Node2D = null
+			var best_fg_sq: float = 520.0 * 520.0
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or p == self:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+					continue
+				var dx: float = (p as Node2D).global_position.x - cast_pos.x
+				if dx * fwd_x <= 0.0:
+					continue
+				var d_sq: float = cast_pos.distance_squared_to((p as Node2D).global_position)
+				if d_sq < best_fg_sq:
+					best_fg_sq = d_sq
+					tgt_fg = p as Node2D
+			var target_base: Vector2 = tgt_fg.global_position if tgt_fg != null else (cast_pos + Vector2(fwd_x * 220.0, 0.0))
+			var drop_pos: Vector2 = target_base + Vector2(0.0, -140.0)
+			var space_state_fg: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+			var up_ray := PhysicsRayQueryParameters2D.create(target_base + Vector2(0.0, -16.0), drop_pos + Vector2(0.0, -24.0), 1)
+			up_ray.collide_with_areas = false
+			up_ray.collide_with_bodies = true
+			var up_hit: Dictionary = space_state_fg.intersect_ray(up_ray)
+			if not up_hit.is_empty():
+				drop_pos.y = maxf(drop_pos.y, up_hit["position"].y + 28.0)
+			drop_pos.y = maxf(76.0, drop_pos.y)
+			var fg := _spawn_custom_bullet(drop_pos, PI * 0.5, 0.0, 100, "heavy_forge", col, ab_name, 0.0, 0.45, false, 2.5, local_auth)
+			if fg != null:
+				fg.radius_scale = 2.0
+				fg.knockback_mult = 2.5
+			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.75)
 		"ult_jump_execute":
 			control_lock_timer = 0.95
 			var fwd_dir: Vector2 = Vector2.from_angle(cast_angle)
@@ -2654,6 +3013,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			freeze_timer = 0.0
 			ability_lock_timer = 0.0
 			slow_mo_timer = 0.0
+			time_stop_timer = 0.0
 			control_lock_timer = 0.0
 			_spawn_vfx_burst(cast_pos, 95.0, col)
 			add_screen_shake(2.0)
@@ -2676,17 +3036,21 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_summon("bomb_eagle", cast_pos + Vector2(0, -40), dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.1)
 		"fiery_hand_beam":
-			_cast_beam_attack(origin, cast_angle, 560.0, 26.0, dmg, col, ab_name, 0.55, local_auth)
-			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.2)
+			var fh := _spawn_custom_bullet(origin, cast_angle, 290.0, dmg, "fiery_hand", col, ab_name, 0.35, 0.0, false, float(ab.get("duration", 2.8)), local_auth)
+			if fh != null:
+				fh.radius_scale = 2.4
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.0)
 		"ult_time_slow":
+			var tf_dur: float = float(ab.get("duration", 5.0))
+			var tf_radius: float = 460.0
 			if local_auth:
 				for p in get_tree().get_nodes_in_group("players"):
 					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
 						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
 							continue
-						if (p as Node2D).global_position.distance_to(cast_pos) <= 440.0 and p.has_method("apply_status"):
-							p.apply_status("slow_mo", float(ab.get("duration", 4.0)))
-			_spawn_vfx_burst(cast_pos, 440.0, col)
+						if (p as Node2D).global_position.distance_to(cast_pos) <= tf_radius and p.has_method("apply_status"):
+							p.apply_status("time_stop", tf_dur)
+			_spawn_time_freeze_wave(cast_pos, tf_radius)
 			add_screen_shake(1.8)
 			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 0.55)
 		"invincible_self":
@@ -2694,13 +3058,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_rising_particles(cast_pos, Color(0.45, 0.88, 1.0), false, 10)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.15)
 		"touch_teleport":
-			var tp_pos: Vector2 = last_world_tap_pos if ((not is_bot or is_preview_dummy) and has_world_tap) else (cast_pos + Vector2.from_angle(cast_angle) * 260.0)
-			tp_pos = Vector2(clampf(tp_pos.x, 80.0, 2200.0), clampf(tp_pos.y, 80.0, 1180.0))
-			_spawn_rising_particles(cast_pos, Color(0.42, 0.85, 1.0), false, 8)
-			global_position = tp_pos
-			velocity = Vector2.ZERO
-			_spawn_rising_particles(tp_pos, Color(0.42, 0.85, 1.0), false, 10)
-			_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 1.45)
+			if is_bot or is_preview_dummy:
+				var tp_pos: Vector2 = last_world_tap_pos if (is_preview_dummy and has_world_tap) else (cast_pos + Vector2.from_angle(cast_angle) * 260.0)
+				_execute_touch_teleport_local(_clamp_to_arena(tp_pos))
+			else:
+				touch_teleport_timer = float(ab.get("duration", 3.0))
+				_spawn_air_wave_circle(cast_pos, 64.0, Color(0.28, 0.78, 1.0))
+				_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 1.25)
 		"ult_soul_drag":
 			var tgt_sd: Node2D = _find_nearest_enemy_player(cast_pos, 340.0)
 			if tgt_sd != null:
@@ -2740,14 +3104,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_summon("shadow_mummy", sm_pos, dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.75)
 		"throwable_magnet":
+			_magnet_timer = float(ab.get("duration", 5.0))
 			if local_auth:
-				var scene_root: Node = get_tree().current_scene if get_tree().current_scene != null else get_parent()
-				if scene_root != null:
-					var pickups := scene_root.find_children("*", "Area2D", true, false)
-					for pk in pickups:
-						if is_instance_valid(pk) and (pk as Node2D).global_position.distance_to(cast_pos) <= 520.0:
-							if pk.has_method("_on_crate_body_entered") or "item_id" in pk:
-								(pk as Node2D).global_position = (pk as Node2D).global_position.lerp(cast_pos, 0.75)
+				for pk in get_tree().get_nodes_in_group("throwable_pickups"):
+					if is_instance_valid(pk) and (pk as Node2D).visible:
+						var p2 := pk as Node2D
+						if p2.global_position.distance_to(cast_pos) <= 680.0:
+							p2.global_position = p2.global_position.lerp(cast_pos, 0.45)
 			var mag_col := Color(0.28, 0.80, 1.0)
 			var parent_mag: Node = get_parent()
 			if parent_mag != null:
@@ -2804,8 +3167,14 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_cast_fireballs(origin, cast_angle, dmg, 0.0, col, ab_name, 2, local_auth, "fireball")
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 0.95)
 		"dragon_laser":
-			_cast_beam_attack(origin, cast_angle, 580.0, 34.0, dmg * 2, col, ab_name, float(ab.get("duration", 2.0)), local_auth)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.1)
+			if is_bot or is_preview_dummy:
+				var tgt_fire: Node2D = _find_nearest_enemy_player(cast_pos, 750.0)
+				if tgt_fire != null:
+					_execute_touch_fire_local(int(tgt_fire.get("peer_id")))
+			else:
+				touch_fire_timer = float(ab.get("duration", 3.0))
+				_spawn_air_wave_circle(cast_pos, 64.0, Color(1.0, 0.42, 0.14))
+				_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 1.25)
 		"ult_dragon_strike":
 			control_lock_timer = 1.2
 			var tgt_ds: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
@@ -2822,27 +3191,31 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			add_screen_shake(2.6)
 			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
 		"banish_enemy":
-			var tgt_bn: Node2D = _find_nearest_enemy_player(cast_pos, 380.0)
-			if tgt_bn != null:
-				var rx: float = 350.0 if cast_pos.x > 1100.0 else 1850.0
-				tgt_bn.global_position = Vector2(rx, 460.0)
-				_spawn_vfx_burst(tgt_bn.global_position, 80.0, col)
-			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.8)
+			if is_bot or is_preview_dummy:
+				var tgt_bn: Node2D = _find_nearest_enemy_player(cast_pos, 650.0)
+				if tgt_bn != null:
+					var dest_b: Vector2 = _pick_random_banish_pos(tgt_bn.global_position)
+					_execute_touch_banish_local(int(tgt_bn.get("peer_id")), dest_b)
+			else:
+				touch_banish_timer = float(ab.get("duration", 3.0))
+				_spawn_air_wave_circle(cast_pos, 68.0, Color(0.78, 0.45, 1.0))
+				_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.8)
 		"swap_enemy":
 			var tgt_sw: Node2D = _find_nearest_enemy_player(cast_pos, 420.0)
 			if tgt_sw != null and absf(tgt_sw.global_position.y - cast_pos.y) <= 110.0:
 				var tmp_p: Vector2 = global_position
 				global_position = tgt_sw.global_position
 				tgt_sw.global_position = tmp_p
-				_spawn_vfx_burst(global_position, 70.0, col)
-				_spawn_vfx_burst(tgt_sw.global_position, 70.0, col)
+				_spawn_rising_particles(global_position, Color(0.30, 0.82, 1.0), false, 14)
+				_spawn_rising_particles(tgt_sw.global_position, Color(0.30, 0.82, 1.0), false, 14)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.25)
 		"ult_mirror_clone":
-			var tgt_mc: Node2D = _find_nearest_enemy_player(cast_pos, 520.0)
-			var mc := _spawn_summon("mirror_clone", (tgt_mc.global_position + Vector2(46, 0)) if tgt_mc != null else origin, 0, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
-			if mc != null:
-				mc.linked_target = tgt_mc
-			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.0)
+			var t_fwd: float = 1.0 if cos(cast_angle) >= 0.0 else -1.0
+			var tor := _spawn_summon("tornado", cast_pos + Vector2(t_fwd * 44.0, -24.0), 100, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
+			if tor != null:
+				tor.move_dir_x = t_fwd
+			add_screen_shake(2.0)
+			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.8)
 		"lava_platform":
 			var lp := _spawn_custom_bullet(origin, cast_angle, 880.0, dmg, "fireball", col, ab_name, 0.0, 18.0, false, 1.4, local_auth)
 			if lp != null:
@@ -2850,23 +3223,24 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				lp.status_effect_dur = float(ab.get("duration", 6.0))
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 1.0)
 		"rolling_fireball":
-			var rf := _spawn_custom_bullet(origin, cast_angle, 620.0, dmg, "fireball", col, ab_name, 0.0, 28.0, false, 2.2, local_auth)
+			var rf := _spawn_custom_bullet(origin, cast_angle, 620.0, dmg, "fireball", col, ab_name, 0.0, 220.0, false, 5.0, local_auth)
 			if rf != null:
 				rf.radius_scale = 2.0
-				rf.wall_bounces_left = 4
+				rf.wall_bounces_left = 5
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 0.8)
 		"ult_inferno_ring":
-			var tgt_ir: Node2D = _find_nearest_enemy_player(cast_pos, 720.0)
-			var ir_pos: Vector2 = tgt_ir.global_position if tgt_ir != null else (cast_pos + Vector2.from_angle(cast_angle) * 180.0)
-			_spawn_hazard_zone("inferno_ring", ir_pos, float(ab.get("duration", 2.0)), 165.0, dmg, ab_name, local_auth)
+			var ir_hz := _spawn_hazard_zone("inferno_ring", cast_pos, float(ab.get("duration", 5.0)), 165.0, dmg, ab_name, local_auth)
+			if ir_hz != null:
+				ir_hz.set("follow_target", self)
 			add_screen_shake(2.4)
 			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
 		"meteor_boulder":
 			var mb := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "thrown_stone", col, ab_name, 0.6, 0.95, false, 5.0, local_auth)
 			if mb != null:
-				mb.radius_scale = 8.4
-				mb.wall_bounces_left = 1
-				mb.stop_on_vertical_wall = true
+				mb.radius_scale = 5.0
+				mb.wall_bounces_left = 999
+				mb.stop_on_vertical_wall = false
+				mb.pierce_players = true
 				mb.spin_speed = 8.0
 			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.85)
 		"piercing_crystal":
@@ -3004,6 +3378,68 @@ func start_hook_pull(target_pos: Vector2) -> void:
 	queue_redraw()
 
 
+func request_hook_pull(target_pos: Vector2) -> void:
+	if is_dead or spawn_invuln_timer > 0.0:
+		return
+	if NetworkManager.is_network_active():
+		sync_hook_pull_rpc.rpc(target_pos)
+	else:
+		start_hook_pull(target_pos)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_hook_pull_rpc(target_pos: Vector2) -> void:
+	start_hook_pull(target_pos)
+
+
+func apply_bubble_trap(dur: float = 10.0, hp: int = 60) -> void:
+	if is_dead or spawn_invuln_timer > 0.0:
+		return
+	if NetworkManager.is_network_active():
+		sync_bubble_trap_rpc.rpc(dur, hp)
+	else:
+		_apply_bubble_trap_local(dur, hp)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_bubble_trap_rpc(dur: float, hp: int) -> void:
+	_apply_bubble_trap_local(dur, hp)
+
+
+func _apply_bubble_trap_local(dur: float, hp: int) -> void:
+	if is_dead:
+		return
+	bubble_trap_timer = dur
+	bubble_trap_hp = hp
+	velocity = Vector2(randf_range(-45.0, 45.0), -135.0)
+	queue_redraw()
+
+
+func damage_bubble(dmg: int) -> void:
+	if bubble_trap_timer <= 0.0:
+		return
+	if NetworkManager.is_network_active():
+		sync_damage_bubble_rpc.rpc(dmg)
+	else:
+		_damage_bubble_local(dmg)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func sync_damage_bubble_rpc(dmg: int) -> void:
+	_damage_bubble_local(dmg)
+
+
+func _damage_bubble_local(dmg: int) -> void:
+	if bubble_trap_timer <= 0.0:
+		return
+	bubble_trap_hp -= dmg
+	if bubble_trap_hp <= 0:
+		bubble_trap_timer = 0.0
+		bubble_trap_hp = 0
+		_play_local_sfx("res://assets/audio/hit.wav", -4.0)
+	queue_redraw()
+
+
 func apply_status(effect_name: String, dur: float, _extra: float = 0.0) -> void:
 	if is_dead or spawn_invuln_timer > 0.0:
 		return
@@ -3030,6 +3466,10 @@ func _apply_status_local(effect_name: String, dur: float, _extra: float = 0.0) -
 			flashbang_timer = maxf(flashbang_timer, dur)
 		"slow_mo":
 			slow_mo_timer = maxf(slow_mo_timer, dur)
+		"time_stop":
+			time_stop_timer = maxf(time_stop_timer, dur)
+			velocity = Vector2.ZERO
+			is_jetpacking = false
 		"slippery":
 			slippery_timer = maxf(slippery_timer, dur)
 		"earth_shake":
@@ -3059,6 +3499,8 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if _gradual_heal_accum >= 0.2:
 			_gradual_heal_accum = 0.0
 			health = mini(max_health, health + 5)
+			if health >= max_health:
+				_damage_by_attacker.clear()
 			_spawn_rising_particles(global_position, Color(0.28, 0.98, 0.48), true, 3)
 			if is_local_human:
 				health_changed.emit(health, max_health)
@@ -3222,6 +3664,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 							gain_ult_charge(2.0)
 		if _shadow_dash_timer <= 0.0:
 			velocity *= 0.25
+		queue_redraw()
 	if _fly_kick_timer > 0.0:
 		_fly_kick_timer = maxf(0.0, _fly_kick_timer - delta)
 		var close_home: bool = false
@@ -3414,6 +3857,35 @@ func _clamp_to_arena(pos: Vector2) -> Vector2:
 	return Vector2(clampf(pos.x, 64.0, bounds.x - 64.0), clampf(pos.y, 64.0, bounds.y - 64.0))
 
 
+func _fire_contra_ult_missile() -> void:
+	if is_dead:
+		return
+	var launch_angle: float = aim_angle
+	var best_dist_sq: float = 950.0 * 950.0
+	var best_pos: Vector2 = Vector2.INF
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		var d_sq: float = global_position.distance_squared_to((p as Node2D).global_position)
+		if d_sq < best_dist_sq:
+			best_dist_sq = d_sq
+			best_pos = (p as Node2D).global_position
+	if best_pos != Vector2.INF:
+		launch_angle = (best_pos - global_position).angle()
+	var origin: Vector2 = global_position + Vector2.from_angle(launch_angle) * 26.0
+	var bz := _spawn_custom_bullet(origin, launch_angle, 820.0, _contra_ult_dmg, "homing_rocket", _contra_ult_col, _contra_ult_name, 0.0, 0.0, true, 4.0, _contra_ult_local)
+	if bz != null:
+		bz.is_explosive = true
+		bz.explosion_radius = 165.0
+		bz.homing_turn_rate = 9.0
+	add_screen_shake(2.2)
+	_play_local_sfx("res://assets/audio/shoot_rpg.wav", -1.0, 0.85)
+
+
 func _spawn_custom_bullet(origin: Vector2, angle: float, spd: float, dmg: int, style: String, col: Color, w_name: String, stun_dur: float, grav: float, homing: bool, life: float, local_auth: bool) -> Node:
 	var parent_node: Node = get_parent()
 	if parent_node == null:
@@ -3459,10 +3931,10 @@ func _spawn_summon(kind: String, pos: Vector2, dmg: int, dur: float, _col: Color
 	return s
 
 
-func _spawn_hazard_zone(kind: String, pos: Vector2, dur: float, rad: float, dps_val: int, w_name: String, local_auth: bool) -> void:
+func _spawn_hazard_zone(kind: String, pos: Vector2, dur: float, rad: float, dps_val: int, w_name: String, local_auth: bool) -> Node2D:
 	var parent_node: Node = get_parent()
 	if parent_node == null:
-		return
+		return null
 	var hz := Node2D.new()
 	hz.set_script(load("res://scripts/PlatformHazardZone.gd"))
 	hz.zone_kind = kind
@@ -3476,6 +3948,7 @@ func _spawn_hazard_zone(kind: String, pos: Vector2, dur: float, rad: float, dps_
 	hz.dps = dps_val
 	hz.global_position = pos
 	parent_node.add_child(hz)
+	return hz
 
 
 func _cast_beam_attack(origin: Vector2, angle: float, beam_len: float, beam_width: float, dmg: int, col: Color, w_name: String, vis_dur: float, local_auth: bool) -> void:
@@ -3648,25 +4121,55 @@ func _cast_reverse_smoke(origin: Vector2, angle: float, dmg: int, dur: float, co
 
 
 func _cast_backstab_teleport(cast_pos: Vector2, _dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
-	var target: Node2D = _find_nearest_enemy_player(cast_pos, 2400.0)
+	var aim_dir: Vector2 = Vector2.from_angle(aim_angle)
+	var target: Node2D = null
+	var best_sq: float = 950.0 * 950.0
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		var diff: Vector2 = (p as Node2D).global_position - cast_pos
+		if diff.dot(aim_dir) <= 0.0:
+			continue
+		var d_sq: float = diff.length_squared()
+		if d_sq < best_sq:
+			best_sq = d_sq
+			target = p as Node2D
+	if target == null:
+		target = _find_nearest_enemy_player(cast_pos, 950.0)
 	_spawn_vfx_burst(cast_pos, 58.0, col)
-	invis_timer = maxf(invis_timer, 3.0)
 	if target != null:
 		var t_facing: bool = bool(target.get("facing_right")) if "facing_right" in target else true
-		var behind_dist: float = 125.0
-		var behind_off: Vector2 = Vector2(-behind_dist if t_facing else behind_dist, -6.0)
-		var dest: Vector2 = target.global_position + behind_off
-		var arena: Node = get_tree().current_scene
-		var max_w: float = float(arena.get("arena_width")) if (arena != null and "arena_width" in arena) else 2240.0
-		var max_h: float = float(arena.get("arena_height")) if (arena != null and "arena_height" in arena) else 1248.0
-		dest.x = clampf(dest.x, 72.0, maxf(144.0, max_w - 72.0))
-		dest.y = clampf(dest.y, 72.0, maxf(144.0, max_h - 84.0))
-		if absf(dest.x - target.global_position.x) < 70.0:
-			dest.x = clampf(target.global_position.x + (behind_dist if t_facing else -behind_dist), 72.0, maxf(144.0, max_w - 72.0))
+		var behind_dist: float = 48.0
+		var behind_off: Vector2 = Vector2(-behind_dist if t_facing else behind_dist, -4.0)
+		var dest: Vector2 = _clamp_to_arena(target.global_position + behind_off)
 		global_position = dest
+		velocity = Vector2.ZERO
 		facing_right = target.global_position.x >= global_position.x
 		aim_angle = (target.global_position - global_position).angle()
-		_spawn_vfx_burst(global_position, 72.0, col)
+		control_lock_timer = 0.85
+		if local_auth and target.has_method("apply_stun"):
+			target.apply_stun(0.85, peer_id)
+		_spawn_vfx_burst(global_position, 64.0, col)
+		_fire_anim_timer = 0.45
+		if is_instance_valid(_modular_rig):
+			_modular_rig.play_melee_swing(not facing_right)
+		get_tree().create_timer(0.42).timeout.connect(func():
+			if is_dead or not is_instance_valid(target):
+				return
+			if target.has_method("is_alive") and not target.is_alive():
+				return
+			var bpos: Vector2 = target.global_position
+			var blood_col := Color(0.88, 0.04, 0.10)
+			if local_auth and target.has_method("apply_hit"):
+				target.apply_hit(100, peer_id, ab_name, player_name, Vector2(380.0 if facing_right else -380.0, -180.0))
+			_spawn_vfx_burst(bpos, 78.0, blood_col)
+			_spawn_rising_particles(bpos, blood_col, false, 24)
+			_play_local_sfx("res://assets/audio/hit.wav", 0.0, 0.85)
+		)
 	else:
 		_cast_teleport(cast_pos, aim_angle, 280.0, 0, 0.0, col, ab_name, false, local_auth)
 
@@ -4152,6 +4655,35 @@ func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
 
 
 func _draw() -> void:
+	if not is_dead:
+		if _shadow_dash_timer > 0.0:
+			var back_dir: Vector2 = -_shadow_dash_dir.normalized()
+			var perp: Vector2 = Vector2(-back_dir.y, back_dir.x)
+			var dash_alpha: float = clampf(_shadow_dash_timer / 0.24, 0.25, 1.0)
+			var line_specs: Array = [
+				[-15.0, 14.0, 66.0, 3.6],
+				[0.0, 18.0, 86.0, 4.6],
+				[15.0, 14.0, 66.0, 3.6],
+			]
+			for spec in line_specs:
+				var lat: Vector2 = perp * float(spec[0])
+				var p_start: Vector2 = lat + back_dir * float(spec[1])
+				var p_end: Vector2 = lat + back_dir * float(spec[2])
+				var w: float = float(spec[3])
+				draw_line(p_start, p_end, Color(0.72, 0.42, 1.0, 0.85 * dash_alpha), w + 2.2)
+				draw_line(p_start, p_end, Color(0.96, 0.92, 1.0, 0.95 * dash_alpha), w * 0.65)
+		if touch_banish_timer > 0.0:
+			var pulse_r: float = 42.0 + sin(Time.get_ticks_msec() * 0.012) * 5.0
+			draw_arc(Vector2.ZERO, pulse_r, 0.0, TAU, 32, Color(0.84, 0.48, 1.0, 0.85), 3.0)
+		if _hook_pull_timer > 0.0 and _hook_pull_target != Vector2.INF:
+			draw_line(Vector2.ZERO, to_local(_hook_pull_target), Color(0.88, 0.72, 0.32), 3.5)
+			draw_circle(to_local(_hook_pull_target), 7.0, Color(0.95, 0.82, 0.38))
+		if bubble_trap_timer > 0.0:
+			var b_rad: float = 38.0
+			draw_circle(Vector2(0.0, -4.0), b_rad, Color(0.32, 0.88, 1.0, 0.24))
+			draw_arc(Vector2(0.0, -4.0), b_rad, 0.0, TAU, 36, Color(0.65, 0.96, 1.0, 0.92), 3.2)
+			draw_arc(Vector2(0.0, -4.0), b_rad - 4.0, -2.4, -1.1, 14, Color(1.0, 1.0, 1.0, 0.85), 2.5)
+			draw_arc(Vector2(0.0, -4.0), b_rad - 3.0, 0.3, 1.4, 12, Color(1.0, 0.58, 0.92, 0.65), 2.0)
 	if NetworkManager.is_agent_clash_mode() and not is_dead:
 		if _laser_visual_timer > 0.0:
 			var p1: Vector2 = Vector2.from_angle(_laser_visual_angle) * 24.0
@@ -4789,3 +5321,207 @@ class PrismMirrorShield extends StaticBody2D:
 		draw_rect(Rect2(-7.0, -44.0, 14.0, 88.0), frame_col, false, 3.0)
 		draw_line(Vector2(-3.0, -34.0), Vector2(3.0, -14.0), Color(1.0, 1.0, 1.0, a * 0.85), 2.5)
 		draw_line(Vector2(-3.0, 4.0), Vector2(3.0, 24.0), Color(1.0, 1.0, 1.0, a * 0.85), 2.5)
+
+
+func _spawn_time_freeze_wave(origin: Vector2, max_rad: float) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var w := TimeFreezeWaveVfx.new()
+	w.global_position = origin
+	w.max_radius = max_rad
+	parent_node.add_child(w)
+
+
+func execute_touch_teleport(target_pos: Vector2) -> void:
+	if touch_teleport_timer <= 0.0 or is_dead:
+		return
+	touch_teleport_timer = 0.0
+	var safe_pos: Vector2 = _clamp_to_arena(target_pos)
+	if NetworkManager.is_network_active():
+		execute_touch_teleport_rpc.rpc(safe_pos)
+	else:
+		_execute_touch_teleport_local(safe_pos)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func execute_touch_teleport_rpc(target_pos: Vector2) -> void:
+	_execute_touch_teleport_local(target_pos)
+
+
+func _execute_touch_teleport_local(target_pos: Vector2) -> void:
+	var old_pos: Vector2 = global_position
+	_spawn_air_wave_circle(old_pos, 72.0, Color(0.25, 0.78, 1.0))
+	_spawn_rising_particles(old_pos, Color(0.35, 0.85, 1.0), false, 8)
+	global_position = target_pos
+	velocity = Vector2.ZERO
+	_spawn_air_wave_circle(target_pos, 84.0, Color(0.25, 0.78, 1.0))
+	_spawn_rising_particles(target_pos, Color(0.35, 0.85, 1.0), false, 12)
+	_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 1.45)
+
+
+func execute_touch_fire(world_pos: Vector2) -> bool:
+	if touch_fire_timer <= 0.0 or is_dead:
+		return false
+	var best_p: Node2D = null
+	var best_d: float = 68.0
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		var d: float = (p as Node2D).global_position.distance_to(world_pos)
+		if d <= best_d:
+			best_d = d
+			best_p = p as Node2D
+	if best_p == null:
+		return false
+	touch_fire_timer = 0.0
+	var target_pid: int = int(best_p.get("peer_id"))
+	if NetworkManager.is_network_active():
+		execute_touch_fire_rpc.rpc(target_pid)
+	else:
+		_execute_touch_fire_local(target_pid)
+	return true
+
+
+@rpc("any_peer", "call_local", "reliable")
+func execute_touch_fire_rpc(target_pid: int) -> void:
+	_execute_touch_fire_local(target_pid)
+
+
+func _execute_touch_fire_local(target_pid: int) -> void:
+	var target: Node2D = _find_player_by_peer_id(target_pid)
+	if target == null or (target.has_method("is_alive") and not target.is_alive()):
+		return
+	var tpos: Vector2 = target.global_position
+	if _is_controlled_locally() and target.has_method("apply_hit"):
+		target.apply_hit(80, peer_id, "Dragon Flame", player_name, Vector2(0.0, -140.0))
+	_spawn_vfx_burst(tpos, 72.0, Color(1.0, 0.36, 0.12))
+	_spawn_rising_particles(tpos, Color(1.0, 0.45, 0.12), false, 16)
+	_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.2)
+
+
+func _pick_random_banish_pos(from_pos: Vector2) -> Vector2:
+	if not _spawn_points.is_empty():
+		var far_pts: Array[Vector2] = []
+		for sp in _spawn_points:
+			if sp.distance_to(from_pos) >= 280.0:
+				far_pts.append(sp)
+		if not far_pts.is_empty():
+			return _clamp_to_arena(far_pts[randi() % far_pts.size()])
+		return _clamp_to_arena(_spawn_points[randi() % _spawn_points.size()])
+	var rx: float = randf_range(260.0, 1940.0)
+	var ry: float = randf_range(220.0, 620.0)
+	return _clamp_to_arena(Vector2(rx, ry))
+
+
+func execute_touch_banish(world_pos: Vector2) -> bool:
+	if touch_banish_timer <= 0.0 or is_dead:
+		return false
+	var best_p: Node2D = null
+	var best_d: float = 68.0
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self:
+			continue
+		if p.has_method("is_alive") and not p.is_alive():
+			continue
+		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+			continue
+		var d: float = (p as Node2D).global_position.distance_to(world_pos)
+		if d <= best_d:
+			best_d = d
+			best_p = p as Node2D
+	if best_p == null:
+		return false
+	touch_banish_timer = 0.0
+	var target_pid: int = int(best_p.get("peer_id"))
+	var dest_pos: Vector2 = _pick_random_banish_pos(best_p.global_position)
+	if NetworkManager.is_network_active():
+		execute_touch_banish_rpc.rpc(target_pid, dest_pos)
+	else:
+		_execute_touch_banish_local(target_pid, dest_pos)
+	return true
+
+
+@rpc("any_peer", "call_local", "reliable")
+func execute_touch_banish_rpc(target_pid: int, dest_pos: Vector2) -> void:
+	_execute_touch_banish_local(target_pid, dest_pos)
+
+
+func _execute_touch_banish_local(target_pid: int, dest_pos: Vector2) -> void:
+	touch_banish_timer = 0.0
+	var target: Node2D = _find_player_by_peer_id(target_pid)
+	if target == null or (target.has_method("is_alive") and not target.is_alive()):
+		return
+	var old_pos: Vector2 = target.global_position
+	_spawn_air_wave_circle(old_pos, 90.0, Color(0.84, 0.48, 1.0))
+	_spawn_vfx_burst(old_pos, 85.0, Color(0.78, 0.45, 1.0))
+	target.global_position = dest_pos
+	if "velocity" in target:
+		target.set("velocity", Vector2.ZERO)
+	_spawn_air_wave_circle(dest_pos, 95.0, Color(0.84, 0.48, 1.0))
+	_spawn_rising_particles(dest_pos, Color(0.84, 0.56, 1.0), false, 16)
+	_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.9)
+
+
+class TimeFreezeWaveVfx extends Node2D:
+	var max_radius: float = 460.0
+	var _t: float = 0.0
+	var _dur: float = 0.55
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= _dur:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var prog: float = clampf(_t / _dur, 0.0, 1.0)
+		var r: float = lerpf(16.0, max_radius, prog)
+		var a: float = 1.0 - prog * prog
+		draw_circle(Vector2.ZERO, r, Color(0.22, 0.65, 1.0, 0.14 * a))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 48, Color(0.32, 0.82, 1.0, 0.92 * a), 5.0)
+		draw_arc(Vector2.ZERO, r * 0.72, 0.0, TAU, 36, Color(0.65, 0.92, 1.0, 0.55 * a), 2.5)
+
+
+func _spawn_scream_wave_vfx(origin: Vector2, ang: float, max_rad: float, col: Color) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var w := ScreamWaveWifiVfx.new()
+	w.global_position = origin
+	w.aim_ang = ang
+	w.max_radius = max_rad
+	w.wave_color = col
+	parent_node.add_child(w)
+
+
+class ScreamWaveWifiVfx extends Node2D:
+	var aim_ang: float = 0.0
+	var max_radius: float = 320.0
+	var wave_color: Color = Color(0.78, 0.98, 1.0)
+	var _t: float = 0.0
+	var _dur: float = 0.45
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= _dur:
+			queue_free()
+			return
+		queue_redraw()
+
+	func _draw() -> void:
+		var prog: float = clampf(_t / _dur, 0.0, 1.0)
+		var half_arc: float = 0.58
+		for arc_i in range(3):
+			var local_p: float = clampf(prog * 1.25 - float(arc_i) * 0.14, 0.0, 1.0)
+			if local_p <= 0.02:
+				continue
+			var r: float = lerpf(24.0, max_radius, local_p)
+			var a: float = (1.0 - local_p) * 0.95
+			var c := Color(wave_color.r, wave_color.g, wave_color.b, a)
+			draw_arc(Vector2.ZERO, r, aim_ang - half_arc, aim_ang + half_arc, 24, c, 7.0 - float(arc_i) * 1.2)

@@ -9,6 +9,7 @@ var can_deal: bool = false
 var time_left: float = 5.0
 var radius: float = 120.0
 var dps: int = 20
+var follow_target: Node2D = null
 var _tick_accum: float = 0.0
 var _left_span: float = 120.0
 var _right_span: float = 120.0
@@ -25,7 +26,7 @@ func _ready() -> void:
 		can_deal = bool(get_meta("can_deal"))
 		time_left = float(get_meta("time_left"))
 		radius = 135.0
-		dps = 10 if zone_kind == "lava_platform" else 0
+		dps = 34 if zone_kind == "lava_platform" else 0
 	if zone_kind in ["ice_platform", "lava_platform"]:
 		_snap_to_platform_bounds()
 	queue_redraw()
@@ -62,6 +63,11 @@ func _snap_to_platform_bounds() -> void:
 
 
 func _process(delta: float) -> void:
+	if follow_target != null:
+		if not is_instance_valid(follow_target) or (follow_target.has_method("is_alive") and not follow_target.is_alive()):
+			queue_free()
+			return
+		global_position = follow_target.global_position
 	time_left -= delta
 	if time_left <= 0.0:
 		queue_free()
@@ -93,7 +99,9 @@ func _process(delta: float) -> void:
 		elif zone_kind == "lava_platform":
 			if px >= global_position.x - _left_span - 12.0 and px <= global_position.x + _right_span + 12.0 and absf(py - global_position.y) <= 58.0:
 				if p.has_method("apply_hit"):
-					p.apply_hit(maxi(1, int(round(float(dps) * 0.25))), shooter_id, weapon_name, shooter_name, Vector2.ZERO)
+					var max_hp: float = float(p.get("max_health")) if "max_health" in p else 100.0
+					var lava_tick: int = maxi(1, int(ceil(max_hp / 12.0)))
+					p.apply_hit(lava_tick, shooter_id, weapon_name, shooter_name, Vector2.ZERO)
 		elif dist <= radius:
 			if zone_kind == "earth_quake_zone" and p.has_method("apply_status"):
 				p.apply_status("earth_shake", 0.45)

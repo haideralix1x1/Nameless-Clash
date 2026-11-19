@@ -160,11 +160,11 @@ static func get_pickup_weapon_ids() -> Array[int]:
 	var out: Array[int] = get_allowed_weapon_ids()
 	var nm: Node = _get_network_manager()
 	var exp_ok: bool = true if nm == null else bool(nm.get("allow_explosives"))
-	out.append_array([11, 13, 14])
+	out.append_array([11, 13, 14, 15, 16])
 	if exp_ok:
 		out.append(12)
 	# Weight special weapons so they appear regularly on the map
-	out.append_array([11, 13, 14])
+	out.append_array([11, 13, 14, 15, 16])
 	if exp_ok:
 		out.append(12)
 	return out
@@ -197,7 +197,7 @@ static func get_effective_preset(preset_idx: int) -> Dictionary:
 
 
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
-	if weapon_id >= 11 and weapon_id <= 14:
+	if weapon_id >= 11 and weapon_id <= 16:
 		return _get_special_weapon(weapon_id)
 	var idx: int = clampi(weapon_id, 0, RESOURCE_PATHS.size() - 1)
 	var base: WeaponData = load(RESOURCE_PATHS[idx]) as WeaponData
@@ -258,7 +258,7 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.description = "Homing missile that tracks enemies! Pickup only."
 			w.damage = 78
 			w.fire_interval = 1.25
-			w.mag_size = 3
+			w.mag_size = 1
 			w.reload_time = 2.2
 			w.recoil_impulse = 175.0
 			w.bullet_speed = 460.0
@@ -307,5 +307,39 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.move_speed_multiplier = 0.88
 			w.bullet_color = Color(1.0, 0.88, 0.25)
 			w.sound_path = "res://assets/audio/shoot_ak47.wav"
+			w.sprite_frame = 2
+		15:
+			w.code_name = "hook_gun"
+			w.display_name = "Hook Gun"
+			w.description = "Grapple walls to zip there or hook enemies to drag them! Pickup only."
+			w.damage = 10
+			w.fire_interval = 0.85
+			w.mag_size = 6
+			w.reload_time = 1.6
+			w.recoil_impulse = 40.0
+			w.bullet_speed = 1180.0
+			w.spread_deg = 0.5
+			w.max_zoom_level = 3
+			w.bullet_color = Color(0.95, 0.72, 0.24)
+			w.custom_visual_style = "hook_gun_claw"
+			w.custom_lifetime = 0.95
+			w.sound_path = "res://assets/audio/jump.wav"
+			w.sprite_frame = 2
+		16:
+			w.code_name = "bubble_gun"
+			w.display_name = "Bubble Gun"
+			w.description = "Trap enemies in a floating bubble for 10s until popped! Pickup only."
+			w.damage = 5
+			w.fire_interval = 0.90
+			w.mag_size = 5
+			w.reload_time = 1.8
+			w.recoil_impulse = 55.0
+			w.bullet_speed = 680.0
+			w.spread_deg = 1.5
+			w.max_zoom_level = 3
+			w.bullet_color = Color(0.35, 0.92, 1.0)
+			w.custom_visual_style = "bubble_trap_orb"
+			w.custom_lifetime = 1.4
+			w.sound_path = "res://assets/audio/pickup.wav"
 			w.sprite_frame = 2
 	return w

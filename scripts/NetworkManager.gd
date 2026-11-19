@@ -12,6 +12,10 @@ signal killfeed_event(killer_name: String, victim_name: String, weapon_name: Str
 signal kill_scored(killer_id: int, victim_id: int)
 signal chat_message_received(sender_name: String, message: String)
 signal interactable_toggled(inter_idx: int, new_state: bool)
+signal barrel_detonated(inter_idx: int, attacker_id: int, attacker_name: String, attacker_team: int)
+signal crate_consumed(crate_idx: int, next_val: int)
+signal ult_pickup_relocated(ult_idx: int, new_pos: Vector2)
+signal mine_event(action: String, mine_id: int, pos: Vector2)
 signal match_timer_updated(time_left: float)
 signal match_ended(winner_text: String, rankings: Array)
 signal combo_achieved(killer_id: int, killer_name: String, combo_count: int)
@@ -859,6 +863,7 @@ func _apply_match_end(winner_text: String, rankings: Array) -> void:
 	if match_over:
 		return
 	match_over = true
+	match_in_progress = false
 	match_time_left = 0.0
 	match_timer_updated.emit(0.0)
 	match_ended.emit(winner_text, rankings)
@@ -890,6 +895,55 @@ func toggle_interactable(inter_idx: int, new_state: bool) -> void:
 @rpc("any_peer", "call_local", "reliable")
 func toggle_interactable_rpc(inter_idx: int, new_state: bool) -> void:
 	interactable_toggled.emit(inter_idx, new_state)
+
+
+func detonate_barrel(inter_idx: int, attacker_id: int, attacker_name: String, attacker_team: int) -> void:
+	if is_network_active():
+		detonate_barrel_rpc.rpc(inter_idx, attacker_id, attacker_name, attacker_team)
+	else:
+		barrel_detonated.emit(inter_idx, attacker_id, attacker_name, attacker_team)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func detonate_barrel_rpc(inter_idx: int, attacker_id: int, attacker_name: String, attacker_team: int) -> void:
+	barrel_detonated.emit(inter_idx, attacker_id, attacker_name, attacker_team)
+
+
+func consume_crate(crate_idx: int, next_val: int) -> void:
+	if is_network_active():
+		consume_crate_rpc.rpc(crate_idx, next_val)
+	else:
+		crate_consumed.emit(crate_idx, next_val)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func consume_crate_rpc(crate_idx: int, next_val: int) -> void:
+	crate_consumed.emit(crate_idx, next_val)
+
+
+func relocate_ult_pickup(ult_idx: int, new_pos: Vector2) -> void:
+	if is_network_active():
+		relocate_ult_pickup_rpc.rpc(ult_idx, new_pos)
+	else:
+		ult_pickup_relocated.emit(ult_idx, new_pos)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func relocate_ult_pickup_rpc(ult_idx: int, new_pos: Vector2) -> void:
+	ult_pickup_relocated.emit(ult_idx, new_pos)
+
+
+func sync_mine_event(action: String, mine_id: int, pos: Vector2) -> void:
+	if is_network_active():
+		if is_host_active():
+			sync_mine_event_rpc.rpc(action, mine_id, pos)
+	else:
+		mine_event.emit(action, mine_id, pos)
+
+
+@rpc("authority", "call_local", "reliable")
+func sync_mine_event_rpc(action: String, mine_id: int, pos: Vector2) -> void:
+	mine_event.emit(action, mine_id, pos)
 
 
 func go_to_arena() -> void:

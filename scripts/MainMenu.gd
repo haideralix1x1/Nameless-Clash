@@ -551,16 +551,6 @@ func _build_agent_select_overlay() -> void:
 	)
 	act_row.add_child(_agent_play_btn)
 
-	var lobby_btn := _make_arcade_button("WIFI LOBBY", Color(0.32, 0.78, 1.0), 46.0, 15, Color(0.10, 0.22, 0.36))
-	lobby_btn.custom_minimum_size = Vector2(130, 46)
-	lobby_btn.pressed.connect(func():
-		_preview_saved_match_mode = -1
-		NetworkManager.match_mode = 2
-		_close_agent_select()
-		_transition_to(NetworkManager.go_to_lobby)
-	)
-	act_row.add_child(lobby_btn)
-
 	# Right 24-Agent Grid
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL

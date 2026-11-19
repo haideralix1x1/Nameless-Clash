@@ -526,7 +526,7 @@ const AGENTS: Array[Dictionary] = [
 		"id": 10,
 		"agent_name": "Nothing",
 		"title": "Skull Skeleton",
-		"role": "Cursed Warrior",
+		"role": "Skull Skeleton",
 		"accent": Color(0.88, 0.90, 0.96),
 		"base_weapon": {
 			"name": "Cursed Bone Scimitar",
@@ -556,19 +556,19 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Fiery Hand Burn",
 				"kind": "fiery_hand_beam",
-				"damage": 45,
-				"duration": 1.0,
+				"damage": 80,
+				"duration": 2.8,
 				"color": Color(1.0, 0.45, 0.14),
-				"desc": "Straighten hands and shoot a fiery burn beam along aim direction."
+				"desc": "Spawn a fiery hand that moves slowly toward your forward aim for 80% health damage on hit."
 			}
 		],
 		"ultimate": {
 			"name": "Time Freeze",
 			"kind": "ult_time_slow",
 			"damage": 0,
-			"duration": 4.0,
-			"color": Color(0.75, 0.88, 1.0),
-			"desc": "Slow nearby enemies to 0.3x speed in a large radius for 4s."
+			"duration": 5.0,
+			"color": Color(0.28, 0.72, 1.0),
+			"desc": "Emit an expanding blue time wave that stops time for all nearby enemies for 5s, freezing them even in mid-air."
 		}
 	},
 	# 11: Wraith // Spooky Ghost
@@ -600,16 +600,17 @@ const AGENTS: Array[Dictionary] = [
 				"name": "Touch Teleport",
 				"kind": "touch_teleport",
 				"damage": 0,
-				"color": Color(0.55, 0.92, 1.0),
-				"desc": "Teleport to the last spot touched on the map/arena."
+				"duration": 3.0,
+				"color": Color(0.32, 0.82, 1.0),
+				"desc": "Activate for 3s: tap anywhere on screen to spawn a blue circle and instantly teleport there."
 			},
 			{
 				"name": "Banshee Scream",
 				"kind": "scream_wave",
-				"damage": 25,
-				"stun": 1.5,
+				"damage": 50,
+				"stun": 3.0,
 				"color": Color(0.78, 0.98, 1.0),
-				"desc": "Release a scream wave that knocks enemies back and stuns them."
+				"desc": "Emit a forward scream wave that hits all enemies in front for 50% damage, stuns them for 3s, and throws them away."
 			}
 		],
 		"ultimate": {
@@ -697,10 +698,10 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Deploy Turret",
 				"kind": "deploy_turret",
-				"damage": 10,
-				"duration": 5.0,
+				"damage": 40,
+				"duration": 10.0,
 				"color": Color(0.48, 0.92, 1.0),
-				"desc": "Deploy a destructible turret for 5s (10%/shot, 1 shot/sec)."
+				"desc": "Deploy a destructible turret for 10s (40%/shot, 1 shot/sec)."
 			},
 			{
 				"name": "Energy Shield",
@@ -860,12 +861,12 @@ const AGENTS: Array[Dictionary] = [
 				"desc": "Throw 2 slow fireballs in sequence (40% damage each)."
 			},
 			{
-				"name": "Dragon Flame Laser",
+				"name": "Dragon Flame",
 				"kind": "dragon_laser",
-				"damage": 50,
-				"duration": 2.0,
+				"damage": 80,
+				"duration": 3.0,
 				"color": Color(1.0, 0.36, 0.12),
-				"desc": "Project a thick straight fire laser along aim for 2s (50%/sec)."
+				"desc": "Activate for 3s: tap/click any enemy player or bot to set them on fire for 80% damage."
 			}
 		],
 		"ultimate": {
@@ -897,8 +898,9 @@ const AGENTS: Array[Dictionary] = [
 				"name": "Banish Teleport",
 				"kind": "banish_enemy",
 				"damage": 10,
+				"duration": 3.0,
 				"color": Color(0.78, 0.45, 1.0),
-				"desc": "Teleport a nearby enemy to a random far spot on the map."
+				"desc": "Activate for 3s: tap/click any enemy player or bot to randomly teleport them."
 			},
 			{
 				"name": "Position Swap",
@@ -908,21 +910,21 @@ const AGENTS: Array[Dictionary] = [
 				"desc": "Swap positions with the enemy fighting in front or behind you."
 			},
 			{
-				"name": "Slow Rotating Axe",
+				"name": "Falling Forge",
 				"kind": "slow_spin_axe",
-				"damage": 45,
-				"duration": 5.0,
+				"damage": 100,
+				"duration": 3.0,
 				"color": Color(0.92, 0.68, 0.98),
-				"desc": "Throw a slow rotating axe that vanishes after 5 seconds."
+				"desc": "Drop a heavy forge above the nearest enemy in front for an instant kill on impact."
 			}
 		],
 		"ultimate": {
-			"name": "Mirror Clone",
+			"name": "Tornado Vortex",
 			"kind": "ult_mirror_clone",
-			"damage": 0,
-			"duration": 5.0,
-			"color": Color(0.82, 0.52, 1.0),
-			"desc": "Create a mirror clone of a nearby enemy (5s); damage to clone hits them."
+			"damage": 100,
+			"duration": 6.0,
+			"color": Color(0.75, 0.58, 1.0),
+			"desc": "Launch a huge tornado forward that chases nearby enemies and kills caught foes in 1s."
 		}
 	},
 	# 18: Ignis // Magma Golem
@@ -948,31 +950,31 @@ const AGENTS: Array[Dictionary] = [
 				"shots": 3,
 				"damage": 25,
 				"color": Color(1.0, 0.46, 0.14),
-				"desc": "Shoot 3 blazing fire shots along your aim."
+				"desc": "Spawn 3 stationary fire blasts at random positions around you."
 			},
 			{
 				"name": "Lava Platform",
 				"kind": "lava_platform",
-				"damage": 10,
+				"damage": 34,
 				"duration": 6.0,
 				"color": Color(1.0, 0.32, 0.08),
-				"desc": "Throw a fireball that sets a platform on fire (10% damage/sec)."
+				"desc": "Throw a fireball that sets a platform on fire (33% damage/sec, kills in 3s)."
 			},
 			{
 				"name": "Rolling Magma Boulder",
 				"kind": "rolling_fireball",
 				"damage": 55,
 				"color": Color(1.0, 0.56, 0.16),
-				"desc": "Spawn a huge physics fireball that rolls forward."
+				"desc": "Spawn a huge physics fireball that bounces 5 times before vanishing."
 			}
 		],
 		"ultimate": {
 			"name": "Inferno Ring",
 			"kind": "ult_inferno_ring",
 			"damage": 170,
-			"duration": 2.0,
+			"duration": 5.0,
 			"color": Color(1.0, 0.28, 0.06),
-			"desc": "Spawn full-circle fire over nearby enemies dealing heavy damage (170 DPS) over 2s."
+			"desc": "Surround yourself with a moving fire circle for 5s (170 DPS)."
 		}
 	},
 	# 19: Prism // Crystal Golem
@@ -997,7 +999,7 @@ const AGENTS: Array[Dictionary] = [
 				"kind": "meteor_boulder",
 				"damage": 60,
 				"color": Color(0.96, 0.52, 0.84),
-				"desc": "Throw a giant boulder (double size) that bounces once, drops with gravity, and breaks on walls or after 5s."
+				"desc": "Throw a giant boulder that bounces continuously for 5s without breaking on hit."
 			},
 			{
 				"name": "Piercing Crystal Shot",
@@ -1121,10 +1123,10 @@ const AGENTS: Array[Dictionary] = [
 			"name": "Shadow Ambush",
 			"kind": "ult_backstab_tp",
 			"cooldown": 18.0,
-			"damage": 0,
-			"duration": 3.0,
+			"damage": 100,
+			"duration": 1.0,
 			"color": Color(0.62, 0.24, 0.95),
-			"desc": "Teleport behind the nearest enemy at a safe distance and turn invisible for 3s."
+			"desc": "Teleport behind the nearest enemy in your aim direction and backstab for instant death."
 		}
 	},
 	# 22: Ray Lina // Young Elf
@@ -1278,3 +1280,191 @@ const TAUNTS: Array[Dictionary] = [
 
 static func get_taunt(taunt_id: int) -> Dictionary:
 	return TAUNTS[clampi(taunt_id, 0, TAUNTS.size() - 1)]
+
+const ABILITY_ICONS_PATH: String = "res://assets/ui/ability_icons_sheet.png"
+const ABILITY_ICON_INDEX: Dictionary = {
+	"ability_lock_smoke": 0,
+	"auto_machinegun": 1,
+	"banish_enemy": 2,
+	"barbarian_squad": 3,
+	"bat_swarm": 4,
+	"bee_swarm": 5,
+	"blood_beam": 6,
+	"boar_ride": 7,
+	"bomb_eagle": 8,
+	"boomerang_axe": 9,
+	"boomerang_sword": 10,
+	"bouncing_chainsaw": 11,
+	"boxer_huge_punch": 12,
+	"damage_shield_50": 13,
+	"dash_speed": 14,
+	"deploy_turret": 15,
+	"dragon_laser": 16,
+	"dual_shotguns": 17,
+	"equip_shield": 18,
+	"fiery_hand_beam": 19,
+	"fireball": 20,
+	"flame_wave": 21,
+	"flash_bird": 22,
+	"freeze_shot": 23,
+	"frost_gas": 24,
+	"ghost_clones": 25,
+	"gradual_heal": 26,
+	"gun_burst": 27,
+	"headless_throw": 28,
+	"hook_drag": 29,
+	"ice_platform": 30,
+	"ice_shards": 31,
+	"impact_grenade": 32,
+	"invincible_self": 33,
+	"jelly_slowmo": 34,
+	"jump_kick": 35,
+	"lava_platform": 36,
+	"long_spear": 37,
+	"meteor_boulder": 38,
+	"piercing_crystal": 39,
+	"poison_gas": 40,
+	"poison_shot": 41,
+	"poison_vomit": 42,
+	"prism_mirror": 43,
+	"push_circle": 44,
+	"raven_swarm": 45,
+	"reverse_smoke": 46,
+	"rolling_fireball": 47,
+	"running_spear": 48,
+	"scream_wave": 49,
+	"shadow_mummy": 50,
+	"shuriken_fan": 51,
+	"sky_smash_punch": 52,
+	"slow_spin_axe": 53,
+	"snake_trio": 54,
+	"spear_throw": 55,
+	"speed": 56,
+	"spinning_blade": 57,
+	"sticky_bomb": 58,
+	"stun_bomb": 59,
+	"swap_enemy": 60,
+	"telekinesis": 61,
+	"teleport": 62,
+	"throwable_magnet": 63,
+	"touch_teleport": 64,
+	"twin_fireballs": 65,
+	"ult_arm_fireballs": 66,
+	"ult_backstab_tp": 67,
+	"ult_bat_execute": 68,
+	"ult_blink_slash": 69,
+	"ult_boxer_flurry": 70,
+	"ult_crush_walls": 71,
+	"ult_cryo_shatter": 72,
+	"ult_death_kiss": 73,
+	"ult_deathless_2x": 74,
+	"ult_dragon_strike": 75,
+	"ult_earth_quake_zone": 76,
+	"ult_electric_laser": 77,
+	"ult_ghost_stealth": 78,
+	"ult_giant_snake": 79,
+	"ult_homing_bazooka": 80,
+	"ult_inferno_ring": 81,
+	"ult_jump_execute": 82,
+	"ult_mirror_clone": 83,
+	"ult_self_blast": 84,
+	"ult_soul_drag": 85,
+	"ult_spear_jump": 86,
+	"ult_time_slow": 87,
+	"ult_winged_lion": 88,
+	"wall": 89,
+	"zombie_dog": 90,
+	"zoom_out_4x": 91
+}
+
+static var _target_icon_tex: Texture2D = null
+static var _hook_icon_tex: Texture2D = null
+
+
+static func _draw_icon_seg(img: Image, p0: Vector2, p1: Vector2, rad: float, col: Color) -> void:
+	var seg_len: float = p0.distance_to(p1)
+	var steps: int = maxi(1, int(ceilf(seg_len * 2.0)))
+	var r_ceil: int = int(ceilf(rad))
+	for s in range(steps + 1):
+		var pt: Vector2 = p0.lerp(p1, float(s) / float(steps))
+		var cx: int = int(roundf(pt.x))
+		var cy: int = int(roundf(pt.y))
+		for dy in range(-r_ceil, r_ceil + 1):
+			for dx in range(-r_ceil, r_ceil + 1):
+				var px: int = cx + dx
+				var py: int = cy + dy
+				if px >= 0 and px < img.get_width() and py >= 0 and py < img.get_height():
+					if Vector2(float(dx), float(dy)).length() <= rad:
+						img.set_pixel(px, py, col)
+
+
+static func _get_hook_icon_texture() -> Texture2D:
+	if _hook_icon_tex != null:
+		return _hook_icon_tex
+	var sz: int = 64
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	var rope_col := Color(1.0, 1.0, 1.0, 1.0)
+	var steel_col := Color(1.0, 1.0, 1.0, 1.0)
+	var tip_col := Color(1.0, 1.0, 1.0, 1.0)
+	# Diagonal rope from bottom-left to hook ring
+	_draw_icon_seg(img, Vector2(10.0, 54.0), Vector2(26.0, 38.0), 2.4, rope_col)
+	# Hook ring/eyelet
+	for a_i in range(32):
+		var ang: float = (float(a_i) / 32.0) * TAU
+		var pt := Vector2(27.0, 37.0) + Vector2.from_angle(ang) * 5.0
+		_draw_icon_seg(img, pt, pt, 1.8, steel_col)
+	# Hook shank going up-right
+	_draw_icon_seg(img, Vector2(31.0, 33.0), Vector2(44.0, 20.0), 3.0, steel_col)
+	# Left & right grapple claws curving back with barbs
+	_draw_icon_seg(img, Vector2(44.0, 20.0), Vector2(51.0, 13.0), 3.0, tip_col)
+	_draw_icon_seg(img, Vector2(44.0, 20.0), Vector2(48.0, 35.0), 2.8, steel_col)
+	_draw_icon_seg(img, Vector2(48.0, 35.0), Vector2(42.0, 42.0), 2.5, tip_col)
+	_draw_icon_seg(img, Vector2(44.0, 20.0), Vector2(29.0, 16.0), 2.8, steel_col)
+	_draw_icon_seg(img, Vector2(29.0, 16.0), Vector2(22.0, 22.0), 2.5, tip_col)
+	_hook_icon_tex = ImageTexture.create_from_image(img)
+	return _hook_icon_tex
+
+
+static func _get_target_icon_texture() -> Texture2D:
+	if _target_icon_tex != null:
+		return _target_icon_tex
+	var sz: int = 64
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	var center := Vector2(31.5, 31.5)
+	var red_outer := Color(1.0, 1.0, 1.0, 1.0)
+	var gold_inner := Color(1.0, 1.0, 1.0, 1.0)
+	var white_tick := Color(1.0, 1.0, 1.0, 1.0)
+	for y in range(sz):
+		for x in range(sz):
+			var d: float = Vector2(float(x), float(y)).distance_to(center)
+			var dx: float = absf(float(x) - center.x)
+			var dy: float = absf(float(y) - center.y)
+			if d >= 20.5 and d <= 25.0:
+				img.set_pixel(x, y, red_outer)
+			elif d >= 11.0 and d <= 14.5:
+				img.set_pixel(x, y, gold_inner)
+			elif d <= 4.5:
+				img.set_pixel(x, y, red_outer)
+			elif ((dx <= 2.2 and dy >= 15.0 and dy <= 29.0) or (dy <= 2.2 and dx >= 15.0 and dx <= 29.0)):
+				img.set_pixel(x, y, white_tick)
+	_target_icon_tex = ImageTexture.create_from_image(img)
+	return _target_icon_tex
+
+
+static func get_ability_icon_texture(kind: String) -> Texture2D:
+	if kind == "ult_homing_bazooka":
+		return _get_target_icon_texture()
+	if kind == "hook_drag":
+		return _get_hook_icon_texture()
+	if not ResourceLoader.exists(ABILITY_ICONS_PATH):
+		return null
+	var sheet := load(ABILITY_ICONS_PATH) as Texture2D
+	if sheet == null:
+		return null
+	var idx: int = int(ABILITY_ICON_INDEX.get(kind, 0))
+	var col: int = idx % 10
+	var row: int = idx / 10
+	var at := AtlasTexture.new()
+	at.atlas = sheet
+	at.region = Rect2(col * 64, row * 64, 64, 64)
+	return at

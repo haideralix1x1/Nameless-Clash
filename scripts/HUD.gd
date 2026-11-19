@@ -8,6 +8,8 @@ signal interact_requested(inter_idx: int)
 const UIStyle = preload("res://scripts/UIStyle.gd")
 const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
+const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
+const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
 const PRESET_SELECT_DURATION: float = 5.0
@@ -61,6 +63,8 @@ var _combo_banner_label: Label
 var _match_end_overlay: Control
 var _match_end_title: Label
 var _match_end_table: VBoxContainer
+var _match_end_again_btn: Button
+var _match_end_lobby_btn: Button
 var _respawn_panel: PanelContainer
 var _respawn_label: Label
 var _add_bot_btn: Button
@@ -109,7 +113,7 @@ var _stun_banner: PanelContainer
 var _stun_label: Label
 
 var _layout_overlay: Control
-var _drawer_panel: PanelContainer
+var _drawer_panel: Control
 var _layout_handles: Dictionary = {}
 var _dragging_key: String = ""
 var _drag_center_offset: Vector2 = Vector2.ZERO
@@ -703,29 +707,28 @@ func _build_ui() -> void:
 	left_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(left_spacer)
 
-	# Left Compact Pill: HP + Jetpack + Gear/Menu toggle
-	var left_panel := PanelContainer.new()
-	left_panel.custom_minimum_size = Vector2(210, 62)
-	left_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	left_panel.add_theme_stylebox_override("panel", _make_compact_glass_style())
-	top_bar.add_child(left_panel)
+	# Unified Top HUD Box: HP/Gas + Menu | Weapon/Agent + Ammo | K/A/D | Timer | Chat
+	var hud_box := PanelContainer.new()
+	hud_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hud_box.add_theme_stylebox_override("panel", _make_compact_glass_style())
+	top_bar.add_child(hud_box)
 
-	var left_h := HBoxContainer.new()
-	left_h.add_theme_constant_override("separation", 8)
-	left_panel.add_child(left_h)
+	var hud_h := HBoxContainer.new()
+	hud_h.add_theme_constant_override("separation", 14)
+	hud_box.add_child(hud_h)
 
 	var lv := VBoxContainer.new()
-	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lv.alignment = BoxContainer.ALIGNMENT_CENTER
-	lv.add_theme_constant_override("separation", 5)
-	left_h.add_child(lv)
+	lv.add_theme_constant_override("separation", 4)
+	hud_h.add_child(lv)
 
 	var hp_row := HBoxContainer.new()
 	hp_row.add_theme_constant_override("separation", 6)
 	lv.add_child(hp_row)
 	_hp_label = Label.new()
 	_hp_label.text = "HP"
-	_hp_label.add_theme_font_size_override("font_size", 15)
+	_hp_label.custom_minimum_size = Vector2(56, 0)
+	_hp_label.add_theme_font_size_override("font_size", 14)
 	_hp_label.modulate = Color(1.0, 0.45, 0.82)
 	hp_row.add_child(_hp_label)
 
@@ -733,8 +736,8 @@ func _build_ui() -> void:
 	_hp_bar.max_value = 100
 	_hp_bar.value = 100
 	_hp_bar.show_percentage = false
-	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hp_bar.custom_minimum_size = Vector2(138, 16)
+	_hp_bar.custom_minimum_size = Vector2(138, 14)
+	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_hp_bar.modulate = Color(0.92, 0.24, 0.78)
 	hp_row.add_child(_hp_bar)
 
@@ -743,7 +746,8 @@ func _build_ui() -> void:
 	lv.add_child(fuel_row)
 	_fuel_label = Label.new()
 	_fuel_label.text = "GAS"
-	_fuel_label.add_theme_font_size_override("font_size", 14)
+	_fuel_label.custom_minimum_size = Vector2(56, 0)
+	_fuel_label.add_theme_font_size_override("font_size", 13)
 	_fuel_label.modulate = Color(0.42, 0.78, 1.0)
 	fuel_row.add_child(_fuel_label)
 
@@ -751,20 +755,20 @@ func _build_ui() -> void:
 	_fuel_bar.max_value = 100
 	_fuel_bar.value = 100
 	_fuel_bar.show_percentage = false
-	_fuel_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fuel_bar.custom_minimum_size = Vector2(138, 15)
+	_fuel_bar.custom_minimum_size = Vector2(138, 13)
+	_fuel_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_fuel_bar.modulate = Color(0.22, 0.58, 1.0)
 	fuel_row.add_child(_fuel_bar)
 
 	var drawer_btn := Button.new()
 	drawer_btn.text = "MENU"
+	drawer_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	drawer_btn.focus_mode = Control.FOCUS_NONE
-	_style_circle_btn(drawer_btn, Color(0.12, 0.16, 0.24, 0.72), Color(1.0, 1.0, 1.0, 0.78), 50, 22)
-	left_h.add_child(drawer_btn)
+	_style_circle_btn(drawer_btn, Color(0.12, 0.16, 0.24, 0.72), Color(1.0, 1.0, 1.0, 0.78), 46, 13)
+	hud_h.add_child(drawer_btn)
 
-	# Center Pill: Test Bot Toggle (in Test Mode) or Compact Score Pill
 	_test_bot_btn = Button.new()
-	_test_bot_btn.custom_minimum_size = Vector2(106, 44)
+	_test_bot_btn.custom_minimum_size = Vector2(96, 40)
 	_test_bot_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_test_bot_btn.focus_mode = Control.FOCUS_NONE
 	_style_action_button(_test_bot_btn, Color(0.08, 0.24, 0.26, 0.94), Color(0.24, 0.86, 0.82), 13)
@@ -773,18 +777,18 @@ func _build_ui() -> void:
 		NetworkManager.test_bot_behavior = (NetworkManager.test_bot_behavior + 1) % 3
 		_refresh_test_bot_btn()
 	)
-	top_bar.add_child(_test_bot_btn)
+	hud_h.add_child(_test_bot_btn)
 
 	_agent_swap_row = HBoxContainer.new()
-	_agent_swap_row.add_theme_constant_override("separation", 6)
+	_agent_swap_row.add_theme_constant_override("separation", 4)
 	_agent_swap_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_agent_swap_row.visible = NetworkManager.is_test_mode() and NetworkManager.is_agent_clash_mode()
-	top_bar.add_child(_agent_swap_row)
+	hud_h.add_child(_agent_swap_row)
 
 	var prev_ag_btn := Button.new()
 	prev_ag_btn.text = "<"
 	prev_ag_btn.focus_mode = Control.FOCUS_NONE
-	_style_circle_btn(prev_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 48, 18)
+	_style_circle_btn(prev_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 40, 16)
 	prev_ag_btn.pressed.connect(func():
 		if local_player != null and local_player.has_method("switch_agent_in_game"):
 			local_player.switch_agent_in_game(int(local_player.get("archetype_id")) - 1)
@@ -794,24 +798,23 @@ func _build_ui() -> void:
 	var next_ag_btn := Button.new()
 	next_ag_btn.text = ">"
 	next_ag_btn.focus_mode = Control.FOCUS_NONE
-	_style_circle_btn(next_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 48, 18)
+	_style_circle_btn(next_ag_btn, Color(0.18, 0.12, 0.28, 0.85), Color(0.78, 0.48, 1.0, 0.9), 40, 16)
 	next_ag_btn.pressed.connect(func():
 		if local_player != null and local_player.has_method("switch_agent_in_game"):
 			local_player.switch_agent_in_game(int(local_player.get("archetype_id")) + 1)
 	)
 	_agent_swap_row.add_child(next_ag_btn)
 
-	# Right Compact Pill: Weapon Icon + Ammo + Dual Badge
-	var weapon_panel := PanelContainer.new()
-	weapon_panel.custom_minimum_size = Vector2(204, 62)
-	weapon_panel.clip_contents = true
-	weapon_panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	weapon_panel.add_theme_stylebox_override("panel", _make_compact_glass_style())
-	top_bar.add_child(weapon_panel)
+	var sep1 := ColorRect.new()
+	sep1.custom_minimum_size = Vector2(2, 36)
+	sep1.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sep1.color = Color(1.0, 1.0, 1.0, 0.20)
+	hud_h.add_child(sep1)
 
 	var w_row := HBoxContainer.new()
-	w_row.add_theme_constant_override("separation", 6)
-	weapon_panel.add_child(w_row)
+	w_row.add_theme_constant_override("separation", 8)
+	w_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hud_h.add_child(w_row)
 
 	var atlas := AtlasTexture.new()
 	atlas.atlas = WEAPONS_TEX
@@ -819,6 +822,7 @@ func _build_ui() -> void:
 	_weapon_icon = TextureRect.new()
 	_weapon_icon.texture = atlas
 	_weapon_icon.custom_minimum_size = Vector2(52, 26)
+	_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	w_row.add_child(_weapon_icon)
 
@@ -826,7 +830,8 @@ func _build_ui() -> void:
 	p_atlas.region = Rect2(0, 0, 128, 128)
 	_agent_portrait = TextureRect.new()
 	_agent_portrait.texture = p_atlas
-	_agent_portrait.custom_minimum_size = Vector2(40, 40)
+	_agent_portrait.custom_minimum_size = Vector2(54, 54)
+	_agent_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_agent_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_agent_portrait.clip_contents = true
 	_agent_portrait.visible = false
@@ -835,6 +840,7 @@ func _build_ui() -> void:
 	_agent_hat_overlay = TextureRect.new()
 	_agent_hat_overlay.texture = hat_atlas
 	_agent_hat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_agent_hat_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_agent_hat_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_agent_portrait.add_child(_agent_hat_overlay)
 	w_row.add_child(_agent_portrait)
@@ -899,7 +905,8 @@ func _build_ui() -> void:
 	tp_atlas.region = Rect2(0, 0, 128, 128)
 	_target_portrait = TextureRect.new()
 	_target_portrait.texture = tp_atlas
-	_target_portrait.custom_minimum_size = Vector2(36, 36)
+	_target_portrait.custom_minimum_size = Vector2(50, 50)
+	_target_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_target_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_target_portrait.clip_contents = true
 	_target_portrait.visible = false
@@ -908,48 +915,57 @@ func _build_ui() -> void:
 	_target_hat_overlay = TextureRect.new()
 	_target_hat_overlay.texture = th_atlas
 	_target_hat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_target_hat_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_target_hat_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_target_portrait.add_child(_target_hat_overlay)
 	w_row.add_child(_target_portrait)
 
 	var kad_sep := ColorRect.new()
-	kad_sep.custom_minimum_size = Vector2(2, 34)
+	kad_sep.custom_minimum_size = Vector2(2, 36)
 	kad_sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	kad_sep.color = Color(1.0, 1.0, 1.0, 0.22)
-	w_row.add_child(kad_sep)
+	kad_sep.color = Color(1.0, 1.0, 1.0, 0.20)
+	hud_h.add_child(kad_sep)
 
 	_kad_label = Label.new()
 	_kad_label.text = "K:0  A:0  D:0"
 	_kad_label.add_theme_font_size_override("font_size", 15)
 	_kad_label.modulate = Color(1.0, 0.90, 0.45)
 	_kad_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	w_row.add_child(_kad_label)
+	hud_h.add_child(_kad_label)
 
-	var right_spacer := Control.new()
-	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_bar.add_child(right_spacer)
+	var timer_sep := ColorRect.new()
+	timer_sep.custom_minimum_size = Vector2(2, 36)
+	timer_sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	timer_sep.color = Color(1.0, 1.0, 1.0, 0.20)
+	timer_sep.visible = not NetworkManager.is_test_mode()
+	hud_h.add_child(timer_sep)
 
 	_match_timer_pill = PanelContainer.new()
 	_match_timer_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_match_timer_pill.add_theme_stylebox_override("panel", _make_compact_glass_style())
+	var empty_sb := StyleBoxEmpty.new()
+	_match_timer_pill.add_theme_stylebox_override("panel", empty_sb)
 	_match_timer_pill.visible = not NetworkManager.is_test_mode()
-	top_bar.add_child(_match_timer_pill)
+	hud_h.add_child(_match_timer_pill)
 
 	_match_timer_label = Label.new()
 	_match_timer_label.text = "05:00"
-	_match_timer_label.add_theme_font_size_override("font_size", 18)
+	_match_timer_label.add_theme_font_size_override("font_size", 17)
 	_match_timer_label.modulate = Color(0.95, 0.96, 1.0)
 	_match_timer_pill.add_child(_match_timer_label)
 
 	_chat_toggle_btn = Button.new()
 	_chat_toggle_btn.text = "CHAT"
-	_chat_toggle_btn.custom_minimum_size = Vector2(148, 50)
+	_chat_toggle_btn.custom_minimum_size = Vector2(88, 40)
 	_chat_toggle_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_chat_toggle_btn.focus_mode = Control.FOCUS_NONE
-	UIStyle.style_layer_button(_chat_toggle_btn, "blue", "", 12, 6)
-	_chat_toggle_btn.add_theme_font_size_override("font_size", 18)
-	top_bar.add_child(_chat_toggle_btn)
+	UIStyle.style_layer_button(_chat_toggle_btn, "blue", "", 10, 4)
+	_chat_toggle_btn.add_theme_font_size_override("font_size", 15)
+	hud_h.add_child(_chat_toggle_btn)
+
+	var right_spacer := Control.new()
+	right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_bar.add_child(right_spacer)
 
 	# Circular Translucent Touch Action Buttons (positioned via SettingsManager.touch_layout)
 	_btn_reload = Button.new()
@@ -1068,17 +1084,17 @@ func _build_ui() -> void:
 	top_agent_row.add_child(_btn_throw)
 
 	var ab_row := GridContainer.new()
-	ab_row.columns = 2
-	ab_row.add_theme_constant_override("h_separation", 8)
+	ab_row.columns = 4
+	ab_row.add_theme_constant_override("h_separation", 10)
 	ab_row.add_theme_constant_override("v_separation", 6)
-	ab_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ab_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_agent_action_panel.add_child(ab_row)
 
-	_btn_ability_1 = _create_agent_btn("ABIL 1", Color(0.10, 0.18, 0.30, 0.94), Color(0.38, 0.78, 1.0), 0)
+	_btn_ability_1 = _create_agent_btn("ABIL 1", Color(0.24, 0.20, 0.06, 0.94), Color(1.0, 0.84, 0.24), 0)
 	_btn_ability_2 = _create_agent_btn("ABIL 2", Color(0.10, 0.18, 0.30, 0.94), Color(0.45, 0.95, 0.65), 1)
 	_btn_ability_3 = _create_agent_btn("ABIL 3", Color(0.18, 0.14, 0.30, 0.94), Color(0.76, 0.50, 1.0), 2)
-	_btn_ult = _create_agent_btn("ULTIMATE", Color(0.32, 0.14, 0.08, 0.96), Color(1.0, 0.72, 0.20), 3)
+	_btn_ult = _create_agent_btn("ULTIMATE", Color(0.32, 0.08, 0.10, 0.96), Color(1.0, 0.28, 0.28), 3)
 	ab_row.add_child(_btn_ability_1)
 	ab_row.add_child(_btn_ability_2)
 	ab_row.add_child(_btn_ability_3)
@@ -1217,38 +1233,64 @@ func _build_ui() -> void:
 	_diag_label.visible = SettingsManager.show_diagnostics
 	add_child(_diag_label)
 
-	# Collapsible Scoreboard & Match Menu Drawer (opened via ⚙ button)
-	var right_panel := PanelContainer.new()
-	_drawer_panel = right_panel
-	right_panel.anchor_left = 0.5
-	right_panel.anchor_right = 0.5
-	right_panel.offset_left = -180
-	right_panel.offset_right = 180
-	right_panel.offset_top = 72
-	right_panel.offset_bottom = 260
-	right_panel.custom_minimum_size = Vector2(360, 0)
-	right_panel.visible = false
-	right_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.14, 0.92), Color(0.95, 0.55, 0.15, 0.88)))
-	add_child(right_panel)
+	# Full-Screen Pause Menu Overlay (opened via MENU button)
+	var pause_overlay := ColorRect.new()
+	_drawer_panel = pause_overlay
+	pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.color = Color(0.02, 0.03, 0.06, 0.82)
+	pause_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_overlay.visible = false
+	add_child(pause_overlay)
 	drawer_btn.pressed.connect(func():
-		right_panel.visible = not right_panel.visible
+		pause_overlay.visible = not pause_overlay.visible
 		_sync_offline_pause_state()
 	)
 
+	var pause_center := CenterContainer.new()
+	pause_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.add_child(pause_center)
+
+	var right_panel := PanelContainer.new()
+	right_panel.custom_minimum_size = Vector2(520, 0)
+	right_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.15, 0.98), Color(0.95, 0.65, 0.18, 0.95)))
+	pause_center.add_child(right_panel)
+
 	var rv := VBoxContainer.new()
-	rv.add_theme_constant_override("separation", 6)
+	rv.add_theme_constant_override("separation", 12)
 	right_panel.add_child(rv)
+
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", 10)
+	rv.add_child(hdr_row)
+
+	var pause_title := Label.new()
+	pause_title.text = "MATCH MENU" if NetworkManager.is_network_active() else "PAUSED"
+	pause_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pause_title.add_theme_font_size_override("font_size", 24)
+	pause_title.modulate = Color(1.0, 0.84, 0.28)
+	hdr_row.add_child(pause_title)
+
+	var close_x_btn := Button.new()
+	close_x_btn.text = "X"
+	close_x_btn.custom_minimum_size = Vector2(44, 40)
+	close_x_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(close_x_btn, Color(0.28, 0.10, 0.12, 0.96), Color(0.95, 0.38, 0.36), 16)
+	close_x_btn.pressed.connect(func():
+		pause_overlay.visible = false
+		_sync_offline_pause_state()
+	)
+	hdr_row.add_child(close_x_btn)
 
 	_net_status_label = Label.new()
 	_net_status_label.text = "NAMELESS CLASH"
-	_net_status_label.add_theme_font_size_override("font_size", 13)
+	_net_status_label.add_theme_font_size_override("font_size", 15)
 	_net_status_label.clip_text = true
 	_net_status_label.modulate = Color(1.0, 0.78, 0.25)
 	rv.add_child(_net_status_label)
 
 	_map_mode_label = Label.new()
-	_map_mode_label.text = "Bunker Base • Solo"
-	_map_mode_label.add_theme_font_size_override("font_size", 12)
+	_map_mode_label.text = "Bunker Base - Solo"
+	_map_mode_label.add_theme_font_size_override("font_size", 14)
 	_map_mode_label.clip_text = true
 	_map_mode_label.modulate = Color(0.82, 0.92, 0.72)
 	rv.add_child(_map_mode_label)
@@ -1256,63 +1298,45 @@ func _build_ui() -> void:
 	_scoreboard_label = Label.new()
 	_scoreboard_label.text = "Loading..."
 	_scoreboard_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_scoreboard_label.add_theme_font_size_override("font_size", 12)
+	_scoreboard_label.add_theme_font_size_override("font_size", 14)
 	rv.add_child(_scoreboard_label)
 
 	var nav_row := HBoxContainer.new()
-	nav_row.add_theme_constant_override("separation", 6)
+	nav_row.add_theme_constant_override("separation", 10)
 	rv.add_child(nav_row)
 
 	_rem_bot_btn = Button.new()
 	_rem_bot_btn.text = "- BOT"
-	_rem_bot_btn.custom_minimum_size = Vector2(68, 36)
+	_rem_bot_btn.custom_minimum_size = Vector2(0, 44)
 	_rem_bot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rem_bot_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_rem_bot_btn, Color(0.26, 0.14, 0.14, 0.94), Color(0.95, 0.42, 0.36), 12)
+	_style_action_button(_rem_bot_btn, Color(0.26, 0.14, 0.14, 0.94), Color(0.95, 0.42, 0.36), 14)
 	_rem_bot_btn.visible = not NetworkManager.is_network_active() or NetworkManager.is_host_active()
 	_rem_bot_btn.pressed.connect(func(): remove_bot_requested.emit())
 	nav_row.add_child(_rem_bot_btn)
 
 	_add_bot_btn = Button.new()
 	_add_bot_btn.text = "+ BOT"
-	_add_bot_btn.custom_minimum_size = Vector2(88, 36)
+	_add_bot_btn.custom_minimum_size = Vector2(0, 44)
 	_add_bot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_add_bot_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_add_bot_btn, Color(0.10, 0.26, 0.16, 0.94), Color(0.32, 0.92, 0.48), 12)
+	_style_action_button(_add_bot_btn, Color(0.10, 0.26, 0.16, 0.94), Color(0.32, 0.92, 0.48), 14)
 	_add_bot_btn.visible = not NetworkManager.is_network_active() or NetworkManager.is_host_active()
 	_add_bot_btn.pressed.connect(func(): add_bot_requested.emit())
 	nav_row.add_child(_add_bot_btn)
 	_refresh_test_bot_btn()
 
-	var layout_btn := Button.new()
-	layout_btn.text = "LAYOUT"
-	layout_btn.custom_minimum_size = Vector2(78, 36)
-	layout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	layout_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(layout_btn, Color(0.24, 0.18, 0.06, 0.94), Color(1.0, 0.78, 0.24), 12)
-	layout_btn.pressed.connect(_open_hud_layout_editor)
-	nav_row.add_child(layout_btn)
-
-	var menu_btn := Button.new()
-	menu_btn.text = "MENU"
-	menu_btn.custom_minimum_size = Vector2(72, 36)
-	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	menu_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(menu_btn, Color(0.24, 0.12, 0.14, 0.94), Color(0.95, 0.42, 0.36), 12)
-	menu_btn.pressed.connect(func(): NetworkManager.go_to_main_menu())
-	nav_row.add_child(menu_btn)
-
 	var audio_row := HBoxContainer.new()
-	audio_row.add_theme_constant_override("separation", 6)
+	audio_row.add_theme_constant_override("separation", 10)
 	rv.add_child(audio_row)
 
 	var music_btn := Button.new()
-	music_btn.custom_minimum_size = Vector2(0, 36)
+	music_btn.custom_minimum_size = Vector2(0, 44)
 	music_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	music_btn.focus_mode = Control.FOCUS_NONE
 	var sync_music_btn := func():
 		music_btn.text = "MUSIC: ON" if SettingsManager.music_enabled else "MUSIC: MUTED"
-		_style_action_button(music_btn, Color(0.10, 0.24, 0.34, 0.94), Color(0.35, 0.85, 1.0) if SettingsManager.music_enabled else Color(0.65, 0.35, 0.35), 12)
+		_style_action_button(music_btn, Color(0.10, 0.24, 0.34, 0.94), Color(0.35, 0.85, 1.0) if SettingsManager.music_enabled else Color(0.65, 0.35, 0.35), 14)
 	sync_music_btn.call()
 	music_btn.pressed.connect(func():
 		SettingsManager.music_enabled = not SettingsManager.music_enabled
@@ -1322,12 +1346,12 @@ func _build_ui() -> void:
 	audio_row.add_child(music_btn)
 
 	var sfx_btn := Button.new()
-	sfx_btn.custom_minimum_size = Vector2(0, 36)
+	sfx_btn.custom_minimum_size = Vector2(0, 44)
 	sfx_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sfx_btn.focus_mode = Control.FOCUS_NONE
 	var sync_sfx_btn := func():
 		sfx_btn.text = "SFX: ON" if SettingsManager.sfx_enabled else "SFX: MUTED"
-		_style_action_button(sfx_btn, Color(0.10, 0.26, 0.18, 0.94), Color(0.35, 0.92, 0.55) if SettingsManager.sfx_enabled else Color(0.65, 0.35, 0.35), 12)
+		_style_action_button(sfx_btn, Color(0.10, 0.26, 0.18, 0.94), Color(0.35, 0.92, 0.55) if SettingsManager.sfx_enabled else Color(0.65, 0.35, 0.35), 14)
 	sync_sfx_btn.call()
 	sfx_btn.pressed.connect(func():
 		SettingsManager.sfx_enabled = not SettingsManager.sfx_enabled
@@ -1335,6 +1359,44 @@ func _build_ui() -> void:
 		sync_sfx_btn.call()
 	)
 	audio_row.add_child(sfx_btn)
+
+	var util_row := HBoxContainer.new()
+	util_row.add_theme_constant_override("separation", 10)
+	rv.add_child(util_row)
+
+	var layout_btn := Button.new()
+	layout_btn.text = "TOUCH LAYOUT"
+	layout_btn.custom_minimum_size = Vector2(0, 44)
+	layout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(layout_btn, Color(0.24, 0.18, 0.06, 0.94), Color(1.0, 0.78, 0.24), 14)
+	layout_btn.pressed.connect(_open_hud_layout_editor)
+	util_row.add_child(layout_btn)
+
+	var menu_btn := Button.new()
+	menu_btn.text = "QUIT TO MENU"
+	menu_btn.custom_minimum_size = Vector2(0, 44)
+	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(menu_btn, Color(0.26, 0.10, 0.12, 0.94), Color(0.95, 0.42, 0.36), 14)
+	menu_btn.pressed.connect(func():
+		pause_overlay.visible = false
+		get_tree().paused = false
+		NetworkManager.disconnect_network()
+		NetworkManager.go_to_main_menu()
+	)
+	util_row.add_child(menu_btn)
+
+	var resume_btn := Button.new()
+	resume_btn.text = "RESUME"
+	resume_btn.custom_minimum_size = Vector2(0, 50)
+	resume_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(resume_btn, Color(0.10, 0.30, 0.16, 0.96), Color(0.32, 0.92, 0.48), 18)
+	resume_btn.pressed.connect(func():
+		pause_overlay.visible = false
+		_sync_offline_pause_state()
+	)
+	rv.add_child(resume_btn)
 
 	# Respawn Center Banner
 	_respawn_panel = PanelContainer.new()
@@ -1427,8 +1489,8 @@ func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
 	if not is_instance_valid(icon_rect) or w_data == null:
 		return
-	if w_data.id == 11:
-		icon_rect.texture = TEX_FLAMETHROWER
+	if w_data.id == 11 or w_data.id == 15 or w_data.id == 16:
+		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_HOOK_GUN if w_data.id == 15 else TEX_BUBBLE_GUN)
 		return
 	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
 	if atlas == null:
@@ -1446,7 +1508,9 @@ func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
 	if at == null or tex == null:
 		return
 	at.atlas = tex
-	at.region = Rect2(0, 0, maxi(1, int(tex.get_width() / 8)), maxi(1, tex.get_height()))
+	var fw: float = maxf(1.0, float(tex.get_width()) / 8.0)
+	var fh: float = maxf(1.0, float(tex.get_height()))
+	at.region = Rect2(fw * 0.16, fh * 0.06, fw * 0.68, fh * 0.68)
 
 
 func _refresh_top_info_pill() -> void:
@@ -1554,16 +1618,10 @@ func _on_nearby_weapon_changed(crate_idx: int, w_id: int) -> void:
 	_update_stick_and_button_positions()
 
 
-func _on_nearby_interactable_changed(inter_idx: int, label_text: String) -> void:
+func _on_nearby_interactable_changed(inter_idx: int, _label_text: String) -> void:
 	_nearby_inter_idx = inter_idx
-	if not is_instance_valid(_btn_interact):
-		return
-	if inter_idx < 0 or label_text.is_empty():
+	if is_instance_valid(_btn_interact):
 		_btn_interact.visible = false
-		return
-	_btn_interact.text = label_text
-	_btn_interact.visible = true
-	_update_stick_and_button_positions()
 
 
 func _on_held_prop_changed(prop_kind: String) -> void:
@@ -1769,12 +1827,34 @@ func _refresh_test_bot_btn() -> void:
 
 func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -> Button:
 	var btn := Button.new()
-	btn.text = title
-	btn.custom_minimum_size = Vector2(264, 42)
-	btn.clip_text = true
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.text = ""
+	btn.custom_minimum_size = Vector2(76, 66)
 	btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(btn, bg, border, 14)
+	_style_action_button(btn, bg, border, 11)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 2)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(vb)
+
+	var icon_rect := TextureRect.new()
+	icon_rect.custom_minimum_size = Vector2(36, 36)
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(icon_rect)
+
+	var status_lbl := Label.new()
+	status_lbl.text = title
+	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_lbl.add_theme_font_size_override("font_size", 11)
+	status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(status_lbl)
+
+	btn.set_meta("icon_rect", icon_rect)
+	btn.set_meta("status_lbl", status_lbl)
 	btn.pressed.connect(func():
 		if local_player != null:
 			local_player.use_agent_ability(slot_idx)
@@ -1791,7 +1871,6 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 		return
 	var arch_id: int = int(local_player.get("archetype_id")) if local_player != null else ProfileManager.archetype_id
 	_refresh_top_info_pill()
-	var keys: Array[String] = ["1:", "2:", "3:", "ULT"]
 	var btns: Array[Button] = [_btn_ability_1, _btn_ability_2, _btn_ability_3, _btn_ult]
 	var kill_prog: int = int(local_player.get("ability_kill_progress")) if local_player != null else 0
 	var ult_pts: int = int(local_player.get("ult_points")) if local_player != null else 0
@@ -1802,32 +1881,39 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 		if not is_instance_valid(btn):
 			continue
 		var ab: Dictionary = local_player.get_active_ability_slot(i) if (local_player != null and local_player.has_method("get_active_ability_slot")) else AgentData.get_ability_slot(arch_id, i)
-		var ab_name: String = str(ab["name"]).left(16)
+		var ab_kind: String = str(ab.get("kind", ""))
+		var icon_rect: TextureRect = btn.get_meta("icon_rect") as TextureRect if btn.has_meta("icon_rect") else null
+		var status_lbl: Label = btn.get_meta("status_lbl") as Label if btn.has_meta("status_lbl") else null
+		if is_instance_valid(icon_rect):
+			icon_rect.texture = AgentData.get_ability_icon_texture(ab_kind)
 		var cd: float = float(cooldowns[i]) if i < cooldowns.size() else 0.0
 		var max_cd: float = float(max_cooldowns[i]) if i < max_cooldowns.size() else 1.0
 		var _unused := max_cd
+		var st_txt: String = "READY"
 		if frz_t > 0.0:
-			btn.text = "%s %s • FROZEN" % [keys[i], ab_name]
+			st_txt = "FRZ"
 			btn.modulate = Color(0.45, 0.85, 1.0)
 		elif ab_lock > 0.0:
-			btn.text = "%s %s • LOCKED" % [keys[i], ab_name]
+			st_txt = "LOCK"
 			btn.modulate = Color(0.48, 0.48, 0.56)
 		elif stun_left > 0.0:
-			btn.text = "%s %s • STUN" % [keys[i], ab_name]
+			st_txt = "STUN"
 			btn.modulate = Color(0.55, 0.65, 0.78)
 		elif i == 3:
 			if ult_pts < 4:
-				btn.text = "%s %s • %d/4 ULT" % [keys[i], ab_name, ult_pts]
+				st_txt = "%d/4 ULT" % ult_pts
 				btn.modulate = Color(0.65, 0.68, 0.74)
 			else:
-				btn.text = "%s %s • READY!" % [keys[i], ab_name]
-				btn.modulate = Color(0.92, 0.82, 0.48)
+				st_txt = "ULT!"
+				btn.modulate = Color(1.0, 0.36, 0.36)
 		elif cd > 0.05:
-			btn.text = "%s %s • %d/2 KILL" % [keys[i], ab_name, kill_prog]
+			st_txt = "%d/2" % kill_prog
 			btn.modulate = Color(0.65, 0.68, 0.74)
 		else:
-			btn.text = "%s %s • READY" % [keys[i], ab_name]
-			btn.modulate = Color(0.92, 0.94, 0.96)
+			st_txt = "READY"
+			btn.modulate = Color(1.0, 0.86, 0.42) if i == 0 else Color(0.95, 0.98, 1.0)
+		if is_instance_valid(status_lbl):
+			status_lbl.text = st_txt
 
 	if is_instance_valid(_btn_throw):
 		if local_player != null and int(local_player.get("grabbed_player_id")) != 0:
@@ -1922,6 +2008,17 @@ func _build_preset_overlay() -> void:
 	_preset_timer_label.modulate = Color(1.0, 0.86, 0.28)
 	_preset_timer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.add_child(_preset_timer_label)
+
+	var rand_btn := Button.new()
+	rand_btn.text = "RANDOM"
+	rand_btn.custom_minimum_size = Vector2(110, 36)
+	rand_btn.focus_mode = Control.FOCUS_NONE
+	UIStyle.style_layer_button(rand_btn, "purple", "", 12, 6)
+	rand_btn.pressed.connect(func():
+		var r_idx: int = randi() % WeaponData.GUN_PRESETS.size()
+		_confirm_preset(r_idx)
+	)
+	hdr.add_child(rand_btn)
 
 	var keep_btn := Button.new()
 	keep_btn.text = "KEEP DEFAULT"
@@ -2261,16 +2358,33 @@ func _build_match_end_overlay() -> void:
 	btn_row.add_theme_constant_override("separation", 12)
 	vb.add_child(btn_row)
 
-	var again_btn := Button.new()
-	again_btn.text = "PLAY AGAIN"
-	again_btn.custom_minimum_size = Vector2(0, 50)
-	again_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	again_btn.add_theme_font_size_override("font_size", 18)
-	UIStyle.style_layer_button(again_btn, "green", "", 10, 6)
-	again_btn.pressed.connect(func():
-		NetworkManager.go_to_arena()
+	_match_end_again_btn = Button.new()
+	_match_end_again_btn.text = "PLAY AGAIN"
+	_match_end_again_btn.custom_minimum_size = Vector2(0, 50)
+	_match_end_again_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_match_end_again_btn.add_theme_font_size_override("font_size", 18)
+	UIStyle.style_layer_button(_match_end_again_btn, "green", "", 10, 6)
+	_match_end_again_btn.pressed.connect(func():
+		if NetworkManager.is_network_active():
+			if NetworkManager.is_local_leader():
+				NetworkManager.request_start_match()
+		else:
+			NetworkManager.go_to_arena()
 	)
-	btn_row.add_child(again_btn)
+	btn_row.add_child(_match_end_again_btn)
+
+	_match_end_lobby_btn = Button.new()
+	_match_end_lobby_btn.text = "LOBBY"
+	_match_end_lobby_btn.custom_minimum_size = Vector2(0, 50)
+	_match_end_lobby_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_match_end_lobby_btn.add_theme_font_size_override("font_size", 18)
+	UIStyle.style_layer_button(_match_end_lobby_btn, "green", "", 10, 6)
+	_match_end_lobby_btn.pressed.connect(func():
+		if NetworkManager.is_network_active() and not NetworkManager.is_local_leader():
+			NetworkManager.set_local_ready(true)
+		NetworkManager.go_to_lobby()
+	)
+	btn_row.add_child(_match_end_lobby_btn)
 
 	var menu_btn := Button.new()
 	menu_btn.text = "MAIN MENU"
@@ -2323,6 +2437,11 @@ func _on_combo_achieved(killer_id: int, killer_name: String, combo_count: int) -
 func _on_match_ended(winner_text: String, rankings: Array) -> void:
 	if not is_instance_valid(_match_end_overlay) or not is_instance_valid(_match_end_table):
 		return
+	var is_net_client: bool = NetworkManager.is_network_active() and not NetworkManager.is_local_leader()
+	if is_instance_valid(_match_end_again_btn):
+		_match_end_again_btn.visible = not is_net_client
+	if is_instance_valid(_match_end_lobby_btn):
+		_match_end_lobby_btn.visible = NetworkManager.is_network_active()
 	_match_end_title.text = winner_text
 	for ch in _match_end_table.get_children():
 		ch.queue_free()
