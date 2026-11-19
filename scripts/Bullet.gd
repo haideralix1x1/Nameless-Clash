@@ -50,6 +50,7 @@ var _distance_traveled: float = 0.0
 
 var _age: float = 0.0
 var _trail_points: PackedVector2Array = PackedVector2Array()
+var max_trail_points: int = 8
 var _finished: bool = false
 
 @onready var _sprite: Sprite2D = $Sprite2D
@@ -171,7 +172,7 @@ func _physics_process(delta: float) -> void:
 				_handle_collision(p, global_position)
 				return
 	_trail_points.append(next_pos)
-	if _trail_points.size() > 8:
+	while _trail_points.size() > max_trail_points:
 		_trail_points.remove_at(0)
 	_update_trail_visual()
 	if visual_style != "bullet":

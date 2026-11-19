@@ -216,6 +216,7 @@ func _build_ui() -> void:
 	anchor_wrap.add_child(anchor)
 
 	_preview = SoldierPreview.new()
+	_preview.shuffle_guns = true
 	_preview.scale = Vector2(3.8, 3.8)
 	anchor.add_child(_preview)
 
@@ -224,10 +225,7 @@ func _build_ui() -> void:
 	_loadout_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_loadout_label.add_theme_font_size_override("font_size", 17)
 	_loadout_label.modulate = Color(0.76, 0.82, 0.88)
-	var arch_name: String = ProfileManager.ARCHETYPES[ProfileManager.archetype_id]["name"]
-	var pri_weapon: WeaponData = WeaponData.get_weapon(ProfileManager.primary_weapon_id, ProfileManager.weapon_skin_id, ProfileManager.m4a1_rail_mod)
-	var sec_weapon: WeaponData = WeaponData.get_weapon(ProfileManager.secondary_weapon_id, ProfileManager.weapon_skin_id, 0)
-	_loadout_label.text = "%s\n%s  +  %s" % [arch_name, pri_weapon.display_name, sec_weapon.display_name]
+	_update_loadout_label()
 	pv.add_child(_loadout_label)
 
 	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.86, 0.62, 0.24), 56.0, 19, Color(0.18, 0.14, 0.10, 0.96))
@@ -596,10 +594,21 @@ func _build_agent_select_overlay() -> void:
 	_refresh_agent_select_ui()
 
 
+func _update_loadout_label() -> void:
+	if not is_instance_valid(_loadout_label):
+		return
+	var arch_d: Dictionary = ProfileManager.ARCHETYPES[clampi(ProfileManager.archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)]
+	var full_name: String = str(arch_d.get("name", "Hero"))
+	var callsign: String = str(arch_d.get("callsign", full_name))
+	var role_sub: String = full_name.replace(callsign, "").strip_edges().trim_prefix("(").trim_suffix(")")
+	_loadout_label.text = ("%s\n%s" % [callsign, role_sub]) if not role_sub.is_empty() else callsign
+
+
 func _select_agent(idx: int) -> void:
 	ProfileManager.apply_archetype_preset(idx, true)
 	if is_instance_valid(_preview):
 		_preview.refresh_from_profile()
+	_update_loadout_label()
 	_refresh_agent_select_ui()
 
 

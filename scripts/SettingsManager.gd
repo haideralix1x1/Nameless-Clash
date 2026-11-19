@@ -104,6 +104,12 @@ func reset_touch_layout() -> void:
 	_reset_default_touch_layout(true)
 
 
+func restore_touch_layout(saved_layout: Dictionary) -> void:
+	touch_layout = saved_layout.duplicate(true)
+	save_settings()
+	touch_layout_changed.emit()
+
+
 func set_touch_element_pos(key: String, norm_pos: Vector2) -> void:
 	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.04, 0.96), clampf(norm_pos.y, 0.05, 0.95))
 	save_settings()

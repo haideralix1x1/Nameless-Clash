@@ -13,6 +13,7 @@ var _layout_overlay: Control
 var _drag_handles: Dictionary = {}
 var _dragging_key: String = ""
 var _drag_center_offset: Vector2 = Vector2.ZERO
+var _layout_backup: Dictionary = {}
 var _test_sfx_player: AudioStreamPlayer
 
 
@@ -388,15 +389,22 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
-	if _layout_overlay.visible and not _dragging_key.is_empty():
-		if event is InputEventMouseMotion:
-			_move_handle(_dragging_key, (event as InputEventMouseMotion).position - _drag_center_offset)
-		elif event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
-			_dragging_key = ""
-		elif event is InputEventScreenDrag:
-			_move_handle(_dragging_key, (event as InputEventScreenDrag).position - _drag_center_offset)
-		elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
-			_dragging_key = ""
+	if _layout_overlay.visible:
+		if event is InputEventKey:
+			var kev := event as InputEventKey
+			if kev.pressed and not kev.echo and kev.keycode == KEY_ESCAPE:
+				_cancel_layout_editor()
+				get_viewport().set_input_as_handled()
+				return
+		if not _dragging_key.is_empty():
+			if event is InputEventMouseMotion:
+				_move_handle(_dragging_key, (event as InputEventMouseMotion).position - _drag_center_offset)
+			elif event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
+				_dragging_key = ""
+			elif event is InputEventScreenDrag:
+				_move_handle(_dragging_key, (event as InputEventScreenDrag).position - _drag_center_offset)
+			elif event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+				_dragging_key = ""
 
 
 func _build_touch_layout_overlay() -> void:
@@ -409,8 +417,8 @@ func _build_touch_layout_overlay() -> void:
 	var top_bar := HBoxContainer.new()
 	top_bar.anchor_left = 0.5
 	top_bar.anchor_right = 0.5
-	top_bar.offset_left = -310
-	top_bar.offset_right = 310
+	top_bar.offset_left = -380
+	top_bar.offset_right = 380
 	top_bar.offset_top = 12
 	top_bar.offset_bottom = 60
 	top_bar.add_theme_constant_override("separation", 10)
@@ -421,6 +429,14 @@ func _build_touch_layout_overlay() -> void:
 	info.add_theme_font_size_override("font_size", 15)
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(info)
+
+	var back_btn := Button.new()
+	back_btn.text = "BACK"
+	back_btn.custom_minimum_size = Vector2(100, 44)
+	back_btn.add_theme_font_size_override("font_size", 15)
+	_style_button(back_btn, Color(0.14, 0.18, 0.24), Color(0.62, 0.72, 0.86), 10)
+	back_btn.pressed.connect(_cancel_layout_editor)
+	top_bar.add_child(back_btn)
 
 	var reset_btn := Button.new()
 	reset_btn.text = "RESET"
@@ -487,8 +503,15 @@ func _build_touch_layout_overlay() -> void:
 
 func _open_layout_editor() -> void:
 	_dragging_key = ""
+	_layout_backup = SettingsManager.touch_layout.duplicate(true)
 	_layout_overlay.visible = true
 	_position_layout_handles()
+
+
+func _cancel_layout_editor() -> void:
+	_dragging_key = ""
+	SettingsManager.restore_touch_layout(_layout_backup)
+	_layout_overlay.visible = false
 
 
 func _clamp_handle_pos(center_px: Vector2, ctrl_size: Vector2, vp_size: Vector2) -> Vector2:

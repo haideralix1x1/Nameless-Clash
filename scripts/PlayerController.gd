@@ -186,6 +186,14 @@ var _yagami_ult_end: Vector2 = Vector2.ZERO
 var _yagami_ult_target: Node2D = null
 var _yagami_ult_slashed: bool = false
 var _yagami_ult_slash_timer: float = 0.0
+var _flurry_state: int = 0
+var _flurry_timer: float = 0.0
+var _flurry_hit_accum: float = 0.0
+var _flurry_smoke_accum: float = 0.0
+var _flurry_target: Node2D = null
+var _flurry_dmg: int = 200
+var _flurry_name: String = "Knockout Flurry"
+var _flurry_auth: bool = false
 var headless_timer: float = 0.0
 var _headless_proj: Node = null
 const TEX_VAMPIRE_BAT: Texture2D = preload("res://assets/sprites/summons/bat.png")
@@ -1560,6 +1568,10 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	earth_shake_timer = 0.0
 	poison_dot_timer = 0.0
 	cryo_shatter_timer = 0.0
+	_fly_kick_timer = 0.0
+	_flurry_state = 0
+	_flurry_timer = 0.0
+	_flurry_target = null
 	_release_grab_state()
 	_respawn_timer = RESPAWN_TIME
 	var assist_ids: Array = []
@@ -1660,6 +1672,10 @@ func _respawn_self() -> void:
 	held_throwables.clear()
 	shoe_cooldown_timer = 0.0
 	_shoe_windup_timer = 0.0
+	_fly_kick_timer = 0.0
+	_flurry_state = 0
+	_flurry_timer = 0.0
+	_flurry_target = null
 	_release_grab_state()
 	if NetworkManager.is_unlimited_abilities_active() and not is_bot:
 		ult_points = 4
@@ -2075,6 +2091,10 @@ func sync_stun_rpc(duration: float, attacker_id: int = 0) -> void:
 func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
 	if is_dead or invincible_timer > 0.0 or deathless_timer > 0.0 or (attacker_id != 0 and attacker_id == peer_id):
 		return
+	_fly_kick_timer = 0.0
+	_flurry_state = 0
+	_flurry_timer = 0.0
+	_flurry_target = null
 	_release_grab_state()
 	stun_timer = maxf(stun_timer, duration)
 	is_jetpacking = false
@@ -2928,18 +2948,26 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 					_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.85)
 			)
 		"ult_boxer_flurry":
-			control_lock_timer = 1.4
-			var tgt_bf: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
+			var tgt_bf: Node2D = _find_nearest_enemy_player(cast_pos, 560.0)
 			if tgt_bf != null:
-				global_position = tgt_bf.global_position + Vector2(-34.0 if global_position.x < tgt_bf.global_position.x else 34.0, 0.0)
-				_spawn_vfx_burst(tgt_bf.global_position, 115.0, col)
-				if local_auth and tgt_bf.has_method("apply_hit"):
-					tgt_bf.apply_hit(dmg, peer_id, ab_name, player_name, Vector2((1.0 if facing_right else -1.0) * 420.0, -140.0))
+				_flurry_target = tgt_bf
+				_flurry_state = 1
+				_flurry_timer = 0.55
+				_flurry_hit_accum = 0.0
+				_flurry_smoke_accum = 0.0
+				_flurry_dmg = maxi(200, dmg)
+				_flurry_name = ab_name
+				_flurry_auth = local_auth
+				control_lock_timer = 2.55
+				facing_right = tgt_bf.global_position.x >= global_position.x
+				aim_angle = (tgt_bf.global_position - global_position).angle()
 			else:
-				velocity += Vector2.from_angle(cast_angle) * 620.0
-				_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 80.0, 115.0, col)
-			add_screen_shake(2.8)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.1)
+				_flurry_state = 0
+				_flurry_target = null
+				velocity += Vector2.from_angle(cast_angle) * 680.0
+				_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 72.0, 95.0, col)
+				add_screen_shake(1.8)
+			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 1.25)
 
 
 func apply_reverse_controls(dur: float) -> void:
@@ -3052,6 +3080,67 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if personal_shield_timer <= 0.0:
 			personal_shield_hp = 0
 		queue_redraw()
+	if _flurry_state == 1:
+		_flurry_timer = maxf(0.0, _flurry_timer - delta)
+		if not is_instance_valid(_flurry_target) or (_flurry_target.has_method("is_alive") and not _flurry_target.is_alive()):
+			_flurry_state = 0
+			_flurry_target = null
+			control_lock_timer = 0.0
+		else:
+			var to_f: Vector2 = _flurry_target.global_position - global_position
+			var dist_f: float = to_f.length()
+			if dist_f <= 54.0 or _flurry_timer <= 0.0:
+				_flurry_state = 2
+				_flurry_timer = 2.0
+				_flurry_hit_accum = 0.0
+				_flurry_smoke_accum = 0.0
+				control_lock_timer = 2.0
+				if _flurry_auth and _flurry_target.has_method("apply_stun"):
+					_flurry_target.apply_stun(2.1, peer_id)
+				_spawn_flurry_dust_puff(_flurry_target.global_position)
+			else:
+				var rush_dir: Vector2 = to_f / maxf(1.0, dist_f)
+				velocity = rush_dir * 1350.0
+				facing_right = rush_dir.x >= 0.0
+				aim_angle = rush_dir.angle()
+				move_and_slide()
+				_spawn_rising_particles(global_position, Color(0.95, 0.85, 0.65, 0.7), false, 2)
+	elif _flurry_state == 2:
+		_flurry_timer = maxf(0.0, _flurry_timer - delta)
+		_flurry_hit_accum += delta
+		_flurry_smoke_accum += delta
+		if not is_instance_valid(_flurry_target) or (_flurry_target.has_method("is_alive") and not _flurry_target.is_alive()):
+			_flurry_state = 0
+			_flurry_target = null
+			control_lock_timer = 0.0
+		else:
+			var tgt_p: Vector2 = _flurry_target.global_position
+			var osc: float = sin(_flurry_timer * 26.0) * 20.0
+			global_position = tgt_p + Vector2(-24.0 + osc if osc >= 0.0 else 24.0 + osc, -2.0)
+			velocity = Vector2.ZERO
+			facing_right = global_position.x <= tgt_p.x
+			aim_angle = 0.0 if facing_right else PI
+			_melee_swing_timer = 0.14
+			if _flurry_smoke_accum >= 0.12:
+				_flurry_smoke_accum = 0.0
+				_spawn_flurry_dust_puff(tgt_p)
+			if _flurry_hit_accum >= 0.28:
+				_flurry_hit_accum = 0.0
+				add_screen_shake(0.8)
+				_play_local_sfx("res://assets/audio/hit.wav", -3.0, randf_range(0.95, 1.25))
+				if _flurry_auth and _flurry_target.has_method("apply_hit"):
+					_flurry_target.apply_hit(8, peer_id, _flurry_name, player_name, Vector2.ZERO)
+			if _flurry_timer <= 0.0:
+				_flurry_state = 0
+				control_lock_timer = 0.0
+				var fin_dir: float = 1.0 if facing_right else -1.0
+				_spawn_vfx_burst(tgt_p, 130.0, Color(1.0, 0.68, 0.22))
+				add_screen_shake(3.0)
+				_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.05)
+				if _flurry_auth and is_instance_valid(_flurry_target) and _flurry_target.has_method("apply_hit"):
+					_flurry_target.apply_hit(_flurry_dmg, peer_id, _flurry_name, player_name, Vector2(fin_dir * 520.0, -260.0))
+				_flurry_target = null
+
 	if _bat_ult_timer > 0.0:
 		_bat_ult_timer = maxf(0.0, _bat_ult_timer - delta)
 		if _bat_ult_sprite == null:
@@ -3224,7 +3313,9 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if _auto_mg_accum >= 0.11:
 			_auto_mg_accum = 0.0
 			var mg_orig: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
-			_spawn_custom_bullet(mg_orig, aim_angle + randf_range(-0.04, 0.04), 1280.0, 12, "bullet", Color(0.35, 0.86, 1.0), "Auto Machinegun", 0.0, 0.0, false, 1.1, _is_controlled_locally())
+			var mg_b = _spawn_custom_bullet(mg_orig, aim_angle + randf_range(-0.04, 0.04), 1280.0, 12, "bullet", Color(0.35, 0.86, 1.0), "Auto Machinegun", 0.0, 0.0, false, 1.1, _is_controlled_locally())
+			if mg_b != null:
+				mg_b.max_trail_points = 2
 			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -7.0, 1.1)
 	if electric_laser_timer > 0.0:
 		electric_laser_timer = maxf(0.0, electric_laser_timer - delta)
@@ -4014,6 +4105,12 @@ func _spawn_air_wave_circle(pos: Vector2, max_rad: float, col: Color) -> void:
 	vfx.max_radius = max_rad
 	vfx.wave_color = col
 	parent_node.add_child(vfx)
+
+
+func _spawn_flurry_dust_puff(center_pos: Vector2) -> void:
+	var off := Vector2(randf_range(-26.0, 26.0), randf_range(-26.0, 14.0))
+	_spawn_rising_particles(center_pos + off, Color(0.88, 0.88, 0.92, 0.85), false, 5)
+	_spawn_rising_particles(center_pos + off * 0.6, Color(1.0, 0.78, 0.25, 0.90), false, 3)
 
 
 func _spawn_rising_particles(pos: Vector2, col: Color, is_heal: bool = false, count: int = 8) -> void:

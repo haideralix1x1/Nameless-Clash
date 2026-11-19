@@ -285,7 +285,7 @@ func _process(delta: float) -> void:
 			hero.preview_move_x = _hero_pace_dir
 			hero.aim_angle = 0.0 if _hero_pace_dir >= 0.0 else PI
 			hero.facing_right = _hero_pace_dir >= 0.0
-		elif not _hero_dash_casting and _hero_return_delay <= 0.0 and hero.control_lock_timer <= 0.0 and hero._fly_kick_timer <= 0.0 and hero._bat_ult_timer <= 0.0:
+		elif not _hero_dash_casting and _hero_return_delay <= 0.0 and hero.control_lock_timer <= 0.0 and hero._fly_kick_timer <= 0.0 and hero._bat_ult_timer <= 0.0 and hero._flurry_state == 0:
 			if hero.global_position.x > 128.0:
 				hero.preview_move_x = -0.85
 			else:
