@@ -64,6 +64,7 @@ func _ready() -> void:
 	collision_mask = 2
 	monitoring = true
 	monitorable = false
+	add_to_group("agent_summons")
 	_col_shape = CollisionShape2D.new()
 	var sh := CircleShape2D.new()
 	sh.radius = 22.0 if summon_kind in ["winged_lion", "giant_snake", "ghost_clone", "mirror_clone", "turret"] else 15.0
@@ -111,6 +112,22 @@ func _ready() -> void:
 
 func is_alive() -> bool:
 	return time_left > 0.0
+
+
+func apply_fan_wind(dir_n: Vector2, push_force: float, delta: float) -> void:
+	vel += dir_n * push_force * delta
+	if dir_n.y < -0.5:
+		vel.y = clampf(vel.y, -780.0, 420.0)
+	else:
+		vel.x = clampf(vel.x, -820.0, 820.0)
+	var step: Vector2 = dir_n * 420.0 * delta
+	var space := get_world_2d().direct_space_state
+	if space != null:
+		var hit := space.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, global_position + step + dir_n * 18.0, 1))
+		if hit.is_empty():
+			global_position += step
+	else:
+		global_position += step
 
 
 func on_shot_hit(dmg: int, attacker_id: int) -> void:
@@ -400,7 +417,7 @@ func _blast_ghost_clone() -> void:
 	var exp := preload("res://scenes/Explosion.tscn").instantiate()
 	exp.global_position = global_position
 	exp.explosion_radius = 125.0
-	exp.max_damage = 40
+	exp.max_damage = damage if damage > 0 else 50
 	exp.shooter_peer_id = owner_peer_id
 	exp.shooter_team = owner_team
 	exp.shooter_name = owner_name

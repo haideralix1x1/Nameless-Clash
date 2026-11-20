@@ -255,10 +255,10 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Ghost Clones",
 				"kind": "ghost_clones",
-				"damage": 0,
+				"damage": 50,
 				"duration": 4.0,
 				"color": Color(0.78, 0.96, 1.0),
-				"desc": "Create 2 decoy clones for 4s that vanish in 1 hit."
+				"desc": "Create 2 decoy clones for 4s that explode for 50% damage on hit."
 			}
 		],
 		"ultimate": {
@@ -1452,6 +1452,8 @@ static func _get_target_icon_texture() -> Texture2D:
 
 
 static func get_ability_icon_texture(kind: String) -> Texture2D:
+	if kind == "frost_gas" and ResourceLoader.exists("res://assets/ui/frost_snowflake_icon.png"):
+		return load("res://assets/ui/frost_snowflake_icon.png") as Texture2D
 	if kind == "ult_homing_bazooka":
 		return _get_target_icon_texture()
 	if kind == "hook_drag":

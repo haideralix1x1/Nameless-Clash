@@ -144,7 +144,7 @@ static func get_allowed_weapon_ids() -> Array[int]:
 
 
 static func sanitize_weapon_id(weapon_id: int) -> int:
-	if weapon_id >= 11 and weapon_id <= 14:
+	if weapon_id >= 11 and weapon_id <= 17:
 		var nm: Node = _get_network_manager()
 		if weapon_id == 12 and nm != null and not bool(nm.get("allow_explosives")):
 			return 11
@@ -157,14 +157,9 @@ static func sanitize_weapon_id(weapon_id: int) -> int:
 
 
 static func get_pickup_weapon_ids() -> Array[int]:
-	var out: Array[int] = get_allowed_weapon_ids()
+	var out: Array[int] = [11, 13, 14, 15, 16]
 	var nm: Node = _get_network_manager()
 	var exp_ok: bool = true if nm == null else bool(nm.get("allow_explosives"))
-	out.append_array([11, 13, 14, 15, 16])
-	if exp_ok:
-		out.append(12)
-	# Weight special weapons so they appear regularly on the map
-	out.append_array([11, 13, 14, 15, 16])
 	if exp_ok:
 		out.append(12)
 	return out
@@ -197,7 +192,7 @@ static func get_effective_preset(preset_idx: int) -> Dictionary:
 
 
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
-	if weapon_id >= 11 and weapon_id <= 16:
+	if weapon_id >= 11 and weapon_id <= 17:
 		return _get_special_weapon(weapon_id)
 	var idx: int = clampi(weapon_id, 0, RESOURCE_PATHS.size() - 1)
 	var base: WeaponData = load(RESOURCE_PATHS[idx]) as WeaponData
@@ -341,5 +336,21 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.custom_visual_style = "bubble_trap_orb"
 			w.custom_lifetime = 1.4
 			w.sound_path = "res://assets/audio/pickup.wav"
+			w.sprite_frame = 2
+		17:
+			w.code_name = "machine_gun"
+			w.display_name = "Machine Gun"
+			w.description = "100-round rapid-fire Machine Gun (100/100)! Treasure Box exclusive."
+			w.damage = 14
+			w.fire_interval = 0.055
+			w.mag_size = 100
+			w.reload_time = 2.2
+			w.recoil_impulse = 42.0
+			w.bullet_speed = 1280.0
+			w.spread_deg = 4.0
+			w.max_zoom_level = 3
+			w.move_speed_multiplier = 0.90
+			w.bullet_color = Color(1.0, 0.86, 0.30)
+			w.sound_path = "res://assets/audio/shoot_ak47.wav"
 			w.sprite_frame = 2
 	return w

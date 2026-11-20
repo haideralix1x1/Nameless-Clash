@@ -24,6 +24,8 @@ var _test_mode_type_buttons: Array[Button] = []
 var _test_bot_beh_buttons: Array[Button] = []
 var _test_mode_choice: int = 2
 var _test_bot_choice: int = 1
+var _test_grav_slider: HSlider
+var _test_grav_val_lbl: Label
 var _map_opt: OptionButton
 var _map_select_overlay: Control
 var _map_preview_tex: TextureRect
@@ -736,7 +738,7 @@ func _build_test_mode_overlay() -> void:
 	_test_mode_overlay.add_child(cc)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(560, 340)
+	card.custom_minimum_size = Vector2(720, 380)
 	card.add_theme_stylebox_override("panel", _make_style(Color(0.07, 0.11, 0.17, 0.98), Color(0.24, 0.86, 0.82, 0.95), 16))
 	cc.add_child(card)
 
@@ -748,7 +750,7 @@ func _build_test_mode_overlay() -> void:
 	cv.add_child(top_row)
 
 	var title := Label.new()
-	title.text = "TEST / PRACTICE MODE (1 BOT)"
+	title.text = "PRACTICE MODE"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 22)
 	title.modulate = Color(0.38, 0.92, 0.88)
@@ -759,19 +761,31 @@ func _build_test_mode_overlay() -> void:
 	close_btn.pressed.connect(_close_test_mode_overlay)
 	top_row.add_child(close_btn)
 
+	var boxes_row := HBoxContainer.new()
+	boxes_row.add_theme_constant_override("separation", 12)
+	cv.add_child(boxes_row)
+
+	# Box 1: Gameplay Mode (Gun Mode, Agent Mode)
+	var mode_box := PanelContainer.new()
+	mode_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_box.size_flags_stretch_ratio = 0.85
+	mode_box.add_theme_stylebox_override("panel", _make_style(Color(0.05, 0.08, 0.13, 0.95), Color(0.24, 0.56, 0.68, 0.85), 12))
+	boxes_row.add_child(mode_box)
+
+	var mode_vb := VBoxContainer.new()
+	mode_vb.add_theme_constant_override("separation", 10)
+	mode_box.add_child(mode_vb)
+
 	var mode_lbl := Label.new()
-	mode_lbl.text = "GAMEPLAY MODE:"
+	mode_lbl.text = "GAMEPLAY MODE"
+	mode_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mode_lbl.add_theme_font_size_override("font_size", 14)
 	mode_lbl.modulate = Color(0.75, 0.85, 0.95)
-	cv.add_child(mode_lbl)
-
-	var mode_row := HBoxContainer.new()
-	mode_row.add_theme_constant_override("separation", 8)
-	cv.add_child(mode_row)
+	mode_vb.add_child(mode_lbl)
 
 	_test_mode_type_buttons.clear()
 	var mode_specs: Array[Dictionary] = [
-		{"mode": 0, "label": "SOLO SHOOTING"},
+		{"mode": 0, "label": "GUN MODE"},
 		{"mode": 2, "label": "AGENT MODE"}
 	]
 	for ms in mode_specs:
@@ -784,27 +798,39 @@ func _build_test_mode_overlay() -> void:
 			_test_mode_choice = int(ms["mode"])
 			_refresh_test_mode_ui()
 		)
-		mode_row.add_child(mb)
+		mode_vb.add_child(mb)
 		_test_mode_type_buttons.append(mb)
 
+	# Box 2: Bot Behavior (Still, Move Only, Attack) + Bot Count (- / +)
+	var bot_box := PanelContainer.new()
+	bot_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bot_box.size_flags_stretch_ratio = 1.45
+	bot_box.add_theme_stylebox_override("panel", _make_style(Color(0.05, 0.08, 0.13, 0.95), Color(0.24, 0.56, 0.68, 0.85), 12))
+	boxes_row.add_child(bot_box)
+
+	var bot_vb := VBoxContainer.new()
+	bot_vb.add_theme_constant_override("separation", 10)
+	bot_box.add_child(bot_vb)
+
 	var beh_lbl := Label.new()
-	beh_lbl.text = "PRACTICE BOT BEHAVIOR (CAN ALSO TOGGLE IN-GAME):"
+	beh_lbl.text = "BOT BEHAVIOR"
+	beh_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	beh_lbl.add_theme_font_size_override("font_size", 14)
 	beh_lbl.modulate = Color(0.75, 0.85, 0.95)
-	cv.add_child(beh_lbl)
+	bot_vb.add_child(beh_lbl)
 
 	var beh_row := HBoxContainer.new()
 	beh_row.add_theme_constant_override("separation", 8)
-	cv.add_child(beh_row)
+	bot_vb.add_child(beh_row)
 
 	_test_bot_beh_buttons.clear()
-	var beh_labels: Array[String] = ["STILL (DO NOTHING)", "MOVE ONLY", "FIGHT (NORMAL BOT)"]
+	var beh_labels: Array[String] = ["STILL", "MOVE ONLY", "ATTACK"]
 	for i in range(beh_labels.size()):
 		var bb := Button.new()
 		bb.text = beh_labels[i]
 		bb.custom_minimum_size = Vector2(0, 44)
 		bb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bb.add_theme_font_size_override("font_size", 13)
+		bb.add_theme_font_size_override("font_size", 14)
 		bb.pressed.connect(func():
 			_test_bot_choice = i
 			_refresh_test_mode_ui()
@@ -814,10 +840,10 @@ func _build_test_mode_overlay() -> void:
 
 	var t_bot_row := HBoxContainer.new()
 	t_bot_row.add_theme_constant_override("separation", 8)
-	cv.add_child(t_bot_row)
+	bot_vb.add_child(t_bot_row)
 
 	var t_bot_lbl := Label.new()
-	t_bot_lbl.text = "BOTS (MIN 1):"
+	t_bot_lbl.text = "BOT COUNT:"
 	t_bot_lbl.add_theme_font_size_override("font_size", 14)
 	t_bot_lbl.modulate = Color(0.75, 0.85, 0.95)
 	t_bot_row.add_child(t_bot_lbl)
@@ -829,8 +855,8 @@ func _build_test_mode_overlay() -> void:
 	t_bot_val.modulate = Color(1.0, 0.88, 0.35)
 	t_bot_val.text = str(clampi(NetworkManager.test_bot_count, 1, NetworkManager.MAX_BOTS))
 
-	var t_minus := _make_arcade_button("-", Color(0.95, 0.42, 0.36), 36.0, 16)
-	t_minus.custom_minimum_size = Vector2(54, 36)
+	var t_minus := _make_arcade_button("-", Color(0.95, 0.42, 0.36), 40.0, 16)
+	t_minus.custom_minimum_size = Vector2(54, 40)
 	t_minus.pressed.connect(func():
 		NetworkManager.test_bot_count = maxi(1, NetworkManager.test_bot_count - 1)
 		t_bot_val.text = str(NetworkManager.test_bot_count)
@@ -838,13 +864,48 @@ func _build_test_mode_overlay() -> void:
 	t_bot_row.add_child(t_minus)
 	t_bot_row.add_child(t_bot_val)
 
-	var t_plus := _make_arcade_button("+", Color(0.32, 0.92, 0.48), 36.0, 16)
-	t_plus.custom_minimum_size = Vector2(54, 36)
+	var t_plus := _make_arcade_button("+", Color(0.32, 0.92, 0.48), 40.0, 16)
+	t_plus.custom_minimum_size = Vector2(54, 40)
 	t_plus.pressed.connect(func():
 		NetworkManager.test_bot_count = mini(NetworkManager.MAX_BOTS, NetworkManager.test_bot_count + 1)
 		t_bot_val.text = str(NetworkManager.test_bot_count)
 	)
 	t_bot_row.add_child(t_plus)
+
+	# Bottom section: Gravity Settings & Unlimited Abilities checkbox
+	var grav_row := HBoxContainer.new()
+	grav_row.add_theme_constant_override("separation", 10)
+	cv.add_child(grav_row)
+
+	var grav_lbl := Label.new()
+	grav_lbl.text = "GRAVITY:"
+	grav_lbl.custom_minimum_size = Vector2(110, 0)
+	grav_lbl.add_theme_font_size_override("font_size", 14)
+	grav_lbl.modulate = Color(0.75, 0.88, 1.0)
+	grav_row.add_child(grav_lbl)
+
+	_test_grav_slider = HSlider.new()
+	_test_grav_slider.min_value = 0.0
+	_test_grav_slider.max_value = 1.0
+	_test_grav_slider.step = 0.05
+	_test_grav_slider.value = NetworkManager.gravity_scale
+	_test_grav_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_test_grav_slider.custom_minimum_size = Vector2(0, 28)
+	_test_grav_slider.value_changed.connect(func(v: float):
+		NetworkManager.gravity_scale = v
+		SettingsManager.gravity_scale = v
+		if is_instance_valid(_test_grav_val_lbl):
+			_test_grav_val_lbl.text = "%.2fx" % v
+	)
+	grav_row.add_child(_test_grav_slider)
+
+	_test_grav_val_lbl = Label.new()
+	_test_grav_val_lbl.custom_minimum_size = Vector2(58, 0)
+	_test_grav_val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_test_grav_val_lbl.add_theme_font_size_override("font_size", 15)
+	_test_grav_val_lbl.modulate = Color(1.0, 0.88, 0.35)
+	_test_grav_val_lbl.text = "%.2fx" % NetworkManager.gravity_scale
+	grav_row.add_child(_test_grav_val_lbl)
 
 	var unlim_ab_cb := CheckBox.new()
 	unlim_ab_cb.text = "  Unlimited Abilities & Ultimate (No Kills Required)"
@@ -898,6 +959,10 @@ func _refresh_test_mode_ui() -> void:
 func _open_test_mode_overlay() -> void:
 	_test_mode_choice = 2 if NetworkManager.is_agent_clash_mode() else 0
 	_test_bot_choice = clampi(NetworkManager.test_bot_behavior, 0, 2)
+	if is_instance_valid(_test_grav_slider):
+		_test_grav_slider.value = NetworkManager.gravity_scale
+	if is_instance_valid(_test_grav_val_lbl):
+		_test_grav_val_lbl.text = "%.2fx" % NetworkManager.gravity_scale
 	_refresh_test_mode_ui()
 	_test_mode_overlay.visible = true
 	_test_mode_overlay.modulate.a = 0.0

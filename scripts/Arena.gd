@@ -10,6 +10,8 @@ const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
+const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
+const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine"]
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
 const DEFAULT_ARENA_HEIGHT: float = 1248.0
@@ -103,7 +105,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	for i in range(_interactables.size()):
 		var node: Node2D = _interactables[i]
-		if not is_instance_valid(node):
+		if not is_instance_valid(node) or node is InteractableProp:
 			continue
 		var inter_pos: Vector2 = node.global_position
 		if "btn_pos" in node:
@@ -113,15 +115,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		var is_remote_button: bool = (node is InteractableFan or node is InteractableDoor or node is InteractableSpikeTrap or node is InteractableSwitchHazard)
 		if world_pos.distance_to(inter_pos) <= 78.0 and (is_remote_button or local_p.global_position.distance_to(inter_pos) <= 135.0):
 			_on_interact_requested(i)
-			get_viewport().set_input_as_handled()
-			return
-	for ci in range(_crate_nodes.size()):
-		var ce: Dictionary = _crate_nodes[ci]
-		if not bool(ce.get("active", false)) or str(ce.get("type", "")) != "weapon":
-			continue
-		var area: Node2D = ce.get("area") as Node2D
-		if is_instance_valid(area) and world_pos.distance_to(area.global_position) <= 68.0 and local_p.global_position.distance_to(area.global_position) <= 120.0:
-			_on_pickup_weapon_requested(ci)
 			get_viewport().set_input_as_handled()
 			return
 
@@ -148,12 +141,61 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(area):
 			continue
 		if not bool(c["active"]):
+			if bool(c.get("one_shot", false)):
+				continue
 			c["timer"] = float(c["timer"]) - delta
 			if float(c["timer"]) <= 0.0:
-				c["active"] = true
-				area.visible = true
-				area.monitoring = true
+				var blocked_by_player: bool = false
+				if str(c.get("type", "")) == "weapon":
+					for p in get_tree().get_nodes_in_group("players"):
+						if is_instance_valid(p) and (not p.has_method("is_alive") or p.is_alive()):
+							if (p as Node2D).global_position.distance_to(area.global_position) < 85.0:
+								blocked_by_player = true
+								break
+				if blocked_by_player:
+					c["timer"] = 0.5
+				else:
+					c["active"] = true
+					area.visible = true
+					area.monitoring = true
+					area.modulate.a = 1.0
+					if str(c.get("type", "")) == "weapon" and not bool(c.get("one_shot", false)):
+						c["life_timer"] = 15.0
 		else:
+			if c.has("despawn_timer"):
+				var dt: float = float(c["despawn_timer"]) - delta
+				c["despawn_timer"] = dt
+				if dt <= 1.0:
+					area.modulate.a = clampf(dt, 0.0, 1.0)
+				if dt <= 0.0:
+					c["active"] = false
+					c["timer"] = 9999999.0
+					area.visible = false
+					area.monitoring = false
+					continue
+			elif c.has("life_timer"):
+				var lt: float = float(c["life_timer"]) - delta
+				c["life_timer"] = lt
+				if lt <= 5.0 and lt > 0.0:
+					var blink_a: float = 0.25 if (int(floor(lt * 8.0)) % 2 == 0) else 1.0
+					if lt <= 1.0:
+						blink_a *= clampf(lt, 0.0, 1.0)
+					area.modulate.a = blink_a
+				elif lt > 5.0:
+					area.modulate.a = 1.0
+				if lt <= 0.0:
+					c["active"] = false
+					c["timer"] = 9.0
+					area.visible = false
+					area.monitoring = false
+					area.modulate.a = 1.0
+					var allowed_ws: Array[int] = WeaponData.get_pickup_weapon_ids()
+					var next_w: int = allowed_ws[randi() % allowed_ws.size()]
+					c["val"] = next_w
+					var w_spr := c["sprite"] as Sprite2D
+					if w_spr != null:
+						_apply_pickup_weapon_sprite(w_spr, next_w)
+					continue
 			var visual_node: Node2D = c["sprite"] as Node2D
 			if is_instance_valid(visual_node):
 				visual_node.position.y = 0.0
@@ -641,6 +683,13 @@ func _is_spot_clear(pos: Vector2, half_w: float, half_h: float, avoid_items: boo
 		for up in _ult_pickups:
 			if is_instance_valid(up) and up.position.distance_to(pos) < 62.0:
 				return false
+		for sp in _spawn_points:
+			if sp.distance_to(pos) < 100.0:
+				return false
+		for p in get_tree().get_nodes_in_group("players"):
+			if is_instance_valid(p) and (not p.has_method("is_alive") or p.is_alive()):
+				if (p as Node2D).global_position.distance_to(pos) < 88.0:
+					return false
 	return true
 
 
@@ -675,16 +724,19 @@ func _build_pickup_crates() -> void:
 		for sp_idx in range(_spawn_points.size()):
 			var w_id: int = allowed_ws[randi() % allowed_ws.size()]
 			var sp: Vector2 = _spawn_points[sp_idx]
-			var off_x: float = randf_range(-60.0, 60.0)
+			var off_x: float = 180.0 if (sp_idx % 2 == 0) else -180.0
 			var w_pos: Vector2 = sp + Vector2(off_x, 0.0)
 			var w_hit := w_space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, w_pos + Vector2(signf(off_x) * 22.0, 0.0), 1))
 			if not w_hit.is_empty():
 				var alt_pos: Vector2 = sp - Vector2(off_x, 0.0)
 				var alt_hit := w_space.intersect_ray(PhysicsRayQueryParameters2D.create(sp, alt_pos - Vector2(signf(off_x) * 22.0, 0.0), 1))
-				w_pos = alt_pos if alt_hit.is_empty() else sp
+				w_pos = alt_pos if alt_hit.is_empty() else Vector2(arena_width * 0.50, sp.y)
 			crate_specs.append({"pos": w_pos, "type": "weapon", "val": w_id})
 		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.52), "type": "health", "val": 45})
 		crate_specs.append({"pos": Vector2(arena_width * 0.50, arena_height * 0.20), "type": "health", "val": 50})
+		if NetworkManager.allow_explosives:
+			for bx in [arena_width * 0.28, arena_width * 0.50, arena_width * 0.72]:
+				crate_specs.append({"pos": Vector2(bx, arena_height * 0.72), "type": "bomb", "val": randi() % FLOOR_BOMB_TYPES.size()})
 
 	for i in range(crate_specs.size()):
 		var spec: Dictionary = crate_specs[i]
@@ -710,6 +762,10 @@ func _build_pickup_crates() -> void:
 			var w_spr := Sprite2D.new()
 			_apply_pickup_weapon_sprite(w_spr, int(spec["val"]))
 			visual = w_spr
+		elif str(spec["type"]) == "bomb":
+			var b_icon := GroundBombIcon.new()
+			b_icon.bomb_idx = int(spec["val"])
+			visual = b_icon
 		else:
 			var spr := Sprite2D.new()
 			spr.texture = TEX_CRATE
@@ -725,6 +781,8 @@ func _build_pickup_crates() -> void:
 			"timer": 0.0,
 			"phase": float(i) * 1.3
 		}
+		if str(spec["type"]) == "weapon":
+			entry["life_timer"] = 15.0
 		_crate_nodes.append(entry)
 		area.body_entered.connect(_on_crate_body_entered.bind(i))
 		area.body_exited.connect(_on_crate_body_exited.bind(i))
@@ -748,8 +806,8 @@ func _build_interactables() -> void:
 		# Map 0 (Bunker Base): Wind Fans + Red Switches (exclusive to Bunker Base)
 		var fan_specs: Array[Dictionary] = [
 			{
-				"fan_pos": Vector2(arena_width * 0.25, arena_height - 76.0),
-				"button_pos": Vector2(arena_width * 0.25 - 120.0, arena_height - 104.0),
+				"fan_pos": Vector2(490.0, arena_height - 76.0),
+				"button_pos": Vector2(370.0, arena_height - 104.0),
 				"push_dir": Vector2.UP,
 				"beam_len": 420.0
 			},
@@ -760,8 +818,8 @@ func _build_interactables() -> void:
 				"beam_len": 440.0
 			},
 			{
-				"fan_pos": Vector2(arena_width * 0.75, arena_height - 76.0),
-				"button_pos": Vector2(arena_width * 0.75 + 120.0, arena_height - 104.0),
+				"fan_pos": Vector2(arena_width - 490.0, arena_height - 76.0),
+				"button_pos": Vector2(arena_width - 370.0, arena_height - 104.0),
 				"push_dir": Vector2.UP,
 				"beam_len": 420.0
 			}
@@ -917,6 +975,12 @@ func _build_interactables() -> void:
 	_world_geometry.add_child(heal)
 	_interactables.append(heal)
 
+	var tbox := InteractableTreasureBox.new()
+	tbox.inter_idx = _interactables.size()
+	tbox.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height * 0.42), 20.0, true)
+	_world_geometry.add_child(tbox)
+	_interactables.append(tbox)
+
 	var prop_kinds: Array = _get_map_prop_kinds(NetworkManager.selected_map_id)
 	var prop_spots: Array[Vector2] = [
 		Vector2(arena_width * 0.16, arena_height - 84.0),
@@ -1009,6 +1073,15 @@ func _on_interact_requested(inter_idx: int) -> void:
 	elif node is InteractableSpikeTrap:
 		var st := node as InteractableSpikeTrap
 		NetworkManager.toggle_interactable(inter_idx, not st.is_on)
+	elif node is InteractableTreasureBox:
+		var tb := node as InteractableTreasureBox
+		if tb.cooldown_left <= 0.0:
+			for p in get_tree().get_nodes_in_group("players"):
+				if is_instance_valid(p) and p.get("is_local_human") == true and p.has_method("is_alive") and p.is_alive():
+					if p.has_method("set_nearby_interactable"):
+						p.set_nearby_interactable(-1, "")
+					break
+			NetworkManager.toggle_interactable(inter_idx, true)
 
 
 func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
@@ -1031,6 +1104,23 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 		(node as InteractableDoor).set_door_state(new_state)
 	elif node is InteractableSpikeTrap:
 		(node as InteractableSpikeTrap).set_trap_state(new_state)
+	elif node is InteractableTreasureBox:
+		(node as InteractableTreasureBox).trigger_opened()
+		var origin_p: Vector2 = node.global_position
+		_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-58.0, 0.0), 15.0, false), "health", 100)
+		_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", 17)
+		if NetworkManager.allow_explosives:
+			var b_type_str: String = "frag"
+			var best_d: float = 1e9
+			for p in get_tree().get_nodes_in_group("players"):
+				if is_instance_valid(p) and (not p.has_method("is_alive") or p.is_alive()):
+					var d: float = (p as Node2D).global_position.distance_to(origin_p)
+					if d < best_d:
+						best_d = d
+						b_type_str = str(p.get("bomb_type"))
+			var b_idx: int = maxi(0, FLOOR_BOMB_TYPES.find(b_type_str))
+			for bx_off in [-36.0, 0.0, 36.0]:
+				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(bx_off, 0.0), 14.0, false), "bomb", b_idx)
 
 
 func _on_barrel_detonated(inter_idx: int, attacker_id: int, attacker_name: String, attacker_team: int) -> void:
@@ -1047,7 +1137,7 @@ func _on_crate_consumed(crate_idx: int, next_val: int) -> void:
 	var entry: Dictionary = _crate_nodes[crate_idx]
 	var p_type: String = str(entry["type"])
 	entry["active"] = false
-	entry["timer"] = 6.0 if p_type == "throwable" else 9.0
+	entry["timer"] = 9999999.0 if bool(entry.get("one_shot", false)) else (6.0 if p_type == "throwable" else 9.0)
 	var area: Area2D = entry["area"] as Area2D
 	area.visible = false
 	area.set_deferred("monitoring", false)
@@ -1062,6 +1152,123 @@ func _on_crate_consumed(crate_idx: int, next_val: int) -> void:
 		var w_spr := entry["sprite"] as Sprite2D
 		if w_spr != null:
 			_apply_pickup_weapon_sprite(w_spr, next_val)
+	elif p_type == "bomb":
+		entry["val"] = next_val
+		var b_icon := entry["sprite"] as GroundBombIcon
+		if b_icon != null:
+			b_icon.bomb_idx = next_val
+			b_icon.queue_redraw()
+
+
+func _spawn_treasure_drop(origin_pos: Vector2, target_pos: Vector2, drop_type: String, drop_val: int) -> void:
+	if not is_instance_valid(_pickups_container):
+		return
+	var idx: int = _crate_nodes.size()
+	var area := Area2D.new()
+	area.position = origin_pos + Vector2(0.0, -10.0)
+	area.collision_layer = 0
+	area.collision_mask = 2
+	area.monitoring = false
+
+	var cs := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = Vector2(56, 42) if drop_type == "weapon" else Vector2(30, 30)
+	cs.shape = box
+	area.add_child(cs)
+
+	var visual: Node2D
+	if drop_type == "weapon":
+		var spr := Sprite2D.new()
+		_apply_pickup_weapon_sprite(spr, drop_val)
+		visual = spr
+	elif drop_type == "bomb":
+		var b_icon := GroundBombIcon.new()
+		b_icon.bomb_idx = drop_val
+		visual = b_icon
+	else:
+		var spr := Sprite2D.new()
+		spr.texture = TEX_CRATE
+		visual = spr
+	area.add_child(visual)
+
+	var entry: Dictionary = {
+		"area": area,
+		"sprite": visual,
+		"type": drop_type,
+		"val": drop_val,
+		"active": true,
+		"one_shot": true,
+		"timer": 0.0,
+		"phase": float(idx) * 1.3
+	}
+	_crate_nodes.append(entry)
+	area.body_entered.connect(_on_crate_body_entered.bind(idx))
+	area.body_exited.connect(_on_crate_body_exited.bind(idx))
+	_pickups_container.add_child(area)
+
+	var mid_pos: Vector2 = Vector2((origin_pos.x + target_pos.x) * 0.5, minf(origin_pos.y, target_pos.y) - 52.0)
+	var tw := area.create_tween()
+	tw.tween_property(area, "position", mid_pos, 0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(area, "position", target_pos, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func():
+		if is_instance_valid(area) and bool(entry.get("active", false)):
+			area.monitoring = true
+	)
+
+
+func spawn_dropped_weapon_pickup(w_id: int, origin_pos: Vector2, angle: float, saved_mag: int, saved_res: int) -> void:
+	if not is_instance_valid(_pickups_container):
+		return
+	var idx: int = _crate_nodes.size()
+	var area := Area2D.new()
+	area.position = origin_pos + Vector2(0.0, -10.0)
+	area.collision_layer = 0
+	area.collision_mask = 2
+	area.monitoring = false
+
+	var cs := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = Vector2(56, 42)
+	cs.shape = box
+	area.add_child(cs)
+
+	var spr := Sprite2D.new()
+	_apply_pickup_weapon_sprite(spr, w_id)
+	area.add_child(spr)
+
+	var entry: Dictionary = {
+		"area": area,
+		"sprite": spr,
+		"type": "weapon",
+		"val": w_id,
+		"active": true,
+		"one_shot": true,
+		"despawn_timer": 5.0,
+		"saved_mag": saved_mag,
+		"saved_res": saved_res,
+		"timer": 0.0,
+		"phase": float(idx) * 1.3
+	}
+	_crate_nodes.append(entry)
+	area.body_entered.connect(_on_crate_body_entered.bind(idx))
+	area.body_exited.connect(_on_crate_body_exited.bind(idx))
+	_pickups_container.add_child(area)
+
+	var dir_x: float = signf(cos(angle))
+	if dir_x == 0.0:
+		dir_x = 1.0
+	var target_pos: Vector2 = _snap_to_floor(origin_pos + Vector2(dir_x * 84.0, 26.0), 12.0, false)
+	var mid_pos: Vector2 = Vector2((origin_pos.x + target_pos.x) * 0.5, minf(origin_pos.y, target_pos.y) - 38.0)
+	var rot_tw := spr.create_tween()
+	rot_tw.tween_property(spr, "rotation", dir_x * TAU, 0.42)
+	rot_tw.tween_property(spr, "rotation", 0.0, 0.05)
+	var tw := area.create_tween()
+	tw.tween_property(area, "position", mid_pos, 0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(area, "position", target_pos, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func():
+		if is_instance_valid(area) and bool(entry.get("active", false)):
+			area.monitoring = true
+	)
 
 
 func _on_ult_pickup_relocated(ult_idx: int, new_pos: Vector2) -> void:
@@ -1108,9 +1315,15 @@ func _on_crate_body_entered(body: Node2D, crate_idx: int) -> void:
 		if p_type == "weapon":
 			if body.get("is_local_human") == true and body.has_method("set_nearby_weapon"):
 				body.set_nearby_weapon(crate_idx, int(entry["val"]))
+			return
+
+		if p_type == "bomb":
+			if not NetworkManager.allow_explosives or NetworkManager.is_agent_clash_mode():
 				return
-			# Bots can still pick up ground weapons on walkover
-			_consume_weapon_crate(crate_idx, body)
+			var b_idx: int = clampi(int(entry["val"]), 0, FLOOR_BOMB_TYPES.size() - 1)
+			if body.has_method("add_bomb_pickup"):
+				body.add_bomb_pickup(FLOOR_BOMB_TYPES[b_idx], 1)
+			NetworkManager.consume_crate(crate_idx, randi() % FLOOR_BOMB_TYPES.size())
 			return
 
 		var val: int = int(entry["val"])
@@ -1142,14 +1355,20 @@ func _consume_weapon_crate(crate_idx: int, body: Node2D) -> void:
 	var entry: Dictionary = _crate_nodes[crate_idx]
 	var val: int = int(entry["val"])
 	body.apply_pickup("weapon", val)
+	if entry.has("saved_mag"):
+		body.set("current_ammo", int(entry["saved_mag"]))
+		if body.has_method("_set_active_reserve_ammo"):
+			body.call("_set_active_reserve_ammo", int(entry["saved_res"]))
+		if body.has_method("_emit_ammo"):
+			body.call("_emit_ammo")
 	var allowed_ws: Array[int] = WeaponData.get_pickup_weapon_ids()
 	var next_w: int = allowed_ws[randi() % allowed_ws.size()]
 	NetworkManager.consume_crate(crate_idx, next_w)
 
 
 func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
-	if w_id == 11 or w_id == 15 or w_id == 16:
-		w_spr.texture = TEX_FLAMETHROWER if w_id == 11 else (TEX_HOOK_GUN if w_id == 15 else TEX_BUBBLE_GUN)
+	if w_id == 11 or w_id == 15 or w_id == 16 or w_id == 17:
+		w_spr.texture = TEX_FLAMETHROWER if w_id == 11 else (TEX_HOOK_GUN if w_id == 15 else (TEX_BUBBLE_GUN if w_id == 16 else TEX_MACHINE_GUN))
 		w_spr.hframes = 1
 		w_spr.vframes = 1
 		w_spr.frame = 0
@@ -1211,6 +1430,15 @@ func _pick_safest_spawn() -> Vector2:
 	var best_pos: Vector2 = _spawn_points[0]
 	var best_min_d: float = -1.0
 	for cand in candidates:
+		var near_gun: bool = false
+		for ce in _crate_nodes:
+			if bool(ce.get("active", false)) and str(ce.get("type", "")) == "weapon":
+				var ca: Node2D = ce.get("area") as Node2D
+				if is_instance_valid(ca) and cand.distance_to(ca.global_position) < 85.0:
+					near_gun = true
+					break
+		if near_gun:
+			continue
 		var min_d: float = 1e9
 		for occ in occupied:
 			var d: float = cand.distance_to(occ)
@@ -1676,6 +1904,11 @@ class InteractableFan extends Node2D:
 							cb.velocity.y = clampf(cb.velocity.y, -780.0, 420.0)
 						else:
 							cb.velocity.x = clampf(cb.velocity.x, -820.0, 820.0)
+			var w_half: Vector2 = Vector2(beam_width * 0.5, beam_length * 0.5) if absf(push_dir.y) > absf(push_dir.x) else Vector2(beam_length * 0.5, beam_width * 0.5)
+			var w_rect := Rect2(_wind_area.position - w_half, w_half * 2.0)
+			for s in get_tree().get_nodes_in_group("agent_summons"):
+				if is_instance_valid(s) and s is Node2D and w_rect.has_point((s as Node2D).global_position) and s.has_method("apply_fan_wind"):
+					s.apply_fan_wind(dir_n, push_force, delta)
 			queue_redraw()
 
 	func _draw() -> void:
@@ -1688,14 +1921,19 @@ class InteractableFan extends Node2D:
 		draw_circle(button_pos + Vector2(0, -6), 6.0, led_col)
 		draw_rect(Rect2(button_pos + Vector2(-7, 4), Vector2(14, 8)), Color(0.75, 0.80, 0.88))
 
-		# Fan housing
+		# Fan housing (oriented perpendicular to push_dir)
 		var half_w: float = beam_width * 0.44
-		draw_rect(Rect2(fan_pos - Vector2(half_w, 12), Vector2(half_w * 2.0, 24)), Color(0.22, 0.26, 0.32))
-		draw_rect(Rect2(fan_pos - Vector2(half_w, 12), Vector2(half_w * 2.0, 24)), Color(0.58, 0.64, 0.72), false, 2.5)
+		var is_side_fan: bool = absf(push_dir.x) > absf(push_dir.y)
+		var housing_rect: Rect2 = Rect2(fan_pos - Vector2(12, half_w), Vector2(24, half_w * 2.0)) if is_side_fan else Rect2(fan_pos - Vector2(half_w, 12), Vector2(half_w * 2.0, 24))
+		draw_rect(housing_rect, Color(0.22, 0.26, 0.32))
+		draw_rect(housing_rect, Color(0.58, 0.64, 0.72), false, 2.5)
 		# Spinning fan blades
 		for k in range(3):
-			var bx: float = sin(_spin + float(k) * 2.1) * (half_w * 0.75)
-			draw_line(fan_pos + Vector2(bx, -8), fan_pos + Vector2(bx, 8), Color(0.75, 0.82, 0.90), 5.0)
+			var b_off: float = sin(_spin + float(k) * 2.1) * (half_w * 0.75)
+			if is_side_fan:
+				draw_line(fan_pos + Vector2(-8, b_off), fan_pos + Vector2(8, b_off), Color(0.75, 0.82, 0.90), 5.0)
+			else:
+				draw_line(fan_pos + Vector2(b_off, -8), fan_pos + Vector2(b_off, 8), Color(0.75, 0.82, 0.90), 5.0)
 
 		# Air stream streaks when ON
 		if is_on:
@@ -1753,6 +1991,65 @@ class InteractableHealStation extends Node2D:
 		var cross_col: Color = Color(0.25, 1.0, 0.52) if ready else Color(0.42, 0.45, 0.50)
 		draw_rect(Rect2(-4, -14, 8, 22), cross_col)
 		draw_rect(Rect2(-11, -7, 22, 8), cross_col)
+
+
+class InteractableTreasureBox extends Node2D:
+	var inter_idx: int = 0
+	var cooldown_left: float = 0.0
+	var _pulse_t: float = 0.0
+	var _lbl: Label
+
+	func _ready() -> void:
+		z_index = -1
+		_lbl = Label.new()
+		_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_lbl.position = Vector2(-36, -42)
+		_lbl.custom_minimum_size = Vector2(72, 20)
+		_lbl.add_theme_font_size_override("font_size", 12)
+		_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		_lbl.add_theme_constant_override("outline_size", 3)
+		add_child(_lbl)
+		_update_label()
+		queue_redraw()
+
+	func trigger_opened() -> void:
+		cooldown_left = 30.0
+		_update_label()
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_pulse_t += delta
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(0.0, cooldown_left - delta)
+			_update_label()
+		queue_redraw()
+
+	func _update_label() -> void:
+		if not is_instance_valid(_lbl):
+			return
+		if cooldown_left <= 0.0:
+			_lbl.text = "TREASURE"
+			_lbl.modulate = Color(1.0, 0.88, 0.30)
+		else:
+			_lbl.text = "%ds" % int(ceil(cooldown_left))
+			_lbl.modulate = Color(0.65, 0.70, 0.78)
+
+	func _draw() -> void:
+		var ready: bool = cooldown_left <= 0.0
+		if ready:
+			var breath: float = 0.5 + 0.5 * sin(_pulse_t * 3.2)
+			var glow_r: float = 31.0 + breath * 10.0
+			var glow_a: float = 0.12 + breath * 0.14
+			draw_circle(Vector2(0, -2), glow_r, Color(1.0, 0.82, 0.22, glow_a))
+			draw_arc(Vector2(0, -2), glow_r, 0.0, TAU, 36, Color(1.0, 0.88, 0.35, 0.28 + breath * 0.35), 2.0)
+			draw_rect(Rect2(-24, -18, 48, 36), Color(0.48, 0.28, 0.12))
+			draw_rect(Rect2(-24, -18, 48, 12), Color(0.62, 0.38, 0.16))
+			draw_rect(Rect2(-24, -18, 48, 36), Color(1.0, 0.84, 0.28), false, 3.0)
+			draw_line(Vector2(-24, -6), Vector2(24, -6), Color(1.0, 0.84, 0.28), 3.0)
+			draw_rect(Rect2(-5, -10, 10, 10), Color(1.0, 0.90, 0.35))
+		else:
+			draw_rect(Rect2(-24, -6, 48, 24), Color(0.28, 0.18, 0.10, 0.65))
+			draw_rect(Rect2(-24, -6, 48, 24), Color(0.45, 0.42, 0.36, 0.75), false, 2.0)
 
 
 class InteractableProp extends Node2D:
@@ -1844,7 +2141,7 @@ class InteractableProp extends Node2D:
 
 	func _on_entered(body: Node2D) -> void:
 		if is_available and body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
-			body.set_nearby_interactable(inter_idx, "PICK\n%s" % prop_kind.replace("_", " ").to_upper().substr(0, 7))
+			body.set_nearby_interactable(inter_idx, "PICK")
 
 	func _on_exited(body: Node2D) -> void:
 		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
@@ -2450,3 +2747,25 @@ class ArenaAutoMine extends Area2D:
 		draw_rect(Rect2(-11, -3, 22, 6), Color(0.75, 0.55, 0.20), false, 1.8)
 		var led_on: bool = _arm_timer <= 0.0 and sin(_pulse) > 0.0
 		draw_circle(Vector2(0, -4), 3.5, Color(1.0, 0.25, 0.18) if led_on else Color(0.95, 0.68, 0.20))
+
+
+class GroundBombIcon extends Node2D:
+	var bomb_idx: int = 0
+
+	func _draw() -> void:
+		draw_circle(Vector2.ZERO, 14.0, Color(0.10, 0.14, 0.20, 0.75))
+		match bomb_idx:
+			1: # sticky
+				draw_circle(Vector2.ZERO, 9.0, Color(0.24, 0.78, 1.0))
+				draw_arc(Vector2.ZERO, 9.0, 0.0, TAU, 16, Color(0.88, 0.98, 1.0), 2.0)
+			2: # time
+				draw_rect(Rect2(-8.5, -7, 17, 14), Color(0.95, 0.28, 0.24))
+				draw_rect(Rect2(-8.5, -7, 17, 14), Color(1.0, 0.82, 0.35), false, 1.8)
+				draw_circle(Vector2.ZERO, 2.5, Color.WHITE)
+			3: # mine
+				draw_rect(Rect2(-9.5, 1, 19, 5), Color(0.96, 0.62, 0.18))
+				draw_circle(Vector2(0, -1.5), 4.0, Color(1.0, 0.25, 0.22))
+			_: # frag
+				draw_circle(Vector2.ZERO, 9.0, Color(0.26, 0.88, 0.42))
+				draw_arc(Vector2.ZERO, 9.0, 0.0, TAU, 16, Color(0.12, 0.16, 0.14), 2.0)
+				draw_line(Vector2(0, -8.5), Vector2(4, -12.5), Color(1.0, 0.80, 0.28), 2.4)

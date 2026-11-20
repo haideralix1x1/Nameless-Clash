@@ -10,6 +10,7 @@ const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
+const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
 const PRESET_SELECT_DURATION: float = 5.0
@@ -83,6 +84,7 @@ var _btn_pickup: Button
 var _nearby_crate_idx: int = -1
 var _btn_interact: Button
 var _nearby_inter_idx: int = -1
+var _nearby_pick_inter_idx: int = -1
 var _btn_throw_prop: Button
 
 var _chat_toggle_btn: Button
@@ -172,16 +174,17 @@ func _process(delta: float) -> void:
 		if _diag_label.visible:
 			_diag_label.text = "FPS: %d | PLAYERS: %d" % [Engine.get_frames_per_second(), get_tree().get_nodes_in_group("players").size()]
 	if is_instance_valid(_btn_shoe) and _btn_shoe.visible and local_player != null:
+		_btn_shoe.text = "THROW"
+		var has_held: bool = (not str(local_player.get("held_prop_kind")).is_empty()) or (int(local_player.get("grabbed_player_id")) != 0) or (not (local_player.get("held_throwables") as Array).is_empty())
 		var w_t: float = float(local_player.get("_shoe_windup_timer"))
 		var cd_t: float = float(local_player.get("shoe_cooldown_timer"))
-		if w_t > 0.01:
-			_btn_shoe.text = "KICK\n%.1fs" % w_t
+		if has_held:
+			_btn_shoe.modulate = Color(1.0, 0.92, 0.55)
+		elif w_t > 0.01:
 			_btn_shoe.modulate = Color(1.0, 0.78, 0.28)
 		elif cd_t > 0.05:
-			_btn_shoe.text = "KICK\n%.1fs" % cd_t
 			_btn_shoe.modulate = Color(0.55, 0.58, 0.65)
 		else:
-			_btn_shoe.text = "KICK"
 			_btn_shoe.modulate = Color.WHITE
 
 	if not NetworkManager.is_agent_clash_mode() and Input.is_action_just_pressed("loadout_menu"):
@@ -248,7 +251,7 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_reload):
 		_btn_reload.visible = not is_agent
 	if is_instance_valid(_btn_switch):
-		_btn_switch.visible = not is_agent
+		_btn_switch.visible = false
 	if is_instance_valid(_btn_dual):
 		_btn_dual.visible = not is_agent
 	if is_instance_valid(_btn_bomb):
@@ -258,9 +261,8 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_zoom):
 		_btn_zoom.visible = not is_agent
 	if is_instance_valid(_btn_shoe):
-		_btn_shoe.visible = not is_agent
-	if is_instance_valid(_btn_pickup):
-		_btn_pickup.visible = (not is_agent) and (_nearby_crate_idx >= 0)
+		_btn_shoe.visible = true
+	_refresh_pick_button()
 	if is_agent and is_instance_valid(_preset_overlay):
 		_preset_overlay.visible = false
 		_set_preset_pause(false)
@@ -275,7 +277,7 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_ult):
 		_btn_ult.visible = is_agent
 	if is_instance_valid(_btn_throw):
-		_btn_throw.visible = is_agent
+		_btn_throw.visible = false
 	if is_agent and local_player != null:
 		_refresh_top_info_pill()
 	elif is_instance_valid(_stun_banner):
@@ -306,9 +308,8 @@ func _update_stick_and_button_positions() -> void:
 		_btn_dual.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_dual", vp_size), _btn_dual.size, vp_size)
 	if is_instance_valid(_btn_bomb):
 		_btn_bomb.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_bomb", vp_size), _btn_bomb.size, vp_size)
-	if is_instance_valid(_btn_pickup) and is_instance_valid(_btn_switch):
-		var sw_pos: Vector2 = _btn_switch.position
-		_btn_pickup.position = _clamp_control_pos(Vector2(sw_pos.x - 90.0, sw_pos.y + _btn_switch.size.y * 0.5), _btn_pickup.size, vp_size)
+	if is_instance_valid(_btn_pickup):
+		_btn_pickup.position = _clamp_control_pos(Vector2(_right_center.x, _right_center.y - STICK_RADIUS - 52.0), _btn_pickup.size, vp_size)
 	if is_instance_valid(_btn_interact):
 		if NetworkManager.is_agent_clash_mode():
 			_btn_interact.position = _clamp_control_pos(Vector2(_right_center.x, _right_center.y - STICK_RADIUS - 52.0), _btn_interact.size, vp_size)
@@ -824,6 +825,12 @@ func _build_ui() -> void:
 	_weapon_icon.custom_minimum_size = Vector2(52, 26)
 	_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_weapon_icon.mouse_filter = Control.MOUSE_FILTER_STOP
+	_weapon_icon.gui_input.connect(func(ev: InputEvent):
+		var pressed: bool = (ev is InputEventScreenTouch and (ev as InputEventScreenTouch).pressed) or (ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+		if pressed and local_player != null and local_player.has_method("drop_picked_up_gun"):
+			local_player.drop_picked_up_gun()
+	)
 	w_row.add_child(_weapon_icon)
 
 	var p_atlas := AtlasTexture.new()
@@ -881,16 +888,28 @@ func _build_ui() -> void:
 	_secondary_weapon_icon = TextureRect.new()
 	_secondary_weapon_icon.texture = sec_atlas
 	_secondary_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_secondary_weapon_icon.custom_minimum_size = Vector2(30, 16)
+	_secondary_weapon_icon.custom_minimum_size = Vector2(54, 30)
 	_secondary_weapon_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_secondary_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_secondary_weapon_icon.modulate = Color(0.85, 0.90, 0.96, 0.82)
 	_secondary_weapon_icon.visible = false
+	_secondary_weapon_icon.mouse_filter = Control.MOUSE_FILTER_STOP
+	_secondary_weapon_icon.gui_input.connect(func(ev: InputEvent):
+		var pressed: bool = (ev is InputEventScreenTouch and (ev as InputEventScreenTouch).pressed) or (ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+		if pressed and local_player != null and local_player.has_method("cycle_weapon"):
+			local_player.cycle_weapon()
+	)
 	w_row.add_child(_secondary_weapon_icon)
 
 	_bomb_hud_icon = BombHudIcon.new()
-	_bomb_hud_icon.custom_minimum_size = Vector2(18, 18)
+	_bomb_hud_icon.custom_minimum_size = Vector2(28, 28)
 	_bomb_hud_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_bomb_hud_icon.mouse_filter = Control.MOUSE_FILTER_STOP
+	_bomb_hud_icon.gui_input.connect(func(ev: InputEvent):
+		var pressed: bool = (ev is InputEventScreenTouch and (ev as InputEventScreenTouch).pressed) or (ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)
+		if pressed and local_player != null and local_player.has_method("cycle_bomb_type"):
+			local_player.cycle_bomb_type()
+	)
 	_bomb_hud_icon.visible = false
 	w_row.add_child(_bomb_hud_icon)
 
@@ -1009,27 +1028,33 @@ func _build_ui() -> void:
 	add_child(_btn_bomb)
 
 	_btn_shoe = Button.new()
-	_btn_shoe.text = "KICK"
+	_btn_shoe.text = "THROW"
 	_btn_shoe.offset_left = 14
 	_btn_shoe.offset_top = 96
 	_btn_shoe.offset_right = 94
 	_btn_shoe.offset_bottom = 176
 	_btn_shoe.focus_mode = Control.FOCUS_NONE
-	_style_circle_btn(_btn_shoe, Color(0.20, 0.14, 0.10, 0.65), Color(1.0, 1.0, 1.0, 0.85), 80, 26)
+	_style_circle_btn(_btn_shoe, Color(0.20, 0.14, 0.10, 0.65), Color(1.0, 1.0, 1.0, 0.85), 80, 16)
 	_btn_shoe.pressed.connect(func():
-		if local_player != null and local_player.has_method("throw_shoe"):
-			local_player.throw_shoe()
+		if local_player != null and local_player.has_method("throw_held_item"):
+			local_player.throw_held_item()
 	)
 	add_child(_btn_shoe)
 
 	_btn_pickup = Button.new()
-	_btn_pickup.text = "PICKUP\nGUN"
+	_btn_pickup.text = "PICK"
 	_btn_pickup.focus_mode = Control.FOCUS_NONE
 	_btn_pickup.visible = false
-	_style_circle_btn(_btn_pickup, Color(0.10, 0.36, 0.22, 0.88), Color(0.45, 1.0, 0.65, 0.95), 78, 13)
+	_style_circle_btn(_btn_pickup, Color(0.10, 0.36, 0.22, 0.88), Color(0.45, 1.0, 0.65, 0.95), 78, 15)
 	_btn_pickup.pressed.connect(func():
-		if _nearby_crate_idx >= 0:
+		if not NetworkManager.is_agent_clash_mode() and _nearby_crate_idx >= 0:
 			pickup_weapon_requested.emit(_nearby_crate_idx)
+		elif _nearby_pick_inter_idx >= 0:
+			interact_requested.emit(_nearby_pick_inter_idx)
+		elif NetworkManager.is_agent_clash_mode() and local_player != null and local_player.has_method("find_grabbable_player"):
+			var tgt: Node2D = local_player.find_grabbable_player()
+			if tgt != null and local_player.has_method("grab_player"):
+				local_player.grab_player(tgt)
 	)
 	add_child(_btn_pickup)
 
@@ -1125,7 +1150,7 @@ func _build_ui() -> void:
 	_chat_panel = PanelContainer.new()
 	_chat_panel.anchor_left = 1.0
 	_chat_panel.anchor_right = 1.0
-	_chat_panel.offset_left = -452
+	_chat_panel.offset_left = -232
 	_chat_panel.offset_right = -12
 	_chat_panel.offset_top = 64
 	_chat_panel.offset_bottom = 318
@@ -1140,22 +1165,24 @@ func _build_ui() -> void:
 	_chat_log = RichTextLabel.new()
 	_chat_log.bbcode_enabled = true
 	_chat_log.scroll_following = true
-	_chat_log.custom_minimum_size = Vector2(390, 140)
+	_chat_log.custom_minimum_size = Vector2(190, 120)
 	_chat_log.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_chat_log.add_theme_font_size_override("normal_font_size", 15)
+	_chat_log.add_theme_font_size_override("normal_font_size", 13)
 	chat_vbox.add_child(_chat_log)
 
-	var emoji_row := HBoxContainer.new()
-	emoji_row.add_theme_constant_override("separation", 4)
+	var emoji_row := GridContainer.new()
+	emoji_row.columns = 4
+	emoji_row.add_theme_constant_override("h_separation", 4)
+	emoji_row.add_theme_constant_override("v_separation", 4)
 	chat_vbox.add_child(emoji_row)
 	for em in ["HAHA", "GG", "NICE", "OUCH", "WHAT?!", "BOOM", "RIP"]:
 		var eb := Button.new()
 		eb.text = em
 		eb.focus_mode = Control.FOCUS_NONE
-		eb.custom_minimum_size = Vector2(0, 32)
+		eb.custom_minimum_size = Vector2(0, 26)
 		eb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UIStyle.style_layer_button(eb, "blue", "", 8, 4)
-		eb.add_theme_font_size_override("font_size", 12)
+		UIStyle.style_layer_button(eb, "blue", "", 8, 3)
+		eb.add_theme_font_size_override("font_size", 10)
 		eb.pressed.connect(_send_tease_emoji.bind(em))
 		emoji_row.add_child(eb)
 
@@ -1164,18 +1191,18 @@ func _build_ui() -> void:
 	chat_vbox.add_child(input_row)
 	_chat_input = LineEdit.new()
 	_chat_input.placeholder_text = "WiFi Chat..."
-	_chat_input.custom_minimum_size = Vector2(0, 36)
-	_chat_input.add_theme_font_size_override("font_size", 15)
+	_chat_input.custom_minimum_size = Vector2(0, 34)
+	_chat_input.add_theme_font_size_override("font_size", 13)
 	_chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_chat_input.max_length = 80
 	_chat_input.text_submitted.connect(func(_t: String): _send_chat_text())
 	input_row.add_child(_chat_input)
 	var send_btn := Button.new()
 	send_btn.text = "SEND"
-	send_btn.custom_minimum_size = Vector2(76, 36)
+	send_btn.custom_minimum_size = Vector2(56, 34)
 	send_btn.focus_mode = Control.FOCUS_NONE
-	UIStyle.style_layer_button(send_btn, "green", "", 12, 5)
-	send_btn.add_theme_font_size_override("font_size", 14)
+	UIStyle.style_layer_button(send_btn, "green", "", 10, 4)
+	send_btn.add_theme_font_size_override("font_size", 12)
 	send_btn.pressed.connect(_send_chat_text)
 	input_row.add_child(send_btn)
 
@@ -1489,8 +1516,8 @@ func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
 	if not is_instance_valid(icon_rect) or w_data == null:
 		return
-	if w_data.id == 11 or w_data.id == 15 or w_data.id == 16:
-		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_HOOK_GUN if w_data.id == 15 else TEX_BUBBLE_GUN)
+	if w_data.id == 11 or w_data.id == 15 or w_data.id == 16 or w_data.id == 17:
+		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_HOOK_GUN if w_data.id == 15 else (TEX_BUBBLE_GUN if w_data.id == 16 else TEX_MACHINE_GUN))
 		return
 	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
 	if atlas == null:
@@ -1605,33 +1632,35 @@ func _on_player_respawned() -> void:
 		_open_preset_selector(PRESET_SELECT_DURATION)
 
 
-func _on_nearby_weapon_changed(crate_idx: int, w_id: int) -> void:
-	_nearby_crate_idx = crate_idx
+func _refresh_pick_button() -> void:
 	if not is_instance_valid(_btn_pickup):
 		return
-	if crate_idx < 0 or w_id < 0 or NetworkManager.is_agent_clash_mode():
-		_btn_pickup.visible = false
-		return
-	var w_name: String = WeaponData.get_weapon(w_id, 0, 0).display_name
-	_btn_pickup.text = "PICKUP\nGUN"
-	_btn_pickup.visible = true
-	_update_stick_and_button_positions()
+	var is_agent: bool = NetworkManager.is_agent_clash_mode()
+	var has_gun: bool = (not is_agent) and (_nearby_crate_idx >= 0)
+	var has_prop: bool = (_nearby_pick_inter_idx >= 0)
+	var has_enemy: bool = is_agent and local_player != null and local_player.has_method("find_grabbable_player") and local_player.find_grabbable_player() != null
+	_btn_pickup.text = "PICK"
+	_btn_pickup.visible = has_gun or has_prop or has_enemy
+	if _btn_pickup.visible:
+		_update_stick_and_button_positions()
 
 
-func _on_nearby_interactable_changed(inter_idx: int, _label_text: String) -> void:
+func _on_nearby_weapon_changed(crate_idx: int, w_id: int) -> void:
+	_nearby_crate_idx = crate_idx if w_id >= 0 else -1
+	_refresh_pick_button()
+
+
+func _on_nearby_interactable_changed(inter_idx: int, label_text: String) -> void:
 	_nearby_inter_idx = inter_idx
+	_nearby_pick_inter_idx = inter_idx if (inter_idx >= 0 and label_text == "PICK") else -1
 	if is_instance_valid(_btn_interact):
 		_btn_interact.visible = false
+	_refresh_pick_button()
 
 
-func _on_held_prop_changed(prop_kind: String) -> void:
-	if not is_instance_valid(_btn_throw_prop):
-		return
-	if prop_kind.is_empty():
+func _on_held_prop_changed(_prop_kind: String) -> void:
+	if is_instance_valid(_btn_throw_prop):
 		_btn_throw_prop.visible = false
-	else:
-		_btn_throw_prop.text = "THROW\n%s" % prop_kind.replace("_", " ").to_upper().substr(0, 7)
-		_btn_throw_prop.visible = true
 
 
 func _taunt_id_for_chat(txt: String) -> int:
@@ -1828,18 +1857,17 @@ func _refresh_test_bot_btn() -> void:
 func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -> Button:
 	var btn := Button.new()
 	btn.text = ""
-	btn.custom_minimum_size = Vector2(76, 66)
 	btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(btn, bg, border, 11)
+	_style_circle_btn(btn, bg, border, 74, 11)
 	var vb := VBoxContainer.new()
 	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.add_theme_constant_override("separation", 2)
+	vb.add_theme_constant_override("separation", 1)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(vb)
 
 	var icon_rect := TextureRect.new()
-	icon_rect.custom_minimum_size = Vector2(36, 36)
+	icon_rect.custom_minimum_size = Vector2(32, 32)
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1849,7 +1877,7 @@ func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -
 	var status_lbl := Label.new()
 	status_lbl.text = title
 	status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_lbl.add_theme_font_size_override("font_size", 11)
+	status_lbl.add_theme_font_size_override("font_size", 10)
 	status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(status_lbl)
 
@@ -1915,31 +1943,9 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 		if is_instance_valid(status_lbl):
 			status_lbl.text = st_txt
 
+	_refresh_pick_button()
 	if is_instance_valid(_btn_throw):
-		if local_player != null and int(local_player.get("grabbed_player_id")) != 0:
-			_btn_throw.text = "THROW GRABBED PLAYER!"
-			_btn_throw.modulate = Color(1.0, 0.58, 0.22)
-		elif held_throwable >= 0:
-			var item: Dictionary = AgentData.get_throwable(held_throwable)
-			var q_size: int = (local_player.get("held_throwables") as Array).size() if local_player != null else 1
-			var count_txt: String = (" (x%d)" % q_size) if q_size > 1 else ""
-			_btn_throw.text = "THROW %s%s" % [str(item["name"]).to_upper(), count_txt]
-			_btn_throw.modulate = Color(1.0, 0.92, 0.42)
-		elif local_player != null and local_player.has_method("find_grabbable_player") and local_player.find_grabbable_player() != null:
-			_btn_throw.text = "GRAB ENEMY PLAYER!"
-			_btn_throw.modulate = Color(0.42, 0.96, 1.0)
-		else:
-			var windup_t: float = float(local_player.get("_shoe_windup_timer")) if local_player != null else 0.0
-			var shoe_cd: float = float(local_player.get("shoe_cooldown_timer")) if local_player != null else 0.0
-			if windup_t > 0.01:
-				_btn_throw.text = "TAKING OFF SHOE (%.1fs)" % windup_t
-				_btn_throw.modulate = Color(1.0, 0.78, 0.28)
-			elif shoe_cd > 0.05:
-				_btn_throw.text = "THROW SHOE (%.1fs)" % shoe_cd
-				_btn_throw.modulate = Color(0.62, 0.66, 0.72)
-			else:
-				_btn_throw.text = "THROW SHOE"
-				_btn_throw.modulate = Color(0.92, 0.76, 0.48)
+		_btn_throw.visible = false
 
 	if is_instance_valid(_stun_banner) and is_instance_valid(_stun_label):
 		_stun_banner.visible = stun_left > 0.0
@@ -2557,7 +2563,6 @@ func _build_hud_layout_overlay() -> void:
 		{"key": "left_stick", "label": "DRAG\nMOVE STICK", "size": Vector2(188, 188), "col": Color(0.25, 0.68, 1.0)},
 		{"key": "right_stick", "label": "DRAG\nAIM & FIRE", "size": Vector2(188, 188), "col": Color(1.0, 0.48, 0.22)},
 		{"key": "btn_reload", "label": "RLD", "size": Vector2(70, 70), "col": Color(0.68, 0.80, 0.98)},
-		{"key": "btn_switch", "label": "SWAP", "size": Vector2(70, 70), "col": Color(0.95, 0.76, 0.28)},
 		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(78, 78), "col": Color(1.0, 0.56, 0.16)},
 		{"key": "btn_dual", "label": "DUAL", "size": Vector2(68, 68), "col": Color(0.28, 0.92, 1.0)},
 		{"key": "ability_bar", "label": "DRAG ABILITY BAR (1 / 2 / 3 / ULT)", "size": Vector2(560, 134), "col": Color(0.78, 0.48, 1.0)},
@@ -2633,23 +2638,23 @@ class BombHudIcon extends Control:
 	var bomb_type: String = "frag"
 
 	func _draw() -> void:
-		var c := Vector2(size.x * 0.5, size.y * 0.55)
+		var c := Vector2(size.x * 0.5, size.y * 0.54)
 		match bomb_type:
 			"cluster":
-				draw_circle(c, 6.5, Color(1.0, 0.45, 0.16))
-				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.12, 0.14, 0.18), 1.8)
-				draw_circle(c + Vector2(0, -6.5), 2.0, Color(1.0, 0.85, 0.30))
+				draw_circle(c, 9.0, Color(1.0, 0.45, 0.16))
+				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.12, 0.14, 0.18), 2.0)
+				draw_circle(c + Vector2(0, -9.0), 2.5, Color(1.0, 0.85, 0.30))
 			"sticky":
-				draw_circle(c, 6.5, Color(0.24, 0.78, 1.0))
-				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.88, 0.98, 1.0), 1.8)
+				draw_circle(c, 9.0, Color(0.24, 0.78, 1.0))
+				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.88, 0.98, 1.0), 2.0)
 			"time":
-				draw_rect(Rect2(c - Vector2(6, 5), Vector2(12, 10)), Color(0.95, 0.28, 0.24))
-				draw_rect(Rect2(c - Vector2(6, 5), Vector2(12, 10)), Color(1.0, 0.82, 0.35), false, 1.5)
-				draw_circle(c, 2.0, Color.WHITE)
+				draw_rect(Rect2(c - Vector2(8.5, 7), Vector2(17, 14)), Color(0.95, 0.28, 0.24))
+				draw_rect(Rect2(c - Vector2(8.5, 7), Vector2(17, 14)), Color(1.0, 0.82, 0.35), false, 1.8)
+				draw_circle(c, 2.8, Color.WHITE)
 			"mine":
-				draw_rect(Rect2(c + Vector2(-7, 1), Vector2(14, 4)), Color(0.96, 0.62, 0.18))
-				draw_circle(c + Vector2(0, -1), 3.0, Color(1.0, 0.25, 0.22))
+				draw_rect(Rect2(c + Vector2(-9.5, 1.5), Vector2(19, 5)), Color(0.96, 0.62, 0.18))
+				draw_circle(c + Vector2(0, -1.5), 4.0, Color(1.0, 0.25, 0.22))
 			_:
-				draw_circle(c, 6.5, Color(0.26, 0.88, 0.42))
-				draw_arc(c, 6.5, 0.0, TAU, 16, Color(0.12, 0.16, 0.14), 1.8)
-				draw_line(c + Vector2(0, -6), c + Vector2(3, -9), Color(1.0, 0.80, 0.28), 2.0)
+				draw_circle(c, 9.0, Color(0.26, 0.88, 0.42))
+				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.12, 0.16, 0.14), 2.0)
+				draw_line(c + Vector2(0, -8.5), c + Vector2(4, -12.5), Color(1.0, 0.80, 0.28), 2.4)

@@ -98,7 +98,8 @@ func _apply_splash_damage() -> void:
 			continue
 		var dist: float = global_position.distance_to(node.global_position)
 		if dist <= explosion_radius:
-			var falloff: float = 1.0 if (is_barrel and dist <= explosion_radius * 0.55) else clampf(1.0 - (dist / explosion_radius) * 0.65, 0.25, 1.0)
+			var full_core: bool = is_barrel or weapon_name == "Ghost Clone Blast"
+			var falloff: float = 1.0 if (full_core and dist <= explosion_radius * 0.55) else clampf(1.0 - (dist / explosion_radius) * 0.65, 0.25, 1.0)
 			var dir: Vector2 = (node.global_position - global_position).normalized()
 			if dir.length_squared() < 0.01:
 				dir = Vector2.UP

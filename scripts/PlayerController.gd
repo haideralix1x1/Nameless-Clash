@@ -17,6 +17,7 @@ signal agent_abilities_changed
 const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const BOMB_SCRIPT: Script = preload("res://scripts/Bomb.gd")
+const TEX_SOUL_GHOST: Texture2D = preload("res://assets/sprites/soul_ghost.png")
 const ZOOM_LEVEL_VALUES: Array[float] = [1.05, 0.94, 0.85, 0.77, 0.70, 0.64, 0.58]
 
 const MOVE_SPEED: float = 310.0
@@ -105,6 +106,8 @@ var _primary_reserve_ammo: int = -1
 var _secondary_reserve_ammo: int = -1
 var _primary_saved_ammo: int = -1
 var _secondary_saved_ammo: int = -1
+var _original_secondary_id: int = 9
+var _active_slot: int = 0
 var _fuel_recharge_delay: float = 0.0
 var _respawn_timer: float = 0.0
 var _anim_timer: float = 0.0
@@ -147,6 +150,7 @@ var _grab_cooldown: float = 0.0
 var thrown_by_peer_id: int = 0
 var thrown_by_name: String = ""
 var thrown_by_team: int = -1
+var thrown_by_rook_frost: bool = false
 var thrown_flight_timer: float = 0.0
 var _thrown_flight_elapsed: float = 0.0
 var stun_timer: float = 0.0
@@ -250,8 +254,10 @@ var _agent_hud_sync_accum: float = 0.0
 
 # Normal Gunfight Mode Preset & Bomb state
 var selected_gun_preset_id: int = 0
+const BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine"]
 var bomb_count: int = 3
 var max_bombs: int = 3
+var bomb_inventory: Dictionary = {}
 var bomb_type: String = "frag"
 var current_zoom_level: int = 1
 var taunt_id: int = 0
@@ -311,11 +317,16 @@ func setup_player(
 	primary_weapon_id = WeaponData.sanitize_weapon_id(int(av["primary_weapon_id"]))
 	secondary_weapon_id = WeaponData.sanitize_weapon_id(int(av["secondary_weapon_id"]))
 	_equipped_primary_id = primary_weapon_id
+	_original_secondary_id = secondary_weapon_id
+	_active_slot = 0
 	current_weapon_id = primary_weapon_id
 	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
 	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	max_bombs = 3 if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
+	bomb_inventory.clear()
+	if max_bombs > 0:
+		bomb_inventory[bomb_type] = max_bombs
 	weapon_skin_id = int(av["weapon_skin_id"])
 	m4a1_rail_mod = int(av["m4a1_rail_mod"])
 	taunt_id = int(av.get("taunt_id", 0))
@@ -819,7 +830,7 @@ func _process_alive(delta: float) -> void:
 					want_punch = Input.is_action_pressed("fire") or virtual_fire
 				elif is_bot:
 					want_punch = true
-				if want_punch and _fire_cooldown <= 0.0 and stun_timer <= 0.0:
+				if want_punch and _fire_cooldown <= 0.0 and stun_timer <= 0.0 and freeze_timer <= 0.0 and control_lock_timer <= 0.0 and time_stop_timer <= 0.0:
 					_fire_cooldown = 0.75 if is_bot else 0.42
 					_melee_swing_timer = 0.22
 					if carrier.has_method("apply_hit"):
@@ -853,6 +864,7 @@ func _process_alive(delta: float) -> void:
 				_check_thrown_player_impact()
 			if thrown_flight_timer <= 0.0:
 				thrown_by_peer_id = 0
+				thrown_by_rook_frost = false
 			return
 
 	if not NetworkManager.is_agent_clash_mode() and is_reloading:
@@ -1188,7 +1200,18 @@ func _fire_weapon() -> void:
 		_spawn_projectiles_local(muzzle_positions, fire_angle, _weapon.id, weapon_skin_id, m4a1_rail_mod, seed_val)
 
 	if current_ammo <= 0:
-		start_reload()
+		if _is_using_secondary_slot() and secondary_weapon_id != _original_secondary_id and _secondary_reserve_ammo == 0:
+			secondary_weapon_id = _original_secondary_id
+			_secondary_reserve_ammo = 3 if (_original_secondary_id == 10 or _original_secondary_id == 12) else -1
+			_secondary_saved_ammo = -1
+			set_weapon(secondary_weapon_id)
+		elif not _is_using_secondary_slot() and _equipped_primary_id != primary_weapon_id and _primary_reserve_ammo == 0:
+			_equipped_primary_id = primary_weapon_id
+			_primary_reserve_ammo = 3 if (primary_weapon_id == 10 or primary_weapon_id == 12) else -1
+			_primary_saved_ammo = -1
+			set_weapon(_equipped_primary_id)
+		else:
+			start_reload()
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -1289,19 +1312,58 @@ func cycle_weapon() -> void:
 		_secondary_saved_ammo = current_ammo
 	else:
 		_primary_saved_ammo = current_ammo
-	if _equipped_primary_id != secondary_weapon_id:
-		var next_id: int = secondary_weapon_id if current_weapon_id != secondary_weapon_id else _equipped_primary_id
+	if _equipped_primary_id != secondary_weapon_id or _equipped_primary_id != primary_weapon_id or secondary_weapon_id != _original_secondary_id:
+		_active_slot = 1 if _active_slot == 0 else 0
+		var next_id: int = secondary_weapon_id if _active_slot == 1 else _equipped_primary_id
 		set_weapon(next_id)
 		# Glock 17 backup pistol features quick-draw readiness
-		if next_id == secondary_weapon_id:
+		if _active_slot == 1:
 			_fire_cooldown = minf(_fire_cooldown, 0.08)
 	else:
 		var next_id: int = (current_weapon_id + 1) % WeaponData.get_weapon_count()
 		set_weapon(next_id)
 
 
+func drop_picked_up_gun() -> void:
+	if NetworkManager.is_agent_clash_mode() or is_dead:
+		return
+	var using_sec: bool = _is_using_secondary_slot()
+	var cur_slot_id: int = secondary_weapon_id if using_sec else _equipped_primary_id
+	var orig_slot_id: int = _original_secondary_id if using_sec else primary_weapon_id
+	if cur_slot_id == orig_slot_id:
+		return
+	var dropped_mag: int = current_ammo
+	var dropped_res: int = _secondary_reserve_ammo if using_sec else _primary_reserve_ammo
+	if NetworkManager.is_network_active():
+		drop_picked_up_gun_vfx_rpc.rpc(cur_slot_id, global_position, aim_angle, dropped_mag, dropped_res)
+	else:
+		_spawn_dropped_gun_pickup(cur_slot_id, global_position, aim_angle, dropped_mag, dropped_res)
+	if using_sec:
+		secondary_weapon_id = _original_secondary_id
+		_secondary_reserve_ammo = 3 if (_original_secondary_id == 10 or _original_secondary_id == 12) else -1
+		_secondary_saved_ammo = -1
+		set_weapon(secondary_weapon_id)
+	else:
+		_equipped_primary_id = primary_weapon_id
+		_primary_reserve_ammo = 3 if (primary_weapon_id == 10 or primary_weapon_id == 12) else -1
+		_primary_saved_ammo = -1
+		set_weapon(_equipped_primary_id)
+	_play_local_sfx("res://assets/audio/jump.wav", -3.0, 1.1)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func drop_picked_up_gun_vfx_rpc(w_id: int, origin: Vector2, angle: float, saved_mag: int, saved_res: int) -> void:
+	_spawn_dropped_gun_pickup(w_id, origin, angle, saved_mag, saved_res)
+
+
+func _spawn_dropped_gun_pickup(w_id: int, origin: Vector2, angle: float, saved_mag: int, saved_res: int) -> void:
+	var arena := get_tree().current_scene
+	if arena != null and arena.has_method("spawn_dropped_weapon_pickup"):
+		arena.spawn_dropped_weapon_pickup(w_id, origin, angle, saved_mag, saved_res)
+
+
 func _is_using_secondary_slot() -> bool:
-	return current_weapon_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id
+	return _active_slot == 1
 
 
 func get_active_reserve_ammo() -> int:
@@ -1330,6 +1392,8 @@ func apply_gun_preset(preset_idx: int) -> void:
 	primary_weapon_id = int(preset["primary"])
 	secondary_weapon_id = int(preset["secondary"])
 	_equipped_primary_id = primary_weapon_id
+	_original_secondary_id = secondary_weapon_id
+	_active_slot = 0
 	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
 	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	_primary_saved_ammo = -1
@@ -1337,6 +1401,9 @@ func apply_gun_preset(preset_idx: int) -> void:
 	bomb_type = str(preset.get("bomb_type", "frag"))
 	max_bombs = int(preset.get("bombs", 3))
 	bomb_count = max_bombs
+	bomb_inventory.clear()
+	if max_bombs > 0:
+		bomb_inventory[bomb_type] = max_bombs
 	set_weapon(primary_weapon_id)
 	if is_local_human:
 		bombs_changed.emit(bomb_count, bomb_type)
@@ -1345,23 +1412,63 @@ func apply_gun_preset(preset_idx: int) -> void:
 func set_bomb_type(b_type: String) -> void:
 	if _is_agent_logic_active():
 		return
-	bomb_type = b_type if not b_type.is_empty() else "frag"
+	var next_t: String = b_type if not b_type.is_empty() else "frag"
+	var prev_cnt: int = int(bomb_inventory.get(bomb_type, bomb_count))
+	bomb_type = next_t
+	if prev_cnt > 0 and not bomb_inventory.has(bomb_type):
+		bomb_inventory[bomb_type] = prev_cnt
+	_sync_bomb_count_from_inventory()
+
+
+func _sync_bomb_count_from_inventory() -> void:
+	bomb_count = int(bomb_inventory.get(bomb_type, 0))
 	if is_local_human:
 		bombs_changed.emit(bomb_count, bomb_type)
+
+
+func add_bomb_pickup(b_type: String, count: int = 1) -> void:
+	if NetworkManager.is_agent_clash_mode() or not NetworkManager.allow_explosives or is_dead:
+		return
+	var clean_t: String = b_type if BOMB_TYPES.has(b_type) else "frag"
+	bomb_inventory[clean_t] = int(bomb_inventory.get(clean_t, 0)) + maxi(1, count)
+	if int(bomb_inventory.get(bomb_type, 0)) <= 0:
+		bomb_type = clean_t
+	_sync_bomb_count_from_inventory()
+	_play_local_sfx("res://assets/audio/pickup.wav", -2.0)
+
+
+func cycle_bomb_type() -> void:
+	if NetworkManager.is_agent_clash_mode() or is_dead:
+		return
+	var avail: Array[String] = []
+	for bt in BOMB_TYPES:
+		if int(bomb_inventory.get(bt, 0)) > 0:
+			avail.append(bt)
+	if avail.size() <= 1:
+		return
+	var cur_idx: int = avail.find(bomb_type)
+	bomb_type = avail[(cur_idx + 1) % avail.size()]
+	_sync_bomb_count_from_inventory()
 
 
 func throw_bomb() -> void:
 	if NetworkManager.is_agent_clash_mode() or is_dead or bomb_count <= 0 or _bomb_cooldown > 0.0 or not NetworkManager.allow_explosives:
 		return
-	bomb_count = maxi(0, bomb_count - 1)
+	var thrown_type: String = bomb_type
+	var next_cnt: int = maxi(0, int(bomb_inventory.get(thrown_type, bomb_count)) - 1)
+	bomb_inventory[thrown_type] = next_cnt
+	if next_cnt <= 0:
+		for bt in BOMB_TYPES:
+			if int(bomb_inventory.get(bt, 0)) > 0:
+				bomb_type = bt
+				break
 	_bomb_cooldown = 0.65
-	if is_local_human:
-		bombs_changed.emit(bomb_count, bomb_type)
+	_sync_bomb_count_from_inventory()
 	var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 	if NetworkManager.is_network_active():
-		throw_bomb_rpc.rpc(safe_m, aim_angle, bomb_type)
+		throw_bomb_rpc.rpc(safe_m, aim_angle, thrown_type)
 	else:
-		_throw_bomb_local(safe_m, aim_angle, bomb_type)
+		_throw_bomb_local(safe_m, aim_angle, thrown_type)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -1478,6 +1585,7 @@ func cycle_zoom() -> void:
 const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
+const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
 var _weapons_sheet_tex: Texture2D = null
 var _weapons_base_scale: Vector2 = Vector2.ONE
 
@@ -1528,6 +1636,14 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.scale = _weapons_base_scale * 0.56
 		_secondary_weapon.visible = false
 		return
+	if current_weapon_id == 17:
+		_primary_weapon.texture = TEX_MACHINE_GUN
+		_primary_weapon.hframes = 1
+		_primary_weapon.vframes = 1
+		_primary_weapon.frame = 0
+		_primary_weapon.scale = _weapons_base_scale * 0.62
+		_secondary_weapon.visible = false
+		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
 		_primary_weapon.texture = _weapons_sheet_tex
 		_primary_weapon.hframes = 11
@@ -1564,28 +1680,27 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 			var new_w_id: int = WeaponData.sanitize_weapon_id(value)
 			var picked_w: WeaponData = WeaponData.get_weapon(new_w_id, weapon_skin_id, m4a1_rail_mod)
 			var pickup_res: int = 3 if (new_w_id == 10 or new_w_id == 12) else picked_w.mag_size
-			if new_w_id == _equipped_primary_id and _primary_reserve_ammo >= 0:
+			if _is_using_secondary_slot():
+				if new_w_id == secondary_weapon_id:
+					_secondary_saved_ammo = picked_w.mag_size
+					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+					current_ammo = picked_w.mag_size
+					is_reloading = false
+					_emit_ammo()
+				else:
+					secondary_weapon_id = new_w_id
+					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+					_secondary_saved_ammo = picked_w.mag_size
+					set_weapon(secondary_weapon_id)
+			elif new_w_id == _equipped_primary_id:
 				_primary_saved_ammo = picked_w.mag_size
-				_primary_reserve_ammo = pickup_res
-				if not _is_using_secondary_slot():
-					current_ammo = picked_w.mag_size
-					is_reloading = false
-					_emit_ammo()
-			elif new_w_id == secondary_weapon_id and _equipped_primary_id != secondary_weapon_id and _secondary_reserve_ammo >= 0:
-				_secondary_saved_ammo = picked_w.mag_size
-				_secondary_reserve_ammo = pickup_res
-				if _is_using_secondary_slot():
-					current_ammo = picked_w.mag_size
-					is_reloading = false
-					_emit_ammo()
-			elif _is_using_secondary_slot():
-				secondary_weapon_id = new_w_id
-				_secondary_reserve_ammo = pickup_res
-				_secondary_saved_ammo = picked_w.mag_size
-				set_weapon(secondary_weapon_id)
+				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+				current_ammo = picked_w.mag_size
+				is_reloading = false
+				_emit_ammo()
 			else:
 				_equipped_primary_id = new_w_id
-				_primary_reserve_ammo = pickup_res
+				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id and new_w_id != 10 and new_w_id != 12) else pickup_res
 				_primary_saved_ammo = picked_w.mag_size
 				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
@@ -1835,6 +1950,22 @@ func _on_death_visuals() -> void:
 		exp.max_damage = 0
 		exp.can_deal_damage = false
 		parent_node.add_child(exp)
+		_spawn_rising_soul(parent_node, global_position)
+
+
+func _spawn_rising_soul(parent_node: Node, pos: Vector2) -> void:
+	var soul := Sprite2D.new()
+	soul.texture = TEX_SOUL_GHOST
+	soul.global_position = pos + Vector2(0.0, -14.0)
+	soul.scale = Vector2(0.75, 0.75)
+	soul.z_index = 26
+	soul.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	parent_node.add_child(soul)
+	var tw := soul.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(soul, "global_position:y", soul.global_position.y - 95.0, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(soul, "modulate:a", 0.0, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(soul.queue_free)
 
 
 func _respawn_self() -> void:
@@ -1926,6 +2057,9 @@ func _respawn_self() -> void:
 	else:
 		ability_cooldowns[3] = 0.0 if ult_points >= 4 else 1.0
 	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
+	bomb_inventory.clear()
+	if bomb_count > 0:
+		bomb_inventory[bomb_type] = bomb_count
 	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
 	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
 	_primary_saved_ammo = -1
@@ -2734,10 +2868,11 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.2)
 		"ghost_clones":
 			var dur_c: float = float(ab.get("duration", 4.0))
-			var gc1 := _spawn_summon("ghost_clone", cast_pos + Vector2(-46, 0), 0, dur_c, col, ab_name, local_auth, -1.0)
+			var gc_dmg: int = dmg if dmg > 0 else 50
+			var gc1 := _spawn_summon("ghost_clone", cast_pos + Vector2(-46, 0), gc_dmg, dur_c, col, ab_name, local_auth, -1.0)
 			if gc1 != null:
 				gc1.clone_arch_id = archetype_id
-			var gc2 := _spawn_summon("ghost_clone", cast_pos + Vector2(46, 0), 0, dur_c, col, ab_name, local_auth, 1.0)
+			var gc2 := _spawn_summon("ghost_clone", cast_pos + Vector2(46, 0), gc_dmg, dur_c, col, ab_name, local_auth, 1.0)
 			if gc2 != null:
 				gc2.clone_arch_id = archetype_id
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.25)
@@ -2764,20 +2899,9 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 1.3)
 		"ult_cryo_shatter":
 			var cs_rad: float = 420.0
-			_spawn_vfx_burst(cast_pos, cs_rad, Color(0.25, 0.76, 1.0, 0.65))
-			_spawn_air_wave_circle(cast_pos, cs_rad, Color(0.45, 0.92, 1.0))
-			for p in get_tree().get_nodes_in_group("players"):
-				if not is_instance_valid(p) or p == self:
-					continue
-				if p.has_method("is_alive") and not p.is_alive():
-					continue
-				if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
-					continue
-				if (p as Node2D).global_position.distance_to(cast_pos) <= cs_rad:
-					if local_auth and p.has_method("apply_status"):
-						p.apply_status("freeze", 3.0)
-						p.apply_status("cryo_shatter", 3.0, float(peer_id))
-					_spawn_rising_particles((p as Node2D).global_position, Color(0.45, 0.90, 1.0), false, 12)
+			_spawn_vfx_burst(cast_pos, cs_rad * 0.35, Color(0.32, 0.84, 1.0, 0.85), true)
+			_spawn_rising_particles(cast_pos, Color(0.45, 0.92, 1.0), false, 18)
+			_spawn_cryo_wave(cast_pos, cs_rad, local_auth)
 			add_screen_shake(1.8)
 			_play_local_sfx("res://assets/audio/shoot_vector.wav", -1.0, 0.85)
 		"boar_ride":
@@ -2799,9 +2923,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_barbarian_squad(origin, cast_angle, dmg, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.8)
 		"ult_earth_quake_zone":
-			var tgt_ez: Node2D = _find_nearest_enemy_player(cast_pos, 900.0)
-			var ez_pos: Vector2 = tgt_ez.global_position if tgt_ez != null else (cast_pos + Vector2.from_angle(cast_angle) * 200.0)
-			_spawn_hazard_zone("earth_quake_zone", ez_pos, float(ab.get("duration", 5.0)), 155.0, dmg, ab_name, local_auth)
+			_spawn_earthquake_wave(cast_pos, 480.0, float(ab.get("duration", 5.0)), dmg, ab_name, local_auth)
 			add_screen_shake(2.2)
 			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.75)
 		"bat_swarm":
@@ -4441,6 +4563,7 @@ func _throw_player_local(victim_pid: int, origin: Vector2, angle: float) -> void
 	victim.set("thrown_by_peer_id", peer_id)
 	victim.set("thrown_by_name", player_name)
 	victim.set("thrown_by_team", team_id)
+	victim.set("thrown_by_rook_frost", str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Rook Frost")
 	victim.set("thrown_flight_timer", 0.70)
 	victim.set("_thrown_flight_elapsed", 0.0)
 	victim.set("stun_timer", maxf(float(victim.get("stun_timer")), 0.75))
@@ -4476,39 +4599,43 @@ func _check_thrown_player_impact() -> bool:
 	if _thrown_flight_elapsed >= 0.06 and (is_on_wall() or is_on_floor() or is_on_ceiling()):
 		var t_id: int = thrown_by_peer_id
 		var t_name: String = thrown_by_name
+		var shatter_kill: bool = thrown_by_rook_frost and freeze_timer > 0.0
 		thrown_flight_timer = 0.0
 		thrown_by_peer_id = 0
+		thrown_by_rook_frost = false
 		_thrown_flight_elapsed = 0.0
-		apply_hit(THROWN_WALL_DAMAGE, t_id, "Thrown Wall Slam", t_name, Vector2.ZERO)
-		_spawn_vfx_burst(global_position, 42.0, Color(0.95, 0.55, 0.20))
+		if shatter_kill:
+			freeze_timer = 0.0
+			apply_hit(9999, t_id, "Frozen Shatter Wall Slam", t_name, Vector2.ZERO)
+			_spawn_vfx_burst(global_position, 64.0, Color(0.55, 0.90, 1.0))
+		else:
+			apply_hit(THROWN_WALL_DAMAGE, t_id, "Thrown Wall Slam", t_name, Vector2.ZERO)
+			_spawn_vfx_burst(global_position, 42.0, Color(0.95, 0.55, 0.20))
 		return true
 	return false
 
 
 func throw_held_item() -> void:
-	if not NetworkManager.is_agent_clash_mode() or is_dead or stun_timer > 0.0 or carried_by_peer_id != 0:
+	if is_dead or stun_timer > 0.0 or carried_by_peer_id != 0:
+		return
+	if not held_prop_kind.is_empty():
+		throw_held_prop()
 		return
 	if grabbed_player_id != 0:
 		throw_grabbed_player(aim_angle)
-		if is_local_human:
+		if is_local_human and NetworkManager.is_agent_clash_mode():
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 		return
 	if not held_throwables.is_empty():
 		var item_id: int = held_throwables.pop_back()
 		held_throwable_id = held_throwables.back() if not held_throwables.is_empty() else -1
-		if is_local_human:
+		if is_local_human and NetworkManager.is_agent_clash_mode():
 			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 		var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 		if NetworkManager.is_network_active():
 			throw_item_rpc.rpc(item_id, safe_m, aim_angle)
 		else:
 			_throw_item_local(item_id, safe_m, aim_angle)
-		return
-	var target := find_grabbable_player()
-	if target != null:
-		grab_player(target)
-		if is_local_human:
-			agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 		return
 	# Default throwable: 1.0s windup to take off shoe, then throw with 5s cooldown
 	throw_shoe()
@@ -4610,6 +4737,40 @@ func _spawn_air_wave_circle(pos: Vector2, max_rad: float, col: Color) -> void:
 	parent_node.add_child(vfx)
 
 
+func _spawn_cryo_wave(pos: Vector2, max_rad: float, can_apply: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var vfx := AirWaveCircleVfx.new()
+	vfx.global_position = pos
+	vfx.max_radius = max_rad
+	vfx.wave_color = Color(0.45, 0.92, 1.0)
+	vfx.cryo_active = true
+	vfx.cryo_can_apply = can_apply
+	vfx.cryo_caster_id = peer_id
+	vfx.cryo_team_id = team_id
+	parent_node.add_child(vfx)
+
+
+func _spawn_earthquake_wave(pos: Vector2, max_rad: float, dur: float, dmg_dps: int, ab_label: String, can_apply: bool) -> void:
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var vfx := AirWaveCircleVfx.new()
+	vfx.global_position = pos
+	vfx.max_radius = max_rad
+	vfx.wave_color = Color(0.78, 0.50, 0.22)
+	vfx.eq_active = true
+	vfx.eq_dur = dur
+	vfx.eq_dps = dmg_dps
+	vfx.eq_label = ab_label
+	vfx.eq_caster_name = player_name
+	vfx.cryo_can_apply = can_apply
+	vfx.cryo_caster_id = peer_id
+	vfx.cryo_team_id = team_id
+	parent_node.add_child(vfx)
+
+
 func _spawn_flurry_dust_puff(center_pos: Vector2) -> void:
 	var off := Vector2(randf_range(-26.0, 26.0), randf_range(-26.0, 14.0))
 	_spawn_rising_particles(center_pos + off, Color(0.88, 0.88, 0.92, 0.85), false, 5)
@@ -4628,7 +4789,7 @@ func _spawn_rising_particles(pos: Vector2, col: Color, is_heal: bool = false, co
 	parent_node.add_child(vfx)
 
 
-func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color) -> void:
+func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color, custom_splash: bool = false) -> void:
 	var parent_node: Node = get_parent()
 	if parent_node == null:
 		return
@@ -4637,6 +4798,7 @@ func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color) -> void:
 	exp.explosion_radius = radius
 	exp.max_damage = 0
 	exp.ring_color = col
+	exp.custom_splash_only = custom_splash
 	exp.can_deal_damage = false
 	parent_node.add_child(exp)
 
@@ -5079,19 +5241,78 @@ class RisingParticleVfx extends Node2D:
 class AirWaveCircleVfx extends Node2D:
 	var max_radius: float = 320.0
 	var wave_color: Color = Color(0.55, 0.90, 1.0)
+	var cryo_active: bool = false
+	var eq_active: bool = false
+	var eq_dur: float = 5.0
+	var eq_dps: int = 170
+	var eq_label: String = "Earthquake Sphere"
+	var eq_caster_name: String = ""
+	var cryo_can_apply: bool = false
+	var cryo_caster_id: int = 0
+	var cryo_team_id: int = -1
+	var _cryo_hit_pids: Dictionary = {}
 	var _age: float = 0.0
 	var _life: float = 0.42
 
 	func _ready() -> void:
 		z_index = 25
+		if eq_active:
+			_life = 0.55
+		if cryo_active or eq_active:
+			_check_wave_hits(48.0)
 		queue_redraw()
 
 	func _process(delta: float) -> void:
 		_age += delta
+		if cryo_active or eq_active:
+			var t_cur: float = clampf(_age / _life, 0.0, 1.0)
+			var ease_cur: float = 1.0 - pow(1.0 - t_cur, 2.5)
+			_check_wave_hits(maxf(48.0, max_radius * ease_cur))
 		if _age >= _life:
 			queue_free()
 			return
 		queue_redraw()
+
+	func _check_wave_hits(cur_rad: float) -> void:
+		if not is_inside_tree():
+			return
+		for p in get_tree().get_nodes_in_group("players"):
+			if not is_instance_valid(p):
+				continue
+			var pid: int = int(p.get("peer_id"))
+			if pid == cryo_caster_id or _cryo_hit_pids.has(pid):
+				continue
+			if p.has_method("is_alive") and not p.is_alive():
+				continue
+			if NetworkManager.is_team_mode() and int(p.get("team_id")) == cryo_team_id:
+				continue
+			if (p as Node2D).global_position.distance_to(global_position) <= cur_rad:
+				_cryo_hit_pids[pid] = true
+				var parent_node: Node = get_parent()
+				if cryo_active:
+					if cryo_can_apply and p.has_method("apply_status"):
+						p.apply_status("freeze", 3.0)
+						p.apply_status("cryo_shatter", 3.0, float(cryo_caster_id))
+					if parent_node != null:
+						var rp := RisingParticleVfx.new()
+						rp.global_position = (p as Node2D).global_position
+						rp.part_color = Color(0.45, 0.90, 1.0)
+						rp.count = 12
+						parent_node.add_child(rp)
+				elif eq_active and parent_node != null:
+					var hz := Node2D.new()
+					hz.set_script(load("res://scripts/PlatformHazardZone.gd"))
+					hz.set("zone_kind", "earth_quake_zone")
+					hz.global_position = (p as Node2D).global_position
+					hz.set("time_left", eq_dur)
+					hz.set("radius", 155.0)
+					hz.set("dps", eq_dps)
+					hz.set("shooter_id", cryo_caster_id)
+					hz.set("shooter_team", cryo_team_id)
+					hz.set("shooter_name", eq_caster_name)
+					hz.set("weapon_name", eq_label)
+					hz.set("can_deal", cryo_can_apply)
+					parent_node.add_child(hz)
 
 	func _draw() -> void:
 		var t: float = clampf(_age / _life, 0.0, 1.0)
@@ -5101,7 +5322,11 @@ class AirWaveCircleVfx extends Node2D:
 		var r2: float = maxf(10.0, max_radius * maxf(0.0, ease_t - 0.18))
 		draw_circle(Vector2.ZERO, r1, Color(wave_color.r, wave_color.g, wave_color.b, a * 0.14))
 		draw_arc(Vector2.ZERO, r1, 0.0, TAU, 48, Color(wave_color.r, wave_color.g, wave_color.b, a * 0.85), 5.0)
-		draw_arc(Vector2.ZERO, r2, 0.0, TAU, 40, Color(0.95, 0.99, 1.0, a * 0.90), 3.5)
+		var inner_col: Color = Color(0.95, 0.68, 0.30, a * 0.90) if eq_active else Color(0.95, 0.99, 1.0, a * 0.90)
+		draw_arc(Vector2.ZERO, r2, 0.0, TAU, 40, inner_col, 3.5)
+		if eq_active and ease_t > 0.34:
+			var r3: float = maxf(10.0, max_radius * (ease_t - 0.34))
+			draw_arc(Vector2.ZERO, r3, 0.0, TAU, 36, Color(0.62, 0.36, 0.14, a * 0.80), 3.0)
 
 
 class IceBlockOverlay extends Node2D:

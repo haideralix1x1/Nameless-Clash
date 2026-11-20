@@ -133,8 +133,10 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, radius, Color(0.32, 0.92, 0.35, 0.32 * alpha))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 28, Color(0.45, 1.0, 0.38, 0.78 * alpha), 3.0)
 		"earth_quake_zone":
-			draw_circle(Vector2.ZERO, radius, Color(0.68, 0.45, 0.22, 0.28 * alpha))
-			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, Color(0.95, 0.65, 0.28, 0.85 * alpha), 4.0)
+			var eq_off := Vector2(randf_range(-6.5, 6.5), randf_range(-6.5, 6.5))
+			var eq_rad: float = radius + randf_range(-4.0, 4.0)
+			draw_circle(eq_off, eq_rad, Color(0.68, 0.45, 0.22, 0.28 * alpha))
+			draw_arc(eq_off, eq_rad, 0.0, TAU, 32, Color(0.95, 0.65, 0.28, 0.85 * alpha), 4.0)
 		"inferno_ring":
 			draw_circle(Vector2.ZERO, radius, Color(1.0, 0.32, 0.08, 0.35 * alpha))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, Color(1.0, 0.75, 0.18, 0.92 * alpha), 5.0)
