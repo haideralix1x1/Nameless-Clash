@@ -352,6 +352,32 @@ static func get_archetype_part_id(arch_idx: int) -> int:
 	return clampi(int(ARCHETYPES[idx].get("part_id", idx)), 0, ModularCharacter.MAX_PART_INDEX)
 
 
+static func build_archetype_avatar_dict(arch_idx: int) -> Dictionary:
+	var idx: int = clampi(arch_idx, 0, ARCHETYPES.size() - 1)
+	var arch: Dictionary = ARCHETYPES[idx]
+	var parts: Dictionary = arch.get("parts", {})
+	var base_part: int = get_archetype_part_id(idx)
+	return {
+		"archetype_id": idx,
+		"skin_id": int(parts.get("head", base_part)),
+		"head_id": int(parts.get("head", base_part)),
+		"torso_id": int(parts.get("torso", base_part)),
+		"legs_id": int(parts.get("legs", base_part)),
+		"hands_id": int(parts.get("hands", base_part)),
+		"accessories_id": int(parts.get("accessories", base_part)),
+		"shirt_color": arch["shirt"],
+		"pants_color": arch["pants"],
+		"skin_color": arch["skin"],
+		"helmet_color": arch["helmet"],
+		"gear_color": arch["gear"],
+		"primary_weapon_id": int(arch["weapon"]),
+		"secondary_weapon_id": 9,
+		"weapon_skin_id": 0,
+		"m4a1_rail_mod": 0,
+		"taunt_id": 0
+	}
+
+
 func apply_archetype_preset(arch_idx: int, emit_save: bool = true) -> void:
 	var idx: int = clampi(arch_idx, 0, ARCHETYPES.size() - 1)
 	var arch: Dictionary = ARCHETYPES[idx]
@@ -385,9 +411,18 @@ func apply_palette(palette_idx: int) -> void:
 	notify_changed()
 
 
+func _get_profile_path() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--profile="):
+			var slot: String = a.substr(10).strip_edges()
+			if not slot.is_empty():
+				return "user://player_profile_%s.cfg" % slot
+	return PROFILE_PATH
+
+
 func load_profile() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(PROFILE_PATH) != OK:
+	if cfg.load(_get_profile_path()) != OK:
 		save_profile()
 		return
 
@@ -446,7 +481,7 @@ func save_profile() -> void:
 	cfg.set_value("loadout", "weapon_skin_id", weapon_skin_id)
 	cfg.set_value("loadout", "m4a1_rail_mod", m4a1_rail_mod)
 	cfg.set_value("loadout", "taunt_id", taunt_id)
-	cfg.save(PROFILE_PATH)
+	cfg.save(_get_profile_path())
 
 
 func notify_changed() -> void:

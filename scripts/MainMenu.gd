@@ -178,11 +178,21 @@ func _build_ui() -> void:
 	split.add_theme_constant_override("separation", 18)
 	_hub_container.add_child(split)
 
+	var win_panel_sb := StyleBoxFlat.new()
+	win_panel_sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	win_panel_sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	win_panel_sb.set_border_width_all(3)
+	win_panel_sb.set_corner_radius_all(18)
+	win_panel_sb.set_content_margin_all(16)
+	win_panel_sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
+	win_panel_sb.shadow_size = 10
+	win_panel_sb.shadow_offset = Vector2.ZERO
+
 	# Left Card: Your Soldier Showcase
 	var preview_panel := PanelContainer.new()
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_stretch_ratio = 0.88
-	preview_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.92), Color(0.32, 0.46, 0.62, 0.90), 14))
+	preview_panel.add_theme_stylebox_override("panel", win_panel_sb)
 	split.add_child(preview_panel)
 
 	var pv := VBoxContainer.new()
@@ -193,21 +203,21 @@ func _build_ui() -> void:
 	p_hdr.text = "YOUR SOLDIER"
 	p_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	p_hdr.add_theme_font_size_override("font_size", 16)
-	p_hdr.modulate = Color(0.70, 0.78, 0.86)
+	p_hdr.modulate = Color(0.76, 0.82, 0.94)
 	pv.add_child(p_hdr)
 
 	_callsign_label = Label.new()
 	_callsign_label.text = ProfileManager.player_name.to_upper()
 	_callsign_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_callsign_label.add_theme_font_size_override("font_size", 28)
-	_callsign_label.modulate = Color(0.90, 0.78, 0.46)
+	_callsign_label.modulate = Color(1.0, 0.84, 0.24)
 	pv.add_child(_callsign_label)
 
 	var stage := PanelContainer.new()
 	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stage.custom_minimum_size = Vector2(210, 168)
 	stage.clip_contents = true
-	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.05, 0.09, 0.94), Color(0.24, 0.38, 0.58, 0.7), 12))
+	stage.add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.12, 0.20, 0.96), Color(0.24, 0.36, 0.56, 0.80), 12))
 	pv.add_child(stage)
 
 	var anchor_wrap := Control.new()
@@ -238,7 +248,7 @@ func _build_ui() -> void:
 	var nav_panel := PanelContainer.new()
 	nav_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav_panel.size_flags_stretch_ratio = 1.08
-	nav_panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.14, 0.92), Color(0.24, 0.56, 0.88, 0.88), 14))
+	nav_panel.add_theme_stylebox_override("panel", win_panel_sb.duplicate())
 	split.add_child(nav_panel)
 
 	var nav_v := VBoxContainer.new()
@@ -250,7 +260,7 @@ func _build_ui() -> void:
 	nav_hdr.text = "CHOOSE MODE"
 	nav_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nav_hdr.add_theme_font_size_override("font_size", 18)
-	nav_hdr.modulate = Color(0.70, 0.78, 0.86)
+	nav_hdr.modulate = Color(1.0, 0.84, 0.24)
 	nav_v.add_child(nav_hdr)
 
 	var mode_grid := GridContainer.new()
@@ -261,7 +271,20 @@ func _build_ui() -> void:
 	mode_grid.add_theme_constant_override("v_separation", 14)
 	nav_v.add_child(mode_grid)
 
-	var btn_solo := _make_icon_card_button("GUN GAME", "res://assets/ui/icons/icon_gun_game.png", Color(0.30, 0.92, 0.48), 132.0, 20, Color(0.09, 0.28, 0.16, 0.98), 72)
+	var btn_solo := _make_icon_card_button("GUN GAME", "res://assets/ui/icons/icon_gun_game.png", Color(0.98, 0.78, 0.22), 132.0, 20, Color(0.24, 0.18, 0.06, 0.98), 72)
+	var gun_n := StyleBoxFlat.new()
+	gun_n.bg_color = Color(0.30, 0.23, 0.05, 0.96)
+	gun_n.border_color = Color(0.98, 0.76, 0.22, 0.95)
+	gun_n.set_border_width_all(2)
+	gun_n.set_corner_radius_all(10)
+	var gun_h := gun_n.duplicate() as StyleBoxFlat
+	gun_h.bg_color = Color(0.38, 0.29, 0.07, 0.98)
+	var gun_p := gun_n.duplicate() as StyleBoxFlat
+	gun_p.bg_color = Color(0.22, 0.17, 0.04, 0.98)
+	btn_solo.add_theme_stylebox_override("normal", gun_n)
+	btn_solo.add_theme_stylebox_override("hover", gun_h)
+	btn_solo.add_theme_stylebox_override("pressed", gun_p)
+	btn_solo.add_theme_stylebox_override("focus", gun_n)
 	btn_solo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_solo.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_solo.pressed.connect(func():
@@ -273,19 +296,19 @@ func _build_ui() -> void:
 	)
 	mode_grid.add_child(btn_solo)
 
-	var btn_agent := _make_icon_card_button("AGENT CLASH", "res://assets/ui/icons/icon_agent_clash.png", Color(0.78, 0.42, 1.0), 132.0, 20, Color(0.20, 0.10, 0.34, 0.98), 72)
+	var btn_agent := _make_icon_card_button("AGENT CLASH", "res://assets/ui/icons/icon_agent_clash.png", Color(0.30, 0.92, 0.48), 132.0, 20, Color(0.09, 0.28, 0.16, 0.98), 72)
 	btn_agent.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_agent.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_agent.pressed.connect(func(): _open_agent_select(false))
 	mode_grid.add_child(btn_agent)
 
-	var btn_test := _make_icon_card_button("PRACTICE MODE", "res://assets/ui/icons/icon_practice.png", Color(0.24, 0.86, 0.82), 132.0, 20, Color(0.08, 0.24, 0.26, 0.98), 72)
+	var btn_test := _make_icon_card_button("PRACTICE MODE", "res://assets/ui/icons/icon_practice.png", Color(0.78, 0.42, 1.0), 132.0, 20, Color(0.20, 0.10, 0.34, 0.98), 72)
 	btn_test.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_test.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_test.pressed.connect(_open_test_mode_overlay)
 	mode_grid.add_child(btn_test)
 
-	var btn_local := _make_icon_card_button("LOCAL MODE", "res://assets/ui/icons/icon_local_mode.png", Color(0.28, 0.76, 1.0), 132.0, 20, Color(0.09, 0.20, 0.34, 0.98), 72)
+	var btn_local := _make_icon_card_button("LOCAL MODE", "res://assets/ui/icons/icon_local_mode.png", Color(0.95, 0.36, 0.34), 132.0, 20, Color(0.28, 0.09, 0.11, 0.98), 72)
 	btn_local.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_local.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_local.pressed.connect(_open_local_mode_overlay)

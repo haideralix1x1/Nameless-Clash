@@ -19,6 +19,8 @@ signal mine_event(action: String, mine_id: int, pos: Vector2)
 signal match_timer_updated(time_left: float)
 signal match_ended(winner_text: String, rankings: Array)
 signal combo_achieved(killer_id: int, killer_name: String, combo_count: int)
+signal agent_draft_started
+signal agent_draft_updated
 
 const GAME_PORT: int = 44334
 const DISCOVERY_PORT: int = 44335
@@ -129,6 +131,10 @@ var _udp_broadcaster: PacketPeerUDP = null
 var _udp_listener: PacketPeerUDP = null
 var _broadcast_timer: float = 0.0
 var _is_listening_lan: bool = false
+var agent_draft_active: bool = false
+var agent_draft_locks: Dictionary = {}
+var agent_draft_timer: float = 0.0
+const AGENT_DRAFT_DURATION: float = 25.0
 
 
 func _ready() -> void:
@@ -153,6 +159,11 @@ func _process(delta: float) -> void:
 
 	if _is_listening_lan and _udp_listener != null:
 		_poll_lan_packets()
+
+	if agent_draft_active:
+		agent_draft_timer = maxf(0.0, agent_draft_timer - delta)
+		if is_host_active() and agent_draft_timer <= 0.0:
+			_auto_fill_and_launch_draft()
 
 
 func _exit_tree() -> void:
@@ -357,7 +368,21 @@ func sync_leader_rpc(new_leader_id: int) -> void:
 	player_list_updated.emit()
 
 
+func are_all_players_ready() -> bool:
+	if not is_network_active():
+		return true
+	for pid in players.keys():
+		if int(pid) == leader_peer_id:
+			continue
+		var info: Dictionary = players[pid] as Dictionary
+		if not bool(info.get("ready", true)):
+			return false
+	return true
+
+
 func request_start_match() -> void:
+	if not are_all_players_ready():
+		return
 	if is_host_active():
 		host_start_match()
 	elif is_network_active() and is_local_leader():
@@ -454,6 +479,7 @@ func host_game(room_name: String = "") -> Error:
 	multiplayer.multiplayer_peer = peer
 	players.clear()
 	players[1] = _build_local_player_dict()
+	stop_lan_discovery()
 	_start_broadcaster()
 	player_list_updated.emit()
 	connection_succeeded.emit()
@@ -480,6 +506,9 @@ func join_game(ip_address: String) -> Error:
 
 func disconnect_network() -> void:
 	match_in_progress = false
+	agent_draft_active = false
+	agent_draft_locks.clear()
+	agent_draft_timer = 0.0
 	_stop_broadcaster()
 	if multiplayer.multiplayer_peer != null and not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
 		multiplayer.multiplayer_peer.close()
@@ -491,14 +520,18 @@ func disconnect_network() -> void:
 
 func start_lan_discovery() -> void:
 	stop_lan_discovery()
-	_udp_listener = PacketPeerUDP.new()
-	_udp_listener.set_broadcast_enabled(true)
-	var err: Error = _udp_listener.bind(DISCOVERY_PORT, "*")
-	if err == OK:
-		_is_listening_lan = true
-	else:
-		_udp_listener = null
-		_is_listening_lan = false
+	if is_host_active():
+		return
+	for offset in range(4):
+		var sock := PacketPeerUDP.new()
+		sock.set_broadcast_enabled(true)
+		if sock.bind(DISCOVERY_PORT + offset, "*") == OK:
+			_udp_listener = sock
+			_is_listening_lan = true
+			return
+		sock.close()
+	_udp_listener = null
+	_is_listening_lan = false
 
 
 func stop_lan_discovery() -> void:
@@ -537,7 +570,7 @@ func _broadcast_lan_presence() -> void:
 		"port": GAME_PORT
 	}).to_utf8_buffer()
 
-	var targets: Array[String] = ["255.255.255.255"]
+	var targets: Array[String] = ["127.0.0.1", "255.255.255.255"]
 	for ip in get_local_ips():
 		var parts := ip.split(".")
 		if parts.size() == 4:
@@ -546,8 +579,9 @@ func _broadcast_lan_presence() -> void:
 				targets.append(bcast)
 
 	for dest in targets:
-		_udp_broadcaster.set_dest_address(dest, DISCOVERY_PORT)
-		_udp_broadcaster.put_packet(payload)
+		for offset in range(4):
+			_udp_broadcaster.set_dest_address(dest, DISCOVERY_PORT + offset)
+			_udp_broadcaster.put_packet(payload)
 
 
 func _poll_lan_packets() -> void:
@@ -558,7 +592,8 @@ func _poll_lan_packets() -> void:
 		var sender_ip: String = _udp_listener.get_packet_ip()
 		var parsed: Variant = JSON.parse_string(pkt.get_string_from_utf8())
 		if parsed is Dictionary and parsed.get("app", "") == "NamelessClash":
-			var ip: String = sender_ip if not sender_ip.is_empty() else str(parsed.get("host_ip", ""))
+			var payload_ip: String = str(parsed.get("host_ip", ""))
+			var ip: String = payload_ip if (sender_ip.is_empty() or (sender_ip == "127.0.0.1" and not payload_ip.is_empty())) else sender_ip
 			if not ip.is_empty():
 				discovered_servers[ip] = {
 					"ip": ip,
@@ -614,6 +649,8 @@ func _on_connection_failed() -> void:
 func _on_server_disconnected() -> void:
 	disconnect_network()
 	server_disconnected.emit()
+	if get_tree() != null and get_tree().current_scene != null and get_tree().current_scene.scene_file_path != "res://scenes/MainMenu.tscn":
+		call_deferred("go_to_main_menu")
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -653,13 +690,112 @@ func sync_all_players(all_players: Dictionary) -> void:
 
 func host_start_match() -> void:
 	if is_host_active():
+		if not are_all_players_ready():
+			return
+		if is_agent_clash_mode() and not agent_draft_active:
+			begin_agent_draft_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty, get_rules_dict())
+			return
 		start_match_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty, get_rules_dict())
 	else:
 		go_to_arena()
 
 
 @rpc("authority", "call_local", "reliable")
+func begin_agent_draft_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1, synced_rules: Dictionary = {}) -> void:
+	bot_count = synced_bot_count
+	match_mode = clampi(synced_mode, 0, MODE_NAMES.size() - 1)
+	selected_map_id = clampi(synced_map_id, 0, MAP_NAMES.size() - 1)
+	bot_difficulty = clampi(synced_bot_diff, 0, 2)
+	if not synced_rules.is_empty():
+		apply_rules_dict(synced_rules)
+	agent_draft_active = true
+	agent_draft_locks.clear()
+	agent_draft_timer = AGENT_DRAFT_DURATION
+	agent_draft_started.emit()
+
+
+func request_lock_agent(arch_id: int) -> void:
+	if not agent_draft_active:
+		return
+	var safe_arch: int = clampi(arch_id, 0, AgentData.AGENTS.size() - 1)
+	if is_host_active():
+		_server_lock_agent(1, safe_arch)
+	elif is_network_active():
+		request_lock_agent_rpc.rpc_id(1, safe_arch)
+
+
+@rpc("any_peer", "call_local", "reliable")
+func request_lock_agent_rpc(arch_id: int) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		sender_id = 1
+	_server_lock_agent(sender_id, clampi(arch_id, 0, AgentData.AGENTS.size() - 1))
+
+
+func _server_lock_agent(peer_id: int, arch_id: int) -> void:
+	if not agent_draft_active or not players.has(peer_id):
+		return
+	if agent_draft_locks.has(peer_id):
+		return
+	for pid in agent_draft_locks.keys():
+		if int(pid) != peer_id and int(agent_draft_locks[pid]) == arch_id:
+			return
+	agent_draft_locks[peer_id] = arch_id
+	players[peer_id]["avatar"] = ProfileManager.build_archetype_avatar_dict(arch_id)
+	sync_agent_draft_rpc.rpc(agent_draft_locks)
+	var all_locked: bool = true
+	for pid in players.keys():
+		if not agent_draft_locks.has(int(pid)):
+			all_locked = false
+			break
+	if all_locked:
+		_launch_match_from_draft()
+
+
+@rpc("authority", "call_local", "reliable")
+func sync_agent_draft_rpc(locks: Dictionary) -> void:
+	agent_draft_locks = locks.duplicate()
+	var my_id: int = get_local_peer_id()
+	if agent_draft_locks.has(my_id):
+		ProfileManager.apply_archetype_preset(int(agent_draft_locks[my_id]), false)
+	agent_draft_updated.emit()
+
+
+func _auto_fill_and_launch_draft() -> void:
+	if not is_host_active() or not agent_draft_active:
+		return
+	var taken: Array[int] = []
+	for pid in agent_draft_locks.keys():
+		taken.append(int(agent_draft_locks[pid]))
+	var avail: Array[int] = []
+	for i in range(AgentData.AGENTS.size()):
+		if not taken.has(i):
+			avail.append(i)
+	avail.shuffle()
+	for pid in players.keys():
+		var p_int: int = int(pid)
+		if not agent_draft_locks.has(p_int):
+			var pick: int = avail.pop_back() if not avail.is_empty() else (p_int % AgentData.AGENTS.size())
+			agent_draft_locks[p_int] = pick
+			players[p_int]["avatar"] = ProfileManager.build_archetype_avatar_dict(pick)
+	sync_agent_draft_rpc.rpc(agent_draft_locks)
+	_launch_match_from_draft()
+
+
+func _launch_match_from_draft() -> void:
+	if not is_host_active():
+		return
+	agent_draft_active = false
+	sync_all_players.rpc(players)
+	start_match_rpc.rpc(bot_count, match_mode, selected_map_id, bot_difficulty, get_rules_dict())
+
+
+@rpc("authority", "call_local", "reliable")
 func start_match_rpc(synced_bot_count: int, synced_mode: int, synced_map_id: int, synced_bot_diff: int = 1, synced_rules: Dictionary = {}) -> void:
+	agent_draft_active = false
+	agent_draft_locks.clear()
 	match_in_progress = true
 	bot_count = synced_bot_count
 	match_mode = clampi(synced_mode, 0, MODE_NAMES.size() - 1)
@@ -956,6 +1092,8 @@ func go_to_lobby() -> void:
 
 
 func go_to_main_menu() -> void:
+	if get_tree() != null:
+		get_tree().paused = false
 	stop_lan_discovery()
 	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 

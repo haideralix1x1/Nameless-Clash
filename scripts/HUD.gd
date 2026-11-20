@@ -190,8 +190,6 @@ func _process(delta: float) -> void:
 
 	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
 		_preset_time_left = maxf(0.0, _preset_time_left - delta)
-		if is_instance_valid(_preset_timer_label):
-			_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET  (%.1fs)" % _preset_time_left
 		if _preset_time_left <= 0.001:
 			var fallback_idx: int = _chosen_preset_idx if _chosen_preset_idx >= 0 else 0
 			_confirm_preset(fallback_idx)
@@ -1277,22 +1275,45 @@ func _build_ui() -> void:
 
 	var right_panel := PanelContainer.new()
 	right_panel.custom_minimum_size = Vector2(520, 0)
-	right_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.06, 0.09, 0.15, 0.98), Color(0.95, 0.65, 0.18, 0.95)))
+	var gm_sb := StyleBoxFlat.new()
+	gm_sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	gm_sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	gm_sb.set_border_width_all(3)
+	gm_sb.set_corner_radius_all(18)
+	gm_sb.set_content_margin_all(22)
+	gm_sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
+	gm_sb.shadow_size = 10
+	gm_sb.shadow_offset = Vector2.ZERO
+	right_panel.add_theme_stylebox_override("panel", gm_sb)
 	pause_center.add_child(right_panel)
 
 	var rv := VBoxContainer.new()
-	rv.add_theme_constant_override("separation", 12)
+	rv.add_theme_constant_override("separation", 14)
 	right_panel.add_child(rv)
+
+	var hdr_box := PanelContainer.new()
+	var hdr_style := StyleBoxFlat.new()
+	hdr_style.bg_color = Color(0.11, 0.16, 0.26, 0.96)
+	hdr_style.set_corner_radius_all(8)
+	hdr_style.set_content_margin_all(8)
+	hdr_box.add_theme_stylebox_override("panel", hdr_style)
+	rv.add_child(hdr_box)
 
 	var hdr_row := HBoxContainer.new()
 	hdr_row.add_theme_constant_override("separation", 10)
-	rv.add_child(hdr_row)
+	hdr_box.add_child(hdr_row)
+
+	var hdr_left_spacer := Control.new()
+	hdr_left_spacer.custom_minimum_size = Vector2(44, 40)
+	hdr_row.add_child(hdr_left_spacer)
 
 	var pause_title := Label.new()
 	pause_title.text = "GAME MENU"
 	pause_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pause_title.add_theme_font_size_override("font_size", 24)
-	pause_title.modulate = Color(1.0, 0.84, 0.28)
+	pause_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pause_title.add_theme_font_size_override("font_size", 26)
+	pause_title.modulate = Color(1.0, 0.84, 0.24)
 	hdr_row.add_child(pause_title)
 
 	var close_x_btn := Button.new()
@@ -2000,7 +2021,7 @@ func _build_preset_overlay() -> void:
 	pv.add_child(hdr)
 
 	_preset_timer_label = Label.new()
-	_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET  (%.1fs)" % PRESET_SELECT_DURATION
+	_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET"
 	_preset_timer_label.add_theme_font_size_override("font_size", 18)
 	_preset_timer_label.modulate = Color(1.0, 0.86, 0.28)
 	_preset_timer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2260,10 +2281,13 @@ func _build_match_end_overlay() -> void:
 	card.custom_minimum_size = Vector2(640, 0)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
-	sb.border_color = Color(0.98, 0.76, 0.22, 0.95)
+	sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
 	sb.set_border_width_all(3)
 	sb.set_corner_radius_all(18)
 	sb.set_content_margin_all(22)
+	sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
+	sb.shadow_size = 10
+	sb.shadow_offset = Vector2.ZERO
 	card.add_theme_stylebox_override("panel", sb)
 	center.add_child(card)
 

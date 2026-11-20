@@ -37,6 +37,18 @@ var _chk_allow_explosives: CheckBox
 var _gravity_slider: HSlider
 var _gravity_val_lbl: Label
 var _syncing_rules_ui: bool = false
+var _left_panel: PanelContainer
+var _lan_sep: HSeparator
+var _lan_hdr: Label
+var _lan_scroll: ScrollContainer
+
+var _draft_overlay: ColorRect
+var _draft_timer_lbl: Label
+var _draft_roster_box: VBoxContainer
+var _draft_agent_btns: Array[Button] = []
+var _draft_info_lbl: Label
+var _draft_lock_btn: Button
+var _draft_selected_arch: int = 0
 
 
 func _ready() -> void:
@@ -44,6 +56,7 @@ func _ready() -> void:
 		NetworkManager.bot_count = 0
 	_local_bot_count = NetworkManager.bot_count
 	_build_ui()
+	_build_draft_overlay()
 	NetworkManager.player_list_updated.connect(_refresh_players)
 	NetworkManager.match_settings_updated.connect(_refresh_match_settings_ui)
 	NetworkManager.game_rules_updated.connect(_refresh_rules_ui)
@@ -51,6 +64,8 @@ func _ready() -> void:
 	NetworkManager.connection_succeeded.connect(_on_connected)
 	NetworkManager.connection_failed.connect(_on_conn_failed)
 	NetworkManager.server_disconnected.connect(_on_server_disconnected)
+	NetworkManager.agent_draft_started.connect(_on_agent_draft_started)
+	NetworkManager.agent_draft_updated.connect(_refresh_agent_draft_ui)
 
 	NetworkManager.start_lan_discovery()
 	_refresh_players()
@@ -167,17 +182,17 @@ func _build_ui() -> void:
 	root_v.add_child(cols)
 
 	# Left Column: Match Setup & Connect
-	var left_panel := PanelContainer.new()
-	left_panel.custom_minimum_size = Vector2(310, 0)
-	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_panel.add_theme_stylebox_override("panel", _make_style(Color(0.07, 0.1, 0.16, 0.94), Color(0.26, 0.58, 0.9, 0.88)))
-	cols.add_child(left_panel)
+	_left_panel = PanelContainer.new()
+	_left_panel.custom_minimum_size = Vector2(310, 0)
+	_left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_left_panel.add_theme_stylebox_override("panel", _make_style(Color(0.07, 0.1, 0.16, 0.94), Color(0.26, 0.58, 0.9, 0.88)))
+	cols.add_child(_left_panel)
 
 	var left_scroll := ScrollContainer.new()
 	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	left_panel.add_child(left_scroll)
+	_left_panel.add_child(left_scroll)
 
 	var lv := VBoxContainer.new()
 	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -422,21 +437,22 @@ func _build_ui() -> void:
 	_players_box.add_theme_constant_override("v_separation", 8)
 	rv.add_child(_players_box)
 
-	rv.add_child(HSeparator.new())
+	_lan_sep = HSeparator.new()
+	rv.add_child(_lan_sep)
 
-	var lan_hdr := Label.new()
-	lan_hdr.text = "NEARBY WI-FI GAMES"
-	lan_hdr.add_theme_font_size_override("font_size", 16)
-	lan_hdr.modulate = Color(0.55, 0.90, 1.0)
-	rv.add_child(lan_hdr)
+	_lan_hdr = Label.new()
+	_lan_hdr.text = "NEARBY WI-FI GAMES"
+	_lan_hdr.add_theme_font_size_override("font_size", 16)
+	_lan_hdr.modulate = Color(0.55, 0.90, 1.0)
+	rv.add_child(_lan_hdr)
 
-	var lan_scroll := ScrollContainer.new()
-	lan_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	rv.add_child(lan_scroll)
+	_lan_scroll = ScrollContainer.new()
+	_lan_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rv.add_child(_lan_scroll)
 
 	_lan_list_box = VBoxContainer.new()
 	_lan_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lan_scroll.add_child(_lan_list_box)
+	_lan_scroll.add_child(_lan_list_box)
 
 	var empty_lan := Label.new()
 	empty_lan.text = "Searching for nearby Wi-Fi rooms..."
@@ -553,6 +569,10 @@ func _on_disconnect_pressed() -> void:
 
 
 func _on_start_pressed() -> void:
+	if NetworkManager.is_network_active() and not NetworkManager.are_all_players_ready():
+		if is_instance_valid(_status_label):
+			_status_label.text = "All players must be READY before starting!"
+		return
 	NetworkManager.request_start_match()
 
 
@@ -636,16 +656,26 @@ func _refresh_controls_state() -> void:
 	if is_instance_valid(_join_row):
 		_join_row.visible = not net_active
 
+	if is_instance_valid(_left_panel):
+		_left_panel.visible = not net_active
+	if is_instance_valid(_lan_sep):
+		_lan_sep.visible = not net_active
+	if is_instance_valid(_lan_hdr):
+		_lan_hdr.visible = not net_active
+	if is_instance_valid(_lan_scroll):
+		_lan_scroll.visible = not net_active
+
+	var all_ready: bool = NetworkManager.are_all_players_ready()
 	_start_btn.visible = (not net_active) or is_leader
-	_wait_host_label.visible = net_active and not is_leader
+	_start_btn.disabled = net_active and not all_ready
+	_wait_host_label.visible = false
 	if is_leader:
-		_start_btn.text = "START BATTLE (%d/%d)" % [NetworkManager.players.size(), NetworkManager.max_room_players]
+		_start_btn.text = ("START BATTLE (%d/%d)" % [NetworkManager.players.size(), NetworkManager.max_room_players]) if all_ready else "WAITING FOR READY..."
 	else:
 		_start_btn.text = "START BATTLE"
 
 	if is_instance_valid(_make_leader_btn):
-		_make_leader_btn.visible = net_active and is_host
-		_make_leader_btn.disabled = (_selected_peer_id <= 0 or _selected_peer_id == NetworkManager.leader_peer_id or not NetworkManager.players.has(_selected_peer_id))
+		_make_leader_btn.visible = false
 	if is_instance_valid(_ready_btn):
 		_ready_btn.visible = net_active and not is_leader
 		_ready_btn.text = "READY" if _local_ready else "NOT READY"
@@ -748,3 +778,251 @@ func _refresh_lan_servers(servers: Array) -> void:
 			_on_join_pressed()
 		)
 		_lan_list_box.add_child(btn)
+
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(_draft_overlay) and _draft_overlay.visible and is_instance_valid(_draft_timer_lbl):
+		var secs: int = maxi(0, int(ceil(NetworkManager.agent_draft_timer)))
+		_draft_timer_lbl.text = "TIME LEFT: %ds" % secs
+
+
+func _make_draft_agent_icon(arch_idx: int) -> Texture2D:
+	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
+	var parts: Dictionary = arch.get("parts", {})
+	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
+	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
+	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
+	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	if skin_tex == null:
+		return null
+	var fw: int = skin_tex.get_width() / 8
+	var fh: int = mini(skin_tex.get_height(), int(float(skin_tex.get_height()) * 0.72))
+	var base_img: Image = skin_tex.get_image().get_region(Rect2i(0, 0, fw, fh))
+	if base_img.get_format() != Image.FORMAT_RGBA8:
+		base_img.convert(Image.FORMAT_RGBA8)
+	var skin_col: Color = arch.get("skin", Color.WHITE)
+	var helm_col: Color = arch.get("helmet", Color.WHITE)
+	if skin_col != Color.WHITE:
+		for y in range(fh):
+			for x in range(fw):
+				var p: Color = base_img.get_pixel(x, y)
+				if p.a > 0.01:
+					base_img.set_pixel(x, y, Color(p.r * skin_col.r, p.g * skin_col.g, p.b * skin_col.b, p.a))
+	if head_tex != null:
+		var h_fw: int = maxi(1, head_tex.get_width() / 8)
+		var h_fh: int = mini(head_tex.get_height(), int(float(head_tex.get_height()) * 0.72))
+		var head_img: Image = head_tex.get_image().get_region(Rect2i(0, 0, h_fw, h_fh))
+		if head_img.get_format() != Image.FORMAT_RGBA8:
+			head_img.convert(Image.FORMAT_RGBA8)
+		if helm_col != Color.WHITE:
+			for y in range(h_fh):
+				for x in range(h_fw):
+					var p: Color = head_img.get_pixel(x, y)
+					if p.a > 0.01:
+						head_img.set_pixel(x, y, Color(p.r * helm_col.r, p.g * helm_col.g, p.b * helm_col.b, p.a))
+		if h_fw != fw or h_fh != fh:
+			head_img.resize(fw, fh, Image.INTERPOLATE_BILINEAR)
+		base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
+	base_img.resize(40, 40, Image.INTERPOLATE_BILINEAR)
+	return ImageTexture.create_from_image(base_img)
+
+
+func _build_draft_overlay() -> void:
+	_draft_overlay = ColorRect.new()
+	_draft_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_draft_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
+	_draft_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_draft_overlay.visible = false
+	add_child(_draft_overlay)
+
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 22)
+	margin.add_theme_constant_override("margin_bottom", 22)
+	_draft_overlay.add_child(margin)
+
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(18)
+	sb.set_content_margin_all(18)
+	sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
+	sb.shadow_size = 10
+	sb.shadow_offset = Vector2.ZERO
+	card.add_theme_stylebox_override("panel", sb)
+	margin.add_child(card)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	card.add_child(vb)
+
+	var hdr := HBoxContainer.new()
+	vb.add_child(hdr)
+	var title := Label.new()
+	title.text = "SELECT & LOCK YOUR AGENT  (UNIQUE PER PLAYER)"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_size_override("font_size", 24)
+	title.modulate = Color(1.0, 0.84, 0.24)
+	hdr.add_child(title)
+
+	_draft_timer_lbl = Label.new()
+	_draft_timer_lbl.text = "TIME LEFT: 25s"
+	_draft_timer_lbl.add_theme_font_size_override("font_size", 20)
+	_draft_timer_lbl.modulate = Color(0.45, 0.96, 1.0)
+	hdr.add_child(_draft_timer_lbl)
+
+	var split := HBoxContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 14)
+	vb.add_child(split)
+
+	var left_panel := PanelContainer.new()
+	left_panel.custom_minimum_size = Vector2(270, 0)
+	left_panel.add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.12, 0.20, 0.96), Color(0.28, 0.45, 0.70, 0.85)))
+	split.add_child(left_panel)
+
+	var l_scroll := ScrollContainer.new()
+	l_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	l_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	left_panel.add_child(l_scroll)
+
+	_draft_roster_box = VBoxContainer.new()
+	_draft_roster_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_draft_roster_box.add_theme_constant_override("separation", 6)
+	l_scroll.add_child(_draft_roster_box)
+
+	var right_panel := PanelContainer.new()
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.12, 0.20, 0.96), Color(0.28, 0.45, 0.70, 0.85)))
+	split.add_child(right_panel)
+
+	var r_scroll := ScrollContainer.new()
+	r_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	r_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right_panel.add_child(r_scroll)
+
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	r_scroll.add_child(grid)
+
+	_draft_agent_btns.clear()
+	for i in range(AgentData.AGENTS.size()):
+		var ag: Dictionary = AgentData.AGENTS[i]
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(0, 56)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.add_theme_font_size_override("font_size", 14)
+		btn.icon = _make_draft_agent_icon(i)
+		btn.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		var idx: int = i
+		btn.pressed.connect(func():
+			_draft_selected_arch = idx
+			_refresh_agent_draft_ui()
+		)
+		grid.add_child(btn)
+		_draft_agent_btns.append(btn)
+
+	var bot_row := HBoxContainer.new()
+	bot_row.add_theme_constant_override("separation", 12)
+	vb.add_child(bot_row)
+
+	_draft_info_lbl = Label.new()
+	_draft_info_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_draft_info_lbl.add_theme_font_size_override("font_size", 16)
+	_draft_info_lbl.modulate = Color(0.86, 0.92, 1.0)
+	bot_row.add_child(_draft_info_lbl)
+
+	_draft_lock_btn = Button.new()
+	_draft_lock_btn.text = "LOCK IN AGENT"
+	_draft_lock_btn.custom_minimum_size = Vector2(240, 52)
+	_draft_lock_btn.add_theme_font_size_override("font_size", 18)
+	_style_button(_draft_lock_btn, Color(0.09, 0.32, 0.16, 0.98), Color(0.32, 0.94, 0.50))
+	_draft_lock_btn.pressed.connect(func():
+		NetworkManager.request_lock_agent(_draft_selected_arch)
+	)
+	bot_row.add_child(_draft_lock_btn)
+
+
+func _on_agent_draft_started() -> void:
+	_draft_selected_arch = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	if is_instance_valid(_draft_overlay):
+		_draft_overlay.visible = true
+	_refresh_agent_draft_ui()
+
+
+func _refresh_agent_draft_ui() -> void:
+	if not is_instance_valid(_draft_overlay) or not _draft_overlay.visible:
+		return
+	var locks: Dictionary = NetworkManager.agent_draft_locks
+	var my_id: int = NetworkManager.get_local_peer_id()
+	var my_locked: bool = locks.has(my_id)
+	var my_locked_arch: int = int(locks.get(my_id, -1))
+
+	var taken_by: Dictionary = {}
+	for pid in locks.keys():
+		taken_by[int(locks[pid])] = int(pid)
+
+	if not my_locked and taken_by.has(_draft_selected_arch):
+		for i in range(AgentData.AGENTS.size()):
+			if not taken_by.has(i):
+				_draft_selected_arch = i
+				break
+
+	for child in _draft_roster_box.get_children():
+		child.queue_free()
+	var p_keys: Array = NetworkManager.players.keys()
+	p_keys.sort()
+	for pid in p_keys:
+		var p_int: int = int(pid)
+		var p_name: String = str(NetworkManager.players[pid].get("name", "Player"))
+		var lbl := Label.new()
+		lbl.add_theme_font_size_override("font_size", 14)
+		if locks.has(p_int):
+			var a_name: String = str(AgentData.get_agent(int(locks[p_int]))["agent_name"])
+			lbl.text = "%s: LOCKED [%s]" % [p_name, a_name]
+			lbl.modulate = Color(0.45, 0.96, 0.56)
+		else:
+			lbl.text = "%s: Picking..." % p_name
+			lbl.modulate = Color(1.0, 0.84, 0.35)
+		_draft_roster_box.add_child(lbl)
+
+	for i in range(_draft_agent_btns.size()):
+		var btn: Button = _draft_agent_btns[i]
+		var ag: Dictionary = AgentData.AGENTS[i]
+		if taken_by.has(i):
+			var owner_id: int = int(taken_by[i])
+			var owner_name: String = str(NetworkManager.players.get(owner_id, {}).get("name", "Player"))
+			if owner_id == my_id:
+				btn.disabled = true
+				btn.text = "%s\n[LOCKED BY YOU]" % str(ag["agent_name"])
+				_style_button(btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.35, 0.98, 0.52))
+			else:
+				btn.disabled = true
+				btn.text = "%s\n[TAKEN: %s]" % [str(ag["agent_name"]), owner_name]
+				_style_button(btn, Color(0.14, 0.14, 0.18, 0.70), Color(0.35, 0.38, 0.45))
+		else:
+			btn.disabled = my_locked
+			btn.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+			if i == _draft_selected_arch and not my_locked:
+				_style_button(btn, Color(0.28, 0.22, 0.06, 0.98), Color(1.0, 0.84, 0.24))
+			else:
+				_style_button(btn, Color(0.10, 0.15, 0.24, 0.95), Color(0.30, 0.48, 0.72))
+
+	if my_locked:
+		var l_name: String = str(AgentData.get_agent(my_locked_arch)["agent_name"])
+		_draft_info_lbl.text = "Locked %s! Waiting for other players to lock..." % l_name
+		_draft_lock_btn.disabled = true
+		_draft_lock_btn.text = "LOCKED (%s)" % l_name
+	else:
+		var sel_ag: Dictionary = AgentData.get_agent(_draft_selected_arch)
+		_draft_info_lbl.text = "Selected: %s — %s" % [str(sel_ag["agent_name"]), str(sel_ag["title"])]
+		_draft_lock_btn.disabled = taken_by.has(_draft_selected_arch)
+		_draft_lock_btn.text = "LOCK IN"

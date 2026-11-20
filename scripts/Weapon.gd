@@ -117,6 +117,8 @@ static func _get_network_manager() -> Node:
 
 
 static func is_weapon_allowed(weapon_id: int) -> bool:
+	if weapon_id == 14:
+		return false
 	var nm: Node = _get_network_manager()
 	if nm == null:
 		return true
@@ -145,6 +147,8 @@ static func get_allowed_weapon_ids() -> Array[int]:
 
 
 static func sanitize_weapon_id(weapon_id: int) -> int:
+	if weapon_id == 14:
+		return 11
 	if weapon_id >= 11 and weapon_id <= 17:
 		var nm: Node = _get_network_manager()
 		if weapon_id == 12 and nm != null and not bool(nm.get("allow_explosives")):
@@ -158,7 +162,7 @@ static func sanitize_weapon_id(weapon_id: int) -> int:
 
 
 static func get_pickup_weapon_ids() -> Array[int]:
-	var out: Array[int] = [11, 13, 14, 15, 16]
+	var out: Array[int] = [11, 13, 15, 16]
 	var nm: Node = _get_network_manager()
 	var exp_ok: bool = true if nm == null else bool(nm.get("allow_explosives"))
 	if exp_ok:

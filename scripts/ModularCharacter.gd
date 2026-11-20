@@ -492,7 +492,7 @@ static func get_weapon_stance(w_id: int, dual: bool = false) -> String:
 		return "dual"
 	if w_id in [3, 4, 9]:
 		return "pistol"
-	if w_id in [10, 11, 12, 14]:
+	if w_id in [10, 11, 12]:
 		return "bazooka"
 	return "rifle"
 

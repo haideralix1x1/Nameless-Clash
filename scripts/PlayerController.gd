@@ -170,6 +170,7 @@ var touch_fire_timer: float = 0.0
 var touch_banish_timer: float = 0.0
 var bubble_trap_timer: float = 0.0
 var bubble_trap_hp: int = 0
+var bubble_trap_lock_timer: float = 0.0
 var deathless_timer: float = 0.0
 var zoom_out_timer: float = 0.0
 var gradual_heal_timer: float = 0.0
@@ -653,10 +654,13 @@ func _physics_process(delta: float) -> void:
 	if touch_banish_timer > 0.0:
 		touch_banish_timer = maxf(0.0, touch_banish_timer - delta)
 		queue_redraw()
+	if bubble_trap_lock_timer > 0.0:
+		bubble_trap_lock_timer = maxf(0.0, bubble_trap_lock_timer - delta)
 	if bubble_trap_timer > 0.0:
 		bubble_trap_timer = maxf(0.0, bubble_trap_timer - delta)
 		if bubble_trap_timer <= 0.0:
 			bubble_trap_hp = 0
+			bubble_trap_lock_timer = 0.0
 		queue_redraw()
 	if deathless_timer > 0.0:
 		deathless_timer = maxf(0.0, deathless_timer - delta)
@@ -713,6 +717,22 @@ func _physics_process(delta: float) -> void:
 				_sync_net_state_rpc.rpc(global_position, velocity, aim_angle, facing_right, is_jetpacking, is_crouching, is_dead, health, anim_frame)
 	else:
 		_apply_weapon_visuals()
+		stun_timer = maxf(0.0, stun_timer - delta)
+		freeze_timer = maxf(0.0, freeze_timer - delta)
+		control_lock_timer = maxf(0.0, control_lock_timer - delta)
+		ability_lock_timer = maxf(0.0, ability_lock_timer - delta)
+		invis_timer = maxf(0.0, invis_timer - delta)
+		time_stop_timer = maxf(0.0, time_stop_timer - delta)
+		invincible_timer = maxf(0.0, invincible_timer - delta)
+		deathless_timer = maxf(0.0, deathless_timer - delta)
+		speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
+		bubble_trap_lock_timer = maxf(0.0, bubble_trap_lock_timer - delta)
+		if bubble_trap_timer > 0.0:
+			bubble_trap_timer = maxf(0.0, bubble_trap_timer - delta)
+			if bubble_trap_timer <= 0.0:
+				bubble_trap_hp = 0
+		touch_banish_timer = maxf(0.0, touch_banish_timer - delta)
+		thrown_flight_timer = maxf(0.0, thrown_flight_timer - delta)
 
 	_update_visual_state(delta)
 	_update_overhead_ui()
@@ -1922,6 +1942,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	touch_banish_timer = 0.0
 	bubble_trap_timer = 0.0
 	bubble_trap_hp = 0
+	bubble_trap_lock_timer = 0.0
 	deathless_timer = 0.0
 	zoom_out_timer = 0.0
 	gradual_heal_timer = 0.0
@@ -2067,6 +2088,7 @@ func _respawn_self() -> void:
 	touch_banish_timer = 0.0
 	bubble_trap_timer = 0.0
 	bubble_trap_hp = 0
+	bubble_trap_lock_timer = 0.0
 	deathless_timer = 0.0
 	zoom_out_timer = 0.0
 	gradual_heal_timer = 0.0
@@ -2281,8 +2303,10 @@ func _update_visual_state(delta: float) -> void:
 	var target_amt: int = clampi(int(round(24.0 * p_ratio)), 1, 36)
 	if _jetpack_particles.amount != target_amt:
 		_jetpack_particles.amount = target_amt
-	_jetpack_particles.modulate.a = clampf(p_ratio, 0.0, 1.0)
-	_jetpack_particles.emitting = is_jetpacking and not is_dead and p_ratio > 0.05
+	var hide_invis_fx: bool = (invis_timer > 0.0) and (not is_local_human) and (not is_preview_dummy)
+	_jetpack_particles.visible = not hide_invis_fx
+	_jetpack_particles.modulate.a = clampf(p_ratio, 0.0, 1.0) * (0.35 if invis_timer > 0.0 else 1.0)
+	_jetpack_particles.emitting = (not hide_invis_fx) and is_jetpacking and not is_dead and p_ratio > 0.05
 
 	if is_jetpacking and not is_dead:
 		if not _jetpack_audio.playing:
@@ -3592,6 +3616,7 @@ func _apply_bubble_trap_local(dur: float, hp: int) -> void:
 		return
 	bubble_trap_timer = dur
 	bubble_trap_hp = hp
+	bubble_trap_lock_timer = 2.0
 	velocity = Vector2(randf_range(-45.0, 45.0), -135.0)
 	queue_redraw()
 
@@ -3613,10 +3638,15 @@ func sync_damage_bubble_rpc(dmg: int) -> void:
 func _damage_bubble_local(dmg: int) -> void:
 	if bubble_trap_timer <= 0.0:
 		return
+	if bubble_trap_lock_timer > 0.0:
+		bubble_trap_hp = maxi(1, bubble_trap_hp - dmg)
+		queue_redraw()
+		return
 	bubble_trap_hp -= dmg
 	if bubble_trap_hp <= 0:
 		bubble_trap_timer = 0.0
 		bubble_trap_hp = 0
+		bubble_trap_lock_timer = 0.0
 		_play_local_sfx("res://assets/audio/hit.wav", -4.0)
 	queue_redraw()
 
