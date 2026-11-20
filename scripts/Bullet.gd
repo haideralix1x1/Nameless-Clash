@@ -3,7 +3,7 @@ extends Area2D
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const TEX_BULLET: Texture2D = preload("res://assets/sprites/bullet.png")
 const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
-const TEX_RAVEN: Texture2D = preload("res://assets/sprites/summons/raven.png")
+const TEX_RAVEN: Texture2D = preload("res://assets/sprites/characters/summons/raven_proj.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -73,7 +73,9 @@ func _ready() -> void:
 			_sprite.scale = Vector2(1.4, 1.1)
 
 	_trail.default_color = Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.75)
-	_trail.width = 6.0 if visual_style == "slash_wave" or is_explosive else (5.0 if is_laser else 3.0)
+	_trail.width = 6.0 if is_explosive else (5.0 if is_laser else 3.0)
+	if visual_style == "slash_wave":
+		_trail.visible = false
 	if on_hit_effect_kind == "hook_drag":
 		_trail.visible = false
 	_trail_points.append(global_position)
@@ -581,15 +583,22 @@ func _trigger_explosion(pos: Vector2) -> void:
 
 
 func _spawn_impact_flash(pos: Vector2, col: Color) -> void:
+	if visual_style == "slash_wave":
+		return
 	var parent_node: Node = get_parent()
 	if parent_node == null:
 		return
 	var exp := EXPLOSION_SCENE.instantiate()
 	exp.global_position = pos
-	exp.explosion_radius = 28.0
 	exp.max_damage = 0
 	exp.can_deal_damage = false
-	exp.modulate = col
+	if weapon_name == "Obsidian Talon Bow":
+		exp.lightning_orb_only = true
+		exp.ring_color = col
+		exp.explosion_radius = 40.0
+	else:
+		exp.explosion_radius = 28.0
+		exp.modulate = col
 	parent_node.add_child(exp)
 
 
@@ -680,12 +689,29 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([Vector2(15.5, 0.0), Vector2(5.0, -6.0), Vector2(5.0, 6.0)]), Color(0.06, 0.06, 0.09))
 			draw_colored_polygon(PackedVector2Array([Vector2(14.0, 0.0), Vector2(6.0, -4.5), Vector2(6.0, 4.5)]), bullet_color)
 		"slash_wave":
-			var pts := PackedVector2Array([
-				Vector2(-6.0, -24.0), Vector2(10.0, -14.0), Vector2(16.0, 0.0),
-				Vector2(10.0, 14.0), Vector2(-6.0, 24.0), Vector2(2.0, 0.0)
-			])
-			draw_colored_polygon(pts, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.88))
-			draw_arc(Vector2(-2.0, 0.0), 22.0, -1.1, 1.1, 14, Color.WHITE, 3.0)
+			var age_frac: float = clampf(_age / maxf(max_lifetime, 0.01), 0.0, 1.0)
+			var fade: float = 1.0 - age_frac * 0.45
+			var bc: Color = bullet_color
+			var bc_hi: Color = bc.lightened(0.45)
+			var bc_core: Color = bc.lightened(0.80)
+			# Outer neon bloom ribbon
+			_draw_tapered_slash_arc(Vector2(-10.0, 0.0), 42.0, -1.35, 1.35, 24, Color(bc.r, bc.g, bc.b, 0.30 * fade), 18.0)
+			# Flowing layered energy streaks
+			_draw_tapered_slash_arc(Vector2(-10.0, 0.0), 39.0, -1.30, 1.30, 24, Color(bc.r, bc.g, bc.b, 0.68 * fade), 10.0)
+			_draw_tapered_slash_arc(Vector2(-14.0, 0.0), 35.0, -1.15, 1.15, 20, Color(bc_hi.r, bc_hi.g, bc_hi.b, 0.72 * fade), 6.0)
+			# Crisp white-hot leading edge
+			_draw_tapered_slash_arc(Vector2(-8.0, 0.0), 42.0, -1.22, 1.22, 22, Color(bc_core.r, bc_core.g, bc_core.b, 0.96 * fade), 3.6)
+			# Glowing energy bubbles & sparks along the outer arc
+			var spark_angles: Array[float] = [-0.95, -0.55, -0.18, 0.15, 0.52, 0.88]
+			for si in range(spark_angles.size()):
+				var ang: float = spark_angles[si]
+				var dist_out: float = 48.0 + float((si * 7) % 13) + age_frac * 14.0
+				var sp_pos: Vector2 = Vector2(-10.0, 0.0) + Vector2.from_angle(ang) * dist_out
+				var r_bub: float = 2.0 + float(si % 3) * 1.1
+				if si % 2 == 0:
+					draw_arc(sp_pos, r_bub, 0.0, TAU, 12, Color(bc_hi.r, bc_hi.g, bc_hi.b, 0.78 * fade), 1.4)
+				else:
+					draw_circle(sp_pos, r_bub * 0.85, Color(bc_core.r, bc_core.g, bc_core.b, 0.88 * fade))
 		"stun_bolt":
 			draw_circle(Vector2.ZERO, 9.0, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.45))
 			draw_polyline(PackedVector2Array([
@@ -749,6 +775,20 @@ func _draw() -> void:
 			]), bullet_color)
 			draw_rect(Rect2(-11.0, 5.5, 23.0, 3.5), Color(0.16, 0.14, 0.12))
 			draw_line(Vector2(-2.0, -4.0), Vector2(3.0, -1.0), Color.WHITE, 2.0)
+		"raven_stone":
+			draw_circle(Vector2.ZERO, 17.0, Color(0.58, 0.22, 0.96, 0.26))
+			var rs_pts := PackedVector2Array([
+				Vector2(-14.0, -4.0), Vector2(-6.0, -14.0), Vector2(8.0, -12.0),
+				Vector2(15.0, 1.0), Vector2(7.0, 13.0), Vector2(-9.0, 12.0)
+			])
+			draw_colored_polygon(rs_pts, Color(0.12, 0.11, 0.16))
+			draw_polyline(rs_pts + PackedVector2Array([rs_pts[0]]), Color(0.04, 0.04, 0.06), 2.5)
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(-8.0, -8.0), Vector2(5.0, -9.0), Vector2(7.0, 0.0), Vector2(-4.0, 2.0)
+			]), Color(0.24, 0.18, 0.36))
+			draw_line(Vector2(-7.0, -3.0), Vector2(1.0, 2.0), Color(0.74, 0.32, 1.0), 2.5)
+			draw_line(Vector2(1.0, 2.0), Vector2(8.0, -5.0), Color(0.90, 0.65, 1.0), 1.8)
+			draw_line(Vector2(1.0, 2.0), Vector2(4.0, 9.0), Color(0.74, 0.32, 1.0), 2.0)
 		"thrown_stone":
 			draw_colored_polygon(PackedVector2Array([
 				Vector2(-12.0, -4.0), Vector2(-5.0, -12.0), Vector2(7.0, -10.0),
@@ -843,30 +883,10 @@ func _draw() -> void:
 			draw_rect(Rect2(-11, -11, 22, 22), Color(0.38, 0.86, 0.98), false, 2.0)
 			draw_line(Vector2(-11, -11), Vector2(11, 11), Color(0.38, 0.86, 0.98, 0.6), 2.0)
 		"raven":
-			draw_set_transform(Vector2.ZERO, velocity.angle() - rotation - _visual_spin, Vector2.ONE)
-			var flap: float = sin(_age * 22.0) * 11.0
-			# Tail feathers
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-10, 0), Vector2(-21, -7), Vector2(-18, 0), Vector2(-21, 7)
-			]), Color(0.08, 0.07, 0.14))
-			# Flapping wings
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-4, -2), Vector2(-12, -20 + flap), Vector2(4, -14 + flap * 0.6), Vector2(7, -2)
-			]), Color(0.12, 0.10, 0.20))
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-4, 2), Vector2(-12, 20 - flap), Vector2(4, 14 - flap * 0.6), Vector2(7, 2)
-			]), Color(0.12, 0.10, 0.20))
-			# Sleek bird body & head
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-12, 0), Vector2(-2, -5.5), Vector2(10, -4.5), Vector2(15, 0), Vector2(10, 4.5), Vector2(-2, 5.5)
-			]), Color(0.06, 0.05, 0.10))
-			# Sharp raven beak
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(14, -2.5), Vector2(23, 0.5), Vector2(14, 2.8)
-			]), Color(0.24, 0.26, 0.34))
-			# Glowing violet eye
-			draw_circle(Vector2(11, -1.5), 2.2, Color(0.82, 0.35, 1.0))
-			draw_circle(Vector2(11, -1.5), 1.0, Color.WHITE)
+			var flap_s: float = sin(_age * 20.0)
+			var flip_y: float = -1.0 if velocity.x < 0.0 else 1.0
+			draw_set_transform(Vector2.ZERO, velocity.angle() - rotation - _visual_spin, Vector2(1.0 + flap_s * 0.06, (1.0 - flap_s * 0.14) * flip_y))
+			draw_texture_rect(TEX_RAVEN, Rect2(-22.0, -22.0, 44.0, 44.0), false)
 		"smoke_orb":
 			var pulse: float = 1.0 + sin(_age * 10.0) * 0.08
 			var bc: Color = bullet_color
@@ -877,3 +897,15 @@ func _draw() -> void:
 			draw_circle(Vector2(-12, 14), 24.0 * pulse, Color(bc.r * 0.20, bc.g * 0.20, bc.b * 0.20, 0.72))
 			draw_arc(Vector2.ZERO, 38.0 * pulse, 0.0, TAU, 28, Color(bc.r, bc.g, bc.b, 0.78), 3.0)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _draw_tapered_slash_arc(center: Vector2, rad: float, start_a: float, end_a: float, steps: int, col: Color, max_w: float) -> void:
+	for i in range(steps):
+		var t0: float = float(i) / float(steps)
+		var t1: float = float(i + 1) / float(steps)
+		var mid_t: float = (t0 + t1) * 0.5
+		var taper: float = sin(mid_t * PI)
+		var w: float = maxf(0.8, max_w * taper * taper)
+		var a0: float = lerpf(start_a, end_a, t0)
+		var a1: float = lerpf(start_a, end_a, t1)
+		draw_line(center + Vector2.from_angle(a0) * rad, center + Vector2.from_angle(a1) * rad, Color(col.r, col.g, col.b, col.a * (0.35 + 0.65 * taper)), w)

@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://b0xk56iu4y1fy"]
 
-[ext_resource type="Script" path="res://scripts/SplashScreen.gd" id="1_splash"]
+[ext_resource type="Script" uid="uid://bxwoxnlixikn1" path="res://scripts/SplashScreen.gd" id="1_splash"]
 
-[node name="SplashScreen" type="Control"]
+[node name="SplashScreen" type="Control" unique_id=272733648]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

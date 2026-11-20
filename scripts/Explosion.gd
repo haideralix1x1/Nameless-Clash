@@ -11,6 +11,7 @@ var allow_self_damage: bool = false
 var stun_duration: float = 0.0
 var ring_color: Color = Color(1.0, 0.72, 0.25)
 var custom_splash_only: bool = false
+var lightning_orb_only: bool = false
 
 var _elapsed: float = 0.0
 var _duration: float = 0.38
@@ -28,7 +29,7 @@ func _ready() -> void:
 	var scale_factor: float = clampf(explosion_radius / 60.0, 0.7, 2.8)
 	_sprite.scale = Vector2(scale_factor, scale_factor)
 	_sprite.frame = 0
-	if custom_splash_only:
+	if custom_splash_only or lightning_orb_only:
 		_sprite.visible = false
 	if _audio != null:
 		if max_damage > 0:
@@ -78,6 +79,37 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, explosion_radius, 0.0, TAU, 40, ring_col, 4.0)
 			draw_arc(Vector2.ZERO, _ring_radius, 0.0, TAU, 32, Color(1.0, 1.0, 1.0, _ring_alpha * 0.85), 2.5)
 		else:
+			if lightning_orb_only:
+				var prog: float = clampf(_elapsed / maxf(_duration, 0.01), 0.0, 1.0)
+				var circle_r: float = lerpf(explosion_radius * 0.55, explosion_radius, prog)
+				var orb_r: float = lerpf(14.0, 7.0, prog)
+				# Outer purple circle glow + crisp neon ring
+				draw_circle(Vector2.ZERO, circle_r, Color(0.54, 0.16, 0.96, _ring_alpha * 0.24))
+				draw_arc(Vector2.ZERO, circle_r, 0.0, TAU, 36, Color(0.76, 0.30, 1.0, _ring_alpha * 0.95), 4.0)
+				draw_arc(Vector2.ZERO, circle_r * 0.94, 0.0, TAU, 36, Color(0.94, 0.78, 1.0, _ring_alpha * 0.65), 1.6)
+				# Center glowing orb
+				draw_circle(Vector2.ZERO, orb_r * 1.35, Color(0.66, 0.22, 1.0, _ring_alpha * 0.55))
+				draw_circle(Vector2.ZERO, orb_r, Color(0.84, 0.52, 1.0, _ring_alpha * 0.92))
+				draw_circle(Vector2.ZERO, orb_r * 0.52, Color(0.98, 0.92, 1.0, _ring_alpha))
+				# Animated purple neon lightning bolts crackling inside the circle
+				var bolt_step: int = int(_elapsed * 32.0)
+				for bi in range(7):
+					var base_ang: float = float(bi) * (TAU / 7.0) + float(bolt_step % 5) * 0.37 + sin(_elapsed * 24.0 + float(bi)) * 0.25
+					var p0: Vector2 = Vector2.from_angle(base_ang) * (orb_r * 0.65)
+					var zig1: float = sin(_elapsed * 48.0 + float(bi) * 2.1) * 0.34
+					var zig2: float = cos(_elapsed * 52.0 + float(bi) * 1.7) * 0.28
+					var p1: Vector2 = Vector2.from_angle(base_ang + zig1) * (circle_r * 0.44)
+					var p2: Vector2 = Vector2.from_angle(base_ang - zig2) * (circle_r * 0.74)
+					var p3: Vector2 = Vector2.from_angle(base_ang + zig1 * 0.4) * (circle_r * 0.95)
+					var neon_col := Color(0.74, 0.28, 1.0, _ring_alpha * 0.92)
+					var core_col := Color(0.97, 0.88, 1.0, _ring_alpha)
+					draw_line(p0, p1, neon_col, 3.6)
+					draw_line(p1, p2, neon_col, 3.2)
+					draw_line(p2, p3, neon_col, 2.6)
+					draw_line(p0, p1, core_col, 1.6)
+					draw_line(p1, p2, core_col, 1.4)
+					draw_line(p2, p3, core_col, 1.2)
+				return
 			if custom_splash_only:
 				draw_circle(Vector2.ZERO, _ring_radius * 0.85, Color(ring_color.r, ring_color.g, ring_color.b, _ring_alpha * 0.42))
 				draw_circle(Vector2.ZERO, _ring_radius * 0.45, Color(ring_color.lightened(0.35).r, ring_color.lightened(0.35).g, ring_color.lightened(0.35).b, _ring_alpha * 0.65))

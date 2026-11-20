@@ -580,11 +580,11 @@ const AGENTS: Array[Dictionary] = [
 		"accent": Color(0.64, 0.94, 1.0),
 		"base_weapon": {
 			"name": "Reaper Soul Scythe",
-			"style": "axe",
+			"style": "scythe",
 			"damage": 24,
 			"cooldown": 0.34,
 			"range": 114.0,
-			"color": Color(0.72, 0.96, 1.0),
+			"color": Color(0.14, 0.94, 1.0),
 			"ranged": false
 		},
 		"abilities": [
@@ -607,10 +607,10 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Banshee Scream",
 				"kind": "scream_wave",
-				"damage": 50,
-				"stun": 3.0,
-				"color": Color(0.78, 0.98, 1.0),
-				"desc": "Emit a forward scream wave that hits all enemies in front for 50% damage, stuns them for 3s, and throws them away."
+				"damage": 40,
+				"stun": 2.0,
+				"color": Color(0.24, 0.94, 1.0),
+				"desc": "Emit a forward wavy scream that deals 40% damage, shakes enemies, and stuns them for 2s."
 			}
 		],
 		"ultimate": {
@@ -936,11 +936,11 @@ const AGENTS: Array[Dictionary] = [
 		"accent": Color(1.0, 0.42, 0.14),
 		"base_weapon": {
 			"name": "Volcanic Magma Hammer",
-			"style": "axe",
+			"style": "magma_hammer",
 			"damage": 26,
 			"cooldown": 0.36,
 			"range": 108.0,
-			"color": Color(1.0, 0.52, 0.18),
+			"color": Color(1.0, 0.44, 0.08),
 			"ranged": false
 		},
 		"abilities": [
@@ -950,7 +950,7 @@ const AGENTS: Array[Dictionary] = [
 				"shots": 3,
 				"damage": 25,
 				"color": Color(1.0, 0.46, 0.14),
-				"desc": "Spawn 3 stationary fire blasts at random positions around you."
+				"desc": "Spawn 3 stationary fire blasts: in front, behind, and above you."
 			},
 			{
 				"name": "Lava Platform",
@@ -971,10 +971,10 @@ const AGENTS: Array[Dictionary] = [
 		"ultimate": {
 			"name": "Inferno Ring",
 			"kind": "ult_inferno_ring",
-			"damage": 170,
-			"duration": 5.0,
+			"damage": 100,
+			"duration": 1.5,
 			"color": Color(1.0, 0.28, 0.06),
-			"desc": "Surround yourself with a moving fire circle for 5s (170 DPS)."
+			"desc": "Grab a nearby enemy close, lock them in a roaring fire, and burn them to death over 1.5s."
 		}
 	},
 	# 19: Prism // Crystal Golem
@@ -1228,10 +1228,70 @@ const AGENTS: Array[Dictionary] = [
 			"color": Color(1.0, 0.18, 0.18),
 			"desc": "Rush to a nearby enemy and beat them down with rapid punches till death."
 		}
+	},
+	# 24: Kaito // HD Test Swordsman
+	{
+		"id": 24,
+		"agent_name": "Kaito",
+		"title": "HD Swordsman (Test)",
+		"role": "HD Test Swordsman",
+		"accent": Color(0.16, 0.58, 0.96),
+		"base_weapon": {
+			"name": "Heroic Broadsword",
+			"style": "dragon_blade",
+			"damage": 28,
+			"cooldown": 0.34,
+			"range": 115.0,
+			"color": Color(0.32, 0.76, 1.0),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Blade Dash",
+				"kind": "dash_speed",
+				"damage": 30,
+				"duration": 3.0,
+				"speed_mult": 1.65,
+				"color": Color(0.24, 0.68, 1.0),
+				"desc": "Dash forward with a sword slash."
+			},
+			{
+				"name": "Crescent Wave",
+				"kind": "sword_wave",
+				"damage": 40,
+				"color": Color(0.45, 0.85, 1.0),
+				"desc": "Launch a sweeping crescent blade wave forward."
+			},
+			{
+				"name": "Whirlwind Spin",
+				"kind": "spinning_blade",
+				"damage": 35,
+				"duration": 3.5,
+				"color": Color(0.95, 0.35, 0.30),
+				"desc": "Hurl a spinning blade around your target."
+			}
+		],
+		"ultimate": {
+			"name": "Final Cross Slash",
+			"kind": "ult_jump_execute",
+			"damage": 100,
+			"color": Color(0.20, 0.65, 1.0),
+			"desc": "Teleport behind a nearby enemy and execute them with a lethal slash."
+		}
 	}
 ]
 static func is_ray_lina(arch_id: int) -> bool:
 	return str(get_agent(arch_id).get("agent_name", "")) == "Ray Lina"
+
+
+static func is_ultimate_weapon_name(w_name: String) -> bool:
+	if w_name.is_empty():
+		return false
+	for ag in AGENTS:
+		var ult: Dictionary = ag.get("ultimate", {})
+		if str(ult.get("name", "")) == w_name:
+			return true
+	return false
 
 
 static func get_agent(arch_id: int) -> Dictionary:

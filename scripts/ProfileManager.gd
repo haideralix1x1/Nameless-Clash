@@ -211,6 +211,15 @@ const ARCHETYPES: Array[Dictionary] = [
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
+	},
+	{
+		"callsign": "Kaito",
+		"name": "Kaito (HD Test)",
+		"desc": "High-detail cel-shaded modular swordsman test character with spiky blue hair, red headband, and leather-strapped tunic.",
+		"part_id": 28,
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
+		"weapon": 4
 	}
 ]
 
@@ -228,7 +237,7 @@ const ARCHETYPE_ROLES: Array[String] = [
 	"Shadow Assassin", "Undead Brawler", "Skull Skeleton", "Spectral Phantom",
 	"Tomb Guardian", "Heavy Automaton", "Bio Specialist", "Feline Striker",
 	"Blade Hero", "Ogre Warlord", "Lava Colossus", "Quartz Elemental",
-	"Martial Master", "Dark Mystic", "Agile Elf Prodigy", "Heavyweight Boxer"
+	"Martial Master", "Dark Mystic", "Agile Elf Prodigy", "Heavyweight Boxer", "HD Test Swordsman"
 ]
 
 const HEAD_NAMES: Array[String] = [

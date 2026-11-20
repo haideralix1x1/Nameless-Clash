@@ -6,7 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 27
+const MAX_PART_INDEX := 28
 
 const ANIM_DEFS: Dictionary = {
 	"idle": {"frames": [0, 1], "fps": 3.5, "loop": true},
@@ -31,6 +31,12 @@ var _manual_sync_mode: bool = false
 var _manual_frame: int = 0
 var _flip_h: bool = false
 var _custom_full_sheet: bool = false
+var _is_raven_wing: bool = false
+var _is_wraith_cape: bool = false
+var _is_ignis_head_fire: bool = false
+var _is_ignis_hands_fire: bool = false
+var _wing_flap_t: float = 0.0
+var _fire_anim_t: float = 0.0
 var hands_z_over_weapon: int = 0
 
 var _base_colors: Dictionary = {
@@ -50,7 +56,32 @@ func _ready() -> void:
 	set_process(true)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if (_is_raven_wing or _is_wraith_cape) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
+		var base_s: float = float(FRAME_SIZE.y) / float(maxi(_sprite_back.texture.get_height(), 1))
+		if _current_anim == "jetpack":
+			var dir_sign: float = -1.0 if _flip_h else 1.0
+			if _is_raven_wing:
+				_wing_flap_t += delta * 18.0
+				var flap: float = sin(_wing_flap_t)
+				_sprite_back.rotation = dir_sign * (-0.18 + flap * 0.38)
+				_sprite_back.position = Vector2(0.0, flap * 4.5 - 2.0)
+				_sprite_back.scale = Vector2(base_s * (1.0 + flap * 0.08), base_s * (1.0 - flap * 0.14))
+			else:
+				_wing_flap_t += delta * 14.0
+				var wave: float = sin(_wing_flap_t)
+				var wave2: float = cos(_wing_flap_t * 1.4)
+				_sprite_back.rotation = dir_sign * (0.14 + wave * 0.16)
+				_sprite_back.position = Vector2(-dir_sign * (2.0 + wave2 * 2.0), wave * 3.0 - 1.0)
+				_sprite_back.scale = Vector2(base_s * (1.06 + wave * 0.09), base_s * (0.94 - wave2 * 0.08))
+		else:
+			_wing_flap_t = 0.0
+			_sprite_back.rotation = lerpf(_sprite_back.rotation, 0.0, clampf(delta * 14.0, 0.0, 1.0))
+			_sprite_back.position = _sprite_back.position.lerp(Vector2.ZERO, clampf(delta * 14.0, 0.0, 1.0))
+			_sprite_back.scale = Vector2.ONE * base_s
+	if _is_ignis_head_fire or _is_ignis_hands_fire:
+		_fire_anim_t += delta * 14.0
+		queue_redraw()
 	if _manual_sync_mode or _anim_legs == null:
 		return
 	var mapped_frame := _get_sheet_frame_for_anim(_current_anim, _anim_legs.frame)
@@ -155,11 +186,16 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_animated_strip(_anim_legs, legs_path)
 	_apply_sprite_strip(_sprite_gear, gear_path)
 	_apply_sprite_strip(_sprite_back, back_path)
+	_is_raven_wing = (acc_id == 24) or back_path.ends_with("accessories_24.png")
+	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 27) or back_path.ends_with("accessories_14.png") or back_path.ends_with("accessories_21.png") or back_path.ends_with("accessories_27.png")
+	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("head_21.png")
+	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("hands_21.png")
 	_apply_sprite_strip(_sprite_hands, hands_path)
 	_sprite_hands.hframes = 1
 	_sprite_hands.region_enabled = true
 	if _sprite_hand_far != null:
 		_sprite_hand_far.texture = _sprite_hands.texture
+		_sprite_hand_far.scale = _sprite_hands.scale
 		_sprite_hand_far.hframes = 1
 		_sprite_hand_far.region_enabled = true
 
@@ -399,6 +435,49 @@ func _apply_flip_to_sprites(flip_h: bool) -> void:
 		_sprite_hand_far.offset = Vector2(9.0 * sign_x, -6.0)
 
 
+func _draw() -> void:
+	if _is_ignis_head_fire and is_instance_valid(_sprite_gear) and _sprite_gear.visible:
+		var head_top: Vector2 = _sprite_gear.position + Vector2(0.0, -34.0)
+		_draw_animated_flame_cluster(head_top, 1.15, 0.0)
+	if _is_ignis_hands_fire:
+		if is_instance_valid(_sprite_hands) and _sprite_hands.visible:
+			_draw_animated_flame_cluster(_sprite_hands.position + Vector2(0.0, -3.0), 0.58, 1.7)
+		if is_instance_valid(_sprite_hand_far) and _sprite_hand_far.visible:
+			_draw_animated_flame_cluster(_sprite_hand_far.position + Vector2(0.0, -3.0), 0.50, 3.4)
+
+
+func _draw_animated_flame_cluster(origin: Vector2, sc: float, phase: float) -> void:
+	var t: float = _fire_anim_t + phase
+	draw_circle(origin + Vector2(0.0, -4.0 * sc), 12.0 * sc, Color(1.0, 0.38, 0.06, 0.24))
+	for i in range(4):
+		var fi: float = float(i)
+		var ox: float = (fi - 1.5) * 4.5 * sc
+		var sway: float = sin(t * 1.1 + fi * 1.8) * 3.2 * sc
+		var h: float = (13.0 + sin(t * 1.4 + fi * 2.3) * 4.5) * sc
+		var w: float = 4.2 * sc
+		var base := origin + Vector2(ox, 0.0)
+		var tip := base + Vector2(sway, -h)
+		var pts := PackedVector2Array([
+			base + Vector2(-w, 0.0),
+			base + Vector2(-w * 0.55 + sway * 0.4, -h * 0.55),
+			tip,
+			base + Vector2(w * 0.55 + sway * 0.4, -h * 0.55),
+			base + Vector2(w, 0.0),
+		])
+		draw_colored_polygon(pts, Color(1.0, 0.34, 0.05, 0.85))
+		var core_pts := PackedVector2Array([
+			base + Vector2(-w * 0.5, 0.0),
+			base + Vector2(sway * 0.45, -h * 0.72),
+			base + Vector2(w * 0.5, 0.0),
+		])
+		draw_colored_polygon(core_pts, Color(1.0, 0.82, 0.24, 0.90))
+	for ei in range(2):
+		var ep: float = fmod(t * 0.14 + float(ei) * 0.5, 1.0)
+		var ex: float = sin(t * 0.8 + float(ei) * 3.1) * 7.0 * sc
+		var ey: float = -ep * 20.0 * sc - 4.0 * sc
+		draw_circle(origin + Vector2(ex, ey), 1.6 * sc, Color(1.0, 0.88, 0.35, 1.0 - ep))
+
+
 func _parse_color(value: Variant, fallback: Color) -> Color:
 	if value is Color:
 		return value
@@ -508,7 +587,7 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		if _sprite_hand_far != null:
 			_sprite_hand_far.position = Vector2(23.0 * dir, 6.0)
 			_sprite_hand_far.rotation = 0.0
-			_sprite_hand_far.scale = Vector2.ONE
+			_sprite_hand_far.scale = _sprite_hands.scale
 		return
 
 	var base_ang: float = 0.0 if facing_r else PI
@@ -536,7 +615,8 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	# Keep the near arm anchored at the real shoulder socket, resting over the gun grip
 	_sprite_hands.z_index = hands_z_over_weapon
 	if _sprite_hand_far != null:
-		_sprite_hand_far.scale = Vector2(0.82, 0.82)
+		_sprite_hand_far.z_index = hands_z_over_weapon
+		_sprite_hand_far.scale = _sprite_hands.scale * 0.82
 	match stance:
 		"pistol":
 			_sprite_hands.position = Vector2(-17.0 * dir, 6.0)
