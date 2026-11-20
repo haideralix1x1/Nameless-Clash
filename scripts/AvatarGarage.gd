@@ -1053,7 +1053,7 @@ func _trigger_hero_ability(slot_i: int) -> void:
 
 
 func _make_agent_icon(arch_idx: int) -> Texture2D:
-	if arch_idx == 23:
+	if arch_idx == 22:
 		var j_abs: String = ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png")
 		var j_img: Image = null
 		if ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png"):

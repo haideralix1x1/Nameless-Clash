@@ -195,6 +195,11 @@ var _fly_kick_timer: float = 0.0
 var _fly_kick_dir: Vector2 = Vector2.RIGHT
 var _fly_kick_target: Node2D = null
 var _fly_kick_hit_ids: Array[int] = []
+var _spear_timer: float = 0.0
+var _spear_dir: Vector2 = Vector2.RIGHT
+var _spear_dmg: int = 45
+var _spear_label: String = "Running Punch"
+var _spear_hit_ids: Array[int] = []
 var _shadow_dash_timer: float = 0.0
 var _shadow_dash_dir: Vector2 = Vector2.RIGHT
 var _shadow_dash_dmg: int = 25
@@ -532,6 +537,7 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 	touch_banish_timer = 0.0
 	_bat_ult_timer = 0.0
 	_fly_kick_timer = 0.0
+	_spear_timer = 0.0
 	_shadow_dash_timer = 0.0
 	_flurry_state = 0
 	_flurry_timer = 0.0
@@ -1259,6 +1265,7 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 			b.min_damage_ratio = w.min_damage_ratio
 			b.can_deal_damage = deal_damage
 			b.is_homing = w.is_homing
+			b.stun_duration = w.stun_duration
 			if w.custom_visual_style != "bullet":
 				b.visual_style = w.custom_visual_style
 			elif w.is_explosive:
@@ -1437,6 +1444,25 @@ func add_bomb_pickup(b_type: String, count: int = 1) -> void:
 	_play_local_sfx("res://assets/audio/pickup.wav", -2.0)
 
 
+func grant_full_ult() -> void:
+	if is_dead:
+		return
+	ult_points = 4
+	ability_cooldowns[3] = 0.0
+	_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.15)
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+
+func ready_ability_slot(slot_idx: int) -> void:
+	if is_dead or slot_idx < 0 or slot_idx >= 3:
+		return
+	ability_cooldowns[slot_idx] = 0.0
+	_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
+	if is_local_human:
+		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+
+
 func cycle_bomb_type() -> void:
 	if NetworkManager.is_agent_clash_mode() or is_dead:
 		return
@@ -1586,6 +1612,7 @@ const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamet
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
+const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 var _weapons_sheet_tex: Texture2D = null
 var _weapons_base_scale: Vector2 = Vector2.ONE
 
@@ -1604,7 +1631,7 @@ func _apply_weapon_visuals() -> void:
 			var bw: Dictionary = ag["base_weapon"]
 			_agent_weapon_node.set("weapon_style", str(bw["style"]))
 			_agent_weapon_node.set("weapon_color", bw["color"] as Color)
-			_agent_weapon_node.visible = not is_dead
+			_agent_weapon_node.visible = (not is_dead) and (str(bw["style"]) != "boxing_glove" or _melee_swing_timer > 0.0)
 			_agent_weapon_node.queue_redraw()
 		return
 
@@ -1641,7 +1668,15 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.62
+		_primary_weapon.scale = _weapons_base_scale * 0.95
+		_secondary_weapon.visible = false
+		return
+	if current_weapon_id == 13:
+		_primary_weapon.texture = TEX_PLASMA_CANNON
+		_primary_weapon.hframes = 1
+		_primary_weapon.vframes = 1
+		_primary_weapon.frame = 0
+		_primary_weapon.scale = _weapons_base_scale * 0.60
 		_secondary_weapon.visible = false
 		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
@@ -1903,6 +1938,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	poison_dot_timer = 0.0
 	cryo_shatter_timer = 0.0
 	_fly_kick_timer = 0.0
+	_spear_timer = 0.0
 	_contra_ult_shots_left = 0
 	_contra_ult_shot_timer = 0.0
 	_magnet_timer = 0.0
@@ -1956,16 +1992,23 @@ func _on_death_visuals() -> void:
 func _spawn_rising_soul(parent_node: Node, pos: Vector2) -> void:
 	var soul := Sprite2D.new()
 	soul.texture = TEX_SOUL_GHOST
-	soul.global_position = pos + Vector2(0.0, -14.0)
-	soul.scale = Vector2(0.75, 0.75)
+	var start_pos: Vector2 = pos + Vector2(0.0, -16.0)
+	soul.global_position = start_pos
+	soul.scale = Vector2(1.15, 1.15)
 	soul.z_index = 26
-	soul.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	soul.modulate = Color(1.0, 1.0, 1.0, 0.94)
 	parent_node.add_child(soul)
 	var tw := soul.create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(soul, "global_position:y", soul.global_position.y - 95.0, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_property(soul, "modulate:a", 0.0, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.chain().tween_callback(soul.queue_free)
+	tw.tween_method(func(t: float):
+		if not is_instance_valid(soul):
+			return
+		var wave_x: float = sin(t * TAU * 1.5) * 20.0
+		var rise_y: float = -112.0 * (1.0 - pow(1.0 - t, 1.6))
+		soul.global_position = start_pos + Vector2(wave_x, rise_y)
+		soul.rotation = cos(t * TAU * 1.5) * 0.14
+		soul.modulate.a = 0.94 * (1.0 - t * t)
+	, 0.0, 1.0, 1.0)
+	tw.tween_callback(soul.queue_free)
 
 
 func _respawn_self() -> void:
@@ -2044,6 +2087,7 @@ func _respawn_self() -> void:
 	shoe_cooldown_timer = 0.0
 	_shoe_windup_timer = 0.0
 	_fly_kick_timer = 0.0
+	_spear_timer = 0.0
 	_contra_ult_shots_left = 0
 	_contra_ult_shot_timer = 0.0
 	_magnet_timer = 0.0
@@ -2201,16 +2245,24 @@ func _update_visual_state(delta: float) -> void:
 		_weapon_pivot.modulate.a = 1.0
 	_weapon_pivot.position.y = 9.0 if is_crouching else 6.0
 	var swing_offset: float = 0.0
+	var is_boxing_glove: bool = (_agent_weapon_node != null and str(_agent_weapon_node.get("weapon_style")) == "boxing_glove")
 	if NetworkManager.is_agent_clash_mode() and _melee_swing_timer > 0.0:
 		var swing_prog: float = 1.0 - (_melee_swing_timer / 0.22)
-		var swing_dir: float = 1.0 if facing_right else -1.0
-		swing_offset = lerpf(-0.95, 0.95, swing_prog) * swing_dir
+		if is_boxing_glove:
+			_agent_weapon_node.position.x = lerpf(8.0, 24.0, sin(swing_prog * PI))
+		else:
+			var swing_dir: float = 1.0 if facing_right else -1.0
+			swing_offset = lerpf(-0.95, 0.95, swing_prog) * swing_dir
+	elif _agent_weapon_node != null:
+		_agent_weapon_node.position.x = 0.0
 	_weapon_pivot.rotation = aim_angle + swing_offset
 	var flip_gun: bool = cos(aim_angle) < 0.0
 	_primary_weapon.flip_v = flip_gun
 	_secondary_weapon.flip_v = flip_gun
 	if _agent_weapon_node != null:
 		_agent_weapon_node.scale.y = -1.0 if flip_gun else 1.0
+		if _is_agent_logic_active() and is_boxing_glove:
+			_agent_weapon_node.visible = _melee_swing_timer > 0.0 and not is_dead
 	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
 		_modular_rig.hands_z_over_weapon = 2
 		if is_dead:
@@ -2505,6 +2557,7 @@ func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
 	if is_dead or invincible_timer > 0.0 or deathless_timer > 0.0 or (attacker_id != 0 and attacker_id == peer_id):
 		return
 	_fly_kick_timer = 0.0
+	_spear_timer = 0.0
 	_contra_ult_shots_left = 0
 	_contra_ult_shot_timer = 0.0
 	_magnet_timer = 0.0
@@ -3188,6 +3241,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				_spawn_air_wave_circle(cast_pos, 64.0, Color(0.28, 0.78, 1.0))
 				_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 1.25)
 		"ult_soul_drag":
+			_spawn_rising_particles(cast_pos, Color(0.38, 0.88, 1.0), false, 12)
 			var tgt_sd: Node2D = _find_nearest_enemy_player(cast_pos, 340.0)
 			if tgt_sd != null:
 				control_lock_timer = 1.28
@@ -3213,12 +3267,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 					if is_instance_valid(tgt_sd) and (not tgt_sd.has_method("is_alive") or tgt_sd.is_alive()):
 						if local_auth and tgt_sd.has_method("apply_hit"):
 							tgt_sd.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
-						_spawn_vfx_burst(tgt_sd.global_position, 95.0, Color.WHITE)
-						_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+						_spawn_vfx_burst(tgt_sd.global_position, 95.0, Color(0.35, 0.88, 1.0, 0.90), true)
+						_spawn_rising_particles(tgt_sd.global_position, Color(0.45, 0.94, 1.0), false, 14)
+						_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.75)
 				)
 				_play_local_sfx("res://assets/audio/pickup.wav", 0.0, 0.75)
 			else:
-				_spawn_vfx_burst(cast_pos, 90.0, col)
+				_spawn_vfx_burst(cast_pos, 90.0, Color(0.35, 0.88, 1.0, 0.90), true)
 			add_screen_shake(2.0)
 		"shadow_mummy":
 			var tgt_sm: Node2D = _find_nearest_enemy_player(cast_pos, 850.0)
@@ -3402,10 +3457,14 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			add_screen_shake(1.8)
 			_play_local_sfx("res://assets/audio/hit.wav", -1.0, 0.85)
 		"running_spear":
-			velocity = Vector2.from_angle(cast_angle) * 820.0
-			if local_auth:
-				_apply_melee_arc(cast_pos, Vector2.from_angle(cast_angle), 175.0, 80.0, dmg, 0.3, 620.0, ab_name)
-			_spawn_vfx_burst(cast_pos + Vector2.from_angle(cast_angle) * 50.0, 85.0, col)
+			_spear_timer = 0.34
+			_spear_dir = Vector2.from_angle(cast_angle)
+			_spear_dmg = dmg
+			_spear_label = ab_name
+			_spear_hit_ids.clear()
+			facing_right = _spear_dir.x >= 0.0
+			velocity = _spear_dir * 940.0
+			_spawn_vfx_burst(cast_pos, 68.0, col, true)
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.9)
 		"sky_smash_punch":
 			var tgt_sp: Node2D = _find_nearest_enemy_player(cast_pos, 540.0)
@@ -3822,6 +3881,30 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if _fly_kick_timer <= 0.0:
 			_fly_kick_target = null
 			facing_right = _fly_kick_dir.x >= 0.0
+			velocity *= 0.35
+	if _spear_timer > 0.0:
+		_spear_timer = maxf(0.0, _spear_timer - delta)
+		velocity = _spear_dir * 940.0
+		facing_right = _spear_dir.x >= 0.0
+		move_and_slide()
+		if _is_controlled_locally():
+			for p in get_tree().get_nodes_in_group("players"):
+				if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
+					if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
+						continue
+					if p.has_method("is_alive") and not p.is_alive():
+						continue
+					var pid: int = int(p.get("peer_id"))
+					if not _spear_hit_ids.has(pid) and (p as Node2D).global_position.distance_to(global_position) <= 64.0:
+						_spear_hit_ids.append(pid)
+						if p.has_method("apply_hit"):
+							p.apply_hit(_spear_dmg, peer_id, _spear_label, player_name, _spear_dir * 680.0 + Vector2(0.0, -240.0))
+						if p.has_method("apply_stun"):
+							p.apply_stun(0.45, peer_id)
+						_spawn_vfx_burst((p as Node2D).global_position, 56.0, Color(0.98, 0.62, 0.18), true)
+						_play_local_sfx("res://assets/audio/hit.wav", -1.0, 0.95)
+						add_screen_shake(1.2)
+		if _spear_timer <= 0.0:
 			velocity *= 0.35
 	if boar_ride_timer > 0.0:
 		boar_ride_timer = maxf(0.0, boar_ride_timer - delta)
@@ -5056,6 +5139,13 @@ class AgentWeaponVisual extends Node2D:
 
 	func _draw() -> void:
 		match weapon_style:
+			"boxing_glove":
+				var ink := Color(0.08, 0.06, 0.08)
+				draw_rect(Rect2(6, -8, 10, 16), ink)
+				draw_rect(Rect2(7, -6, 8, 12), Color(0.95, 0.78, 0.24))
+				draw_circle(Vector2(26, 0), 14.5, ink)
+				draw_circle(Vector2(26, 0), 12.0, weapon_color)
+				draw_circle(Vector2(28, -3), 5.0, weapon_color.lightened(0.35))
 			"greatsword":
 				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
@@ -5479,8 +5569,8 @@ class BoxingFistVfx extends Node2D:
 	func _draw() -> void:
 		var a: float = clampf(1.0 - maxf(0.0, (_age - slam_time) / _hold_fade), 0.0, 1.0)
 		var ink := Color(0.08, 0.05, 0.07, a)
-		var red := Color(0.88, 0.15, 0.18, a)
-		var hi := Color(0.99, 0.42, 0.42, a)
+		var red := Color(0.19, 0.46, 0.88, a)
+		var hi := Color(0.45, 0.72, 1.0, a)
 		var gold := Color(0.97, 0.78, 0.20, a)
 		# Wrist cuff
 		draw_rect(Rect2(-26.0, -14.0, 14.0, 28.0), ink)

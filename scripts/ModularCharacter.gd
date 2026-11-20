@@ -118,7 +118,7 @@ func _get_or_create_animated(node_name: String) -> AnimatedSprite2D:
 func apply_loadout(config: Dictionary) -> void:
 	_ensure_layers()
 
-	var arch_idx := clampi(int(config.get("archetype", 0)), 0, MAX_PART_INDEX)
+	var arch_idx := clampi(int(config.get("archetype", config.get("archetype_id", 0))), 0, MAX_PART_INDEX)
 	var def_part := arch_idx
 	var skin_id := clampi(int(config.get("skin_id", def_part)), 0, MAX_PART_INDEX)
 	var head_id := clampi(int(config.get("head_id", def_part)), 0, MAX_PART_INDEX)
@@ -140,7 +140,7 @@ func apply_loadout(config: Dictionary) -> void:
 	var hands_path := str(config.get("hands_texture",
 		"res://assets/sprites/modular/hands_%d.png" % hands_id))
 
-	if arch_idx == 23 and (ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png") or FileAccess.file_exists(ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png"))):
+	if arch_idx == 22 and (ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png") or FileAccess.file_exists(ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png"))):
 		_custom_full_sheet = true
 		torso_path = "res://assets/sprites/characters/jackson_sheet.png"
 		_anim_head.visible = false
@@ -432,7 +432,8 @@ func reset_taunt_pose() -> void:
 
 func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 	_ensure_layers()
-	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]:
+	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]
+	for n in vis_nodes:
 		if n != null:
 			n.visible = true
 
@@ -486,9 +487,10 @@ func stop_shoe_throw() -> void:
 	_ensure_layers()
 	if _sprite_shoe_throw != null:
 		_sprite_shoe_throw.visible = false
+	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]
 	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if n != null:
-			n.visible = true
+			n.visible = (n in vis_nodes)
 			n.position = Vector2.ZERO
 			n.rotation = 0.0
 	var sign_x: float = -1.0 if _flip_h else 1.0

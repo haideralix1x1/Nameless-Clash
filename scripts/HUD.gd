@@ -11,6 +11,7 @@ const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamet
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
+const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
 const PRESET_SELECT_DURATION: float = 5.0
@@ -187,9 +188,6 @@ func _process(delta: float) -> void:
 		else:
 			_btn_shoe.modulate = Color.WHITE
 
-	if not NetworkManager.is_agent_clash_mode() and Input.is_action_just_pressed("loadout_menu"):
-		_open_preset_selector(PRESET_SELECT_DURATION)
-
 	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
 		_preset_time_left = maxf(0.0, _preset_time_left - delta)
 		if is_instance_valid(_preset_timer_label):
@@ -257,7 +255,7 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_bomb):
 		_btn_bomb.visible = (not is_agent) and NetworkManager.allow_explosives
 	if is_instance_valid(_btn_presets):
-		_btn_presets.visible = not is_agent
+		_btn_presets.visible = false
 	if is_instance_valid(_btn_zoom):
 		_btn_zoom.visible = not is_agent
 	if is_instance_valid(_btn_shoe):
@@ -1291,7 +1289,7 @@ func _build_ui() -> void:
 	rv.add_child(hdr_row)
 
 	var pause_title := Label.new()
-	pause_title.text = "MATCH MENU" if NetworkManager.is_network_active() else "PAUSED"
+	pause_title.text = "GAME MENU"
 	pause_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pause_title.add_theme_font_size_override("font_size", 24)
 	pause_title.modulate = Color(1.0, 0.84, 0.28)
@@ -1308,25 +1306,9 @@ func _build_ui() -> void:
 	)
 	hdr_row.add_child(close_x_btn)
 
-	_net_status_label = Label.new()
-	_net_status_label.text = "NAMELESS CLASH"
-	_net_status_label.add_theme_font_size_override("font_size", 15)
-	_net_status_label.clip_text = true
-	_net_status_label.modulate = Color(1.0, 0.78, 0.25)
-	rv.add_child(_net_status_label)
-
-	_map_mode_label = Label.new()
-	_map_mode_label.text = "Bunker Base - Solo"
-	_map_mode_label.add_theme_font_size_override("font_size", 14)
-	_map_mode_label.clip_text = true
-	_map_mode_label.modulate = Color(0.82, 0.92, 0.72)
-	rv.add_child(_map_mode_label)
-
-	_scoreboard_label = Label.new()
-	_scoreboard_label.text = "Loading..."
-	_scoreboard_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_scoreboard_label.add_theme_font_size_override("font_size", 14)
-	rv.add_child(_scoreboard_label)
+	_net_status_label = null
+	_map_mode_label = null
+	_scoreboard_label = null
 
 	var nav_row := HBoxContainer.new()
 	nav_row.add_theme_constant_override("separation", 10)
@@ -1401,7 +1383,7 @@ func _build_ui() -> void:
 	util_row.add_child(layout_btn)
 
 	var menu_btn := Button.new()
-	menu_btn.text = "QUIT TO MENU"
+	menu_btn.text = "LEAVE MATCH"
 	menu_btn.custom_minimum_size = Vector2(0, 44)
 	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_btn.focus_mode = Control.FOCUS_NONE
@@ -1516,8 +1498,8 @@ func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
 func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
 	if not is_instance_valid(icon_rect) or w_data == null:
 		return
-	if w_data.id == 11 or w_data.id == 15 or w_data.id == 16 or w_data.id == 17:
-		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_HOOK_GUN if w_data.id == 15 else (TEX_BUBBLE_GUN if w_data.id == 16 else TEX_MACHINE_GUN))
+	if w_data.id == 11 or w_data.id == 13 or w_data.id == 15 or w_data.id == 16 or w_data.id == 17:
+		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_PLASMA_CANNON if w_data.id == 13 else (TEX_HOOK_GUN if w_data.id == 15 else (TEX_BUBBLE_GUN if w_data.id == 16 else TEX_MACHINE_GUN)))
 		return
 	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
 	if atlas == null:
@@ -1537,7 +1519,10 @@ func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
 	at.atlas = tex
 	var fw: float = maxf(1.0, float(tex.get_width()) / 8.0)
 	var fh: float = maxf(1.0, float(tex.get_height()))
-	at.region = Rect2(fw * 0.16, fh * 0.06, fw * 0.68, fh * 0.68)
+	if tex_path.ends_with("jackson_sheet.png"):
+		at.region = Rect2(fw * 0.14, 0.0, fw * 0.72, fh * 0.58)
+	else:
+		at.region = Rect2(fw * 0.16, fh * 0.06, fw * 0.68, fh * 0.68)
 
 
 func _refresh_top_info_pill() -> void:
@@ -1560,8 +1545,15 @@ func _refresh_top_info_pill() -> void:
 		var arch_id: int = int(local_player.get("archetype_id"))
 		var ag: Dictionary = AgentData.get_agent(arch_id)
 		var part_id: int = ProfileManager.get_archetype_part_id(arch_id)
-		_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
-		_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
+		if arch_id == 22:
+			_set_portrait_frame(_agent_portrait, "res://assets/sprites/characters/jackson_sheet.png")
+			if is_instance_valid(_agent_hat_overlay):
+				_agent_hat_overlay.visible = false
+		else:
+			_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
+			_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
+			if is_instance_valid(_agent_hat_overlay):
+				_agent_hat_overlay.visible = true
 		if is_instance_valid(_weapon_name_label):
 			_weapon_name_label.text = str(ag["agent_name"]).to_upper()
 		if is_instance_valid(_dual_badge):
@@ -1592,8 +1584,15 @@ func _refresh_top_info_pill() -> void:
 					var e_arch: int = int(best_enemy.get("archetype_id"))
 					var e_part: int = ProfileManager.get_archetype_part_id(e_arch)
 					_target_portrait.visible = true
-					_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
-					_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
+					if e_arch == 22:
+						_set_portrait_frame(_target_portrait, "res://assets/sprites/characters/jackson_sheet.png")
+						if is_instance_valid(_target_hat_overlay):
+							_target_hat_overlay.visible = false
+					else:
+						_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
+						_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
+						if is_instance_valid(_target_hat_overlay):
+							_target_hat_overlay.visible = true
 			else:
 				_ammo_label.text = "NO TARGET"
 				_ammo_label.modulate = Color(0.65, 0.75, 0.85)
@@ -1804,6 +1803,8 @@ func _render_killfeed() -> void:
 
 
 func _refresh_scoreboard() -> void:
+	if not is_instance_valid(_net_status_label) or not is_instance_valid(_map_mode_label) or not is_instance_valid(_scoreboard_label):
+		return
 	if NetworkManager.is_host_active():
 		_net_status_label.text = "HOSTING LAN (%d players)" % NetworkManager.players.size()
 	elif NetworkManager.is_network_active():
@@ -2034,6 +2035,20 @@ func _build_preset_overlay() -> void:
 	keep_btn.pressed.connect(func(): _confirm_preset(_chosen_preset_idx if _chosen_preset_idx >= 0 else 0))
 	hdr.add_child(keep_btn)
 
+	var leave_btn := Button.new()
+	leave_btn.text = "LEAVE MATCH"
+	leave_btn.custom_minimum_size = Vector2(126, 36)
+	leave_btn.focus_mode = Control.FOCUS_NONE
+	UIStyle.style_layer_button(leave_btn, "red", "", 12, 6)
+	leave_btn.pressed.connect(func():
+		_preset_overlay.visible = false
+		_set_preset_pause(false)
+		get_tree().paused = false
+		NetworkManager.disconnect_network()
+		NetworkManager.go_to_main_menu()
+	)
+	hdr.add_child(leave_btn)
+
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -2113,53 +2128,7 @@ func _build_preset_overlay() -> void:
 		bomb_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row_h.add_child(bomb_icon)
 
-	var bomb_row := HBoxContainer.new()
-	bomb_row.add_theme_constant_override("separation", 6)
-	pv.add_child(bomb_row)
-
-	var bomb_hdr := Label.new()
-	bomb_hdr.text = "BOMB:"
-	bomb_hdr.add_theme_font_size_override("font_size", 13)
-	bomb_hdr.modulate = Color(1.0, 0.86, 0.35)
-	bomb_hdr.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	bomb_row.add_child(bomb_hdr)
-
-	_bomb_type_buttons.clear()
-	var bomb_specs: Array[Dictionary] = [
-		{"id": "frag", "label": "Normal (2s)", "accent": "green"},
-		{"id": "sticky", "label": "Sticky (3s)", "accent": "blue"},
-		{"id": "time", "label": "Time (4s)", "accent": "red"},
-		{"id": "mine", "label": "Mine (Prox)", "accent": "orange"}
-	]
-	for spec in bomb_specs:
-		var b_id: String = str(spec["id"])
-		var b_btn := Button.new()
-		b_btn.text = str(spec["label"])
-		b_btn.icon = _make_bomb_icon(b_id)
-		b_btn.custom_minimum_size = Vector2(0, 36)
-		b_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b_btn.focus_mode = Control.FOCUS_NONE
-		UIStyle.style_layer_button(b_btn, str(spec["accent"]), "", 10, 6)
-		b_btn.pressed.connect(_select_bomb_type.bind(b_id))
-		bomb_row.add_child(b_btn)
-		_bomb_type_buttons[b_id] = b_btn
-
 	_refresh_preset_cards()
-	_refresh_bomb_type_buttons()
-
-
-func _select_bomb_type(b_type: String) -> void:
-	_chosen_bomb_type = "" if _chosen_bomb_type == b_type else b_type
-	_refresh_bomb_type_buttons()
-
-
-func _refresh_bomb_type_buttons() -> void:
-	for b_id in _bomb_type_buttons.keys():
-		var btn: Button = _bomb_type_buttons[b_id] as Button
-		if not is_instance_valid(btn):
-			continue
-		var selected: bool = (_chosen_bomb_type == str(b_id))
-		btn.modulate = Color(1.25, 1.25, 1.25) if selected else (Color(0.75, 0.78, 0.85) if not _chosen_bomb_type.is_empty() else Color.WHITE)
 
 
 func _refresh_preset_cards() -> void:
@@ -2565,8 +2534,7 @@ func _build_hud_layout_overlay() -> void:
 		{"key": "btn_reload", "label": "RLD", "size": Vector2(70, 70), "col": Color(0.68, 0.80, 0.98)},
 		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(78, 78), "col": Color(1.0, 0.56, 0.16)},
 		{"key": "btn_dual", "label": "DUAL", "size": Vector2(68, 68), "col": Color(0.28, 0.92, 1.0)},
-		{"key": "ability_bar", "label": "DRAG ABILITY BAR (1 / 2 / 3 / ULT)", "size": Vector2(560, 134), "col": Color(0.78, 0.48, 1.0)},
-		{"key": "btn_presets", "label": "KIT", "size": Vector2(68, 42), "col": Color(1.0, 0.80, 0.24)}
+		{"key": "ability_bar", "label": "DRAG ABILITY BAR (1 / 2 / 3 / ULT)", "size": Vector2(560, 134), "col": Color(0.78, 0.48, 1.0)}
 	]
 
 	_layout_handles.clear()
@@ -2638,23 +2606,31 @@ class BombHudIcon extends Control:
 	var bomb_type: String = "frag"
 
 	func _draw() -> void:
-		var c := Vector2(size.x * 0.5, size.y * 0.54)
+		var c := Vector2(size.x * 0.5, size.y * 0.56)
 		match bomb_type:
 			"cluster":
-				draw_circle(c, 9.0, Color(1.0, 0.45, 0.16))
-				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.12, 0.14, 0.18), 2.0)
-				draw_circle(c + Vector2(0, -9.0), 2.5, Color(1.0, 0.85, 0.30))
+				draw_circle(c, 9.5, Color(0.24, 0.16, 0.14))
+				draw_arc(c, 9.5, 0.0, TAU, 16, Color(1.0, 0.45, 0.16), 2.5)
+				draw_rect(Rect2(c + Vector2(-3.0, -12.0), Vector2(6.0, 4.0)), Color(0.75, 0.78, 0.84))
+				draw_circle(c + Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))
 			"sticky":
-				draw_circle(c, 9.0, Color(0.24, 0.78, 1.0))
-				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.88, 0.98, 1.0), 2.0)
+				draw_circle(c, 9.5, Color(0.14, 0.20, 0.32))
+				draw_arc(c, 9.5, 0.0, TAU, 16, Color(0.24, 0.78, 1.0), 2.5)
+				for k in range(4):
+					var ang: float = float(k) * PI * 0.5 + PI * 0.25
+					draw_line(c + Vector2.from_angle(ang) * 7.5, c + Vector2.from_angle(ang) * 12.0, Color(0.75, 0.85, 1.0), 2.0)
+				draw_circle(c, 3.5, Color(1.0, 0.35, 0.20))
 			"time":
-				draw_rect(Rect2(c - Vector2(8.5, 7), Vector2(17, 14)), Color(0.95, 0.28, 0.24))
-				draw_rect(Rect2(c - Vector2(8.5, 7), Vector2(17, 14)), Color(1.0, 0.82, 0.35), false, 1.8)
-				draw_circle(c, 2.8, Color.WHITE)
+				draw_rect(Rect2(c + Vector2(-10.0, -8.0), Vector2(20.0, 16.0)), Color(0.16, 0.18, 0.22))
+				draw_rect(Rect2(c + Vector2(-10.0, -8.0), Vector2(20.0, 16.0)), Color(0.95, 0.28, 0.24), false, 2.0)
+				draw_rect(Rect2(c + Vector2(-6.0, -5.0), Vector2(12.0, 5.0)), Color(0.08, 0.12, 0.10))
+				draw_circle(c + Vector2(0.0, 3.5), 3.2, Color(1.0, 0.25, 0.20))
 			"mine":
-				draw_rect(Rect2(c + Vector2(-9.5, 1.5), Vector2(19, 5)), Color(0.96, 0.62, 0.18))
-				draw_circle(c + Vector2(0, -1.5), 4.0, Color(1.0, 0.25, 0.22))
+				draw_rect(Rect2(c + Vector2(-11.0, -4.0), Vector2(22.0, 9.0)), Color(0.18, 0.22, 0.24))
+				draw_rect(Rect2(c + Vector2(-11.0, -4.0), Vector2(22.0, 9.0)), Color(0.95, 0.58, 0.16), false, 2.0)
+				draw_circle(c + Vector2(0.0, -5.0), 3.5, Color(1.0, 0.22, 0.16))
 			_:
-				draw_circle(c, 9.0, Color(0.26, 0.88, 0.42))
-				draw_arc(c, 9.0, 0.0, TAU, 20, Color(0.12, 0.16, 0.14), 2.0)
-				draw_line(c + Vector2(0, -8.5), c + Vector2(4, -12.5), Color(1.0, 0.80, 0.28), 2.4)
+				draw_circle(c, 9.5, Color(0.16, 0.22, 0.18))
+				draw_arc(c, 9.5, 0.0, TAU, 16, Color(0.26, 0.88, 0.42), 2.5)
+				draw_rect(Rect2(c + Vector2(-3.0, -12.0), Vector2(6.0, 4.0)), Color(0.75, 0.78, 0.84))
+				draw_circle(c + Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))

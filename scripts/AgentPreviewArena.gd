@@ -321,11 +321,14 @@ func _process(delta: float) -> void:
 				f.velocity.y = 0.0
 	if is_instance_valid(hero) and not hero.is_dead and is_instance_valid(dummy_bot) and not dummy_bot.is_dead:
 		var has_barrier: bool = false
+		var has_prism_mirror: bool = false
 		var has_blood_bubble: bool = false
 		var hazard_zone: Node2D = null
 		for c in get_children():
 			if c.is_in_group("barrier_walls"):
 				has_barrier = true
+			elif c.is_in_group("prism_mirrors"):
+				has_prism_mirror = true
 			elif "summon_kind" in c and str(c.get("summon_kind")) == "blood_bubble":
 				has_blood_bubble = true
 			elif c is Node2D and (c.has_meta("is_lava") or ("zone_kind" in c)):
@@ -370,6 +373,7 @@ func _process(delta: float) -> void:
 		dummy_bot.preview_jump = (bot_slowed and dummy_bot.is_on_floor() and dummy_bot.stun_timer <= 0.0 and dummy_bot.freeze_timer <= 0.0)
 		var hero_defending: bool = (
 			has_barrier
+			or has_prism_mirror
 			or hero.deathless_timer > 0.0
 			or hero.invincible_timer > 0.0
 			or hero.invis_timer > 0.0

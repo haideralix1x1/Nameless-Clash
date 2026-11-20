@@ -1186,14 +1186,14 @@ const AGENTS: Array[Dictionary] = [
 		"agent_name": "Jackson",
 		"title": "Heavyweight Boxer",
 		"role": "Heavyweight Boxer",
-		"accent": Color(0.92, 0.22, 0.24),
+		"accent": Color(0.20, 0.48, 0.92),
 		"base_weapon": {
 			"name": "Championship Boxing Gloves",
-			"style": "sword",
+			"style": "boxing_glove",
 			"damage": 25,
 			"cooldown": 0.30,
 			"range": 102.0,
-			"color": Color(0.95, 0.25, 0.25),
+			"color": Color(0.19, 0.46, 0.88),
 			"ranged": false
 		},
 		"abilities": [
@@ -1202,22 +1202,22 @@ const AGENTS: Array[Dictionary] = [
 				"kind": "boxer_huge_punch",
 				"damage": 50,
 				"stun": 0.8,
-				"color": Color(0.96, 0.26, 0.22),
+				"color": Color(0.22, 0.52, 0.96),
 				"desc": "Unleash a huge boxing punch that knocks enemies back and stuns."
 			},
 			{
-				"name": "Running Spear",
+				"name": "Running Punch",
 				"kind": "running_spear",
 				"damage": 45,
 				"color": Color(0.98, 0.62, 0.18),
-				"desc": "Charge forward like a running spear along your aim direction."
+				"desc": "Charge forward like a running punch along your aim direction."
 			},
 			{
 				"name": "Sky Smash Punch",
 				"kind": "sky_smash_punch",
 				"damage": 60,
 				"stun": 1.0,
-				"color": Color(0.95, 0.22, 0.28),
+				"color": Color(0.22, 0.52, 0.96),
 				"desc": "Drop a giant fist from above onto a nearby enemy and smash them."
 			}
 		],
@@ -1454,6 +1454,8 @@ static func _get_target_icon_texture() -> Texture2D:
 static func get_ability_icon_texture(kind: String) -> Texture2D:
 	if kind == "frost_gas" and ResourceLoader.exists("res://assets/ui/frost_snowflake_icon.png"):
 		return load("res://assets/ui/frost_snowflake_icon.png") as Texture2D
+	if kind == "running_spear" and ResourceLoader.exists("res://assets/ui/running_punch_icon.png"):
+		return load("res://assets/ui/running_punch_icon.png") as Texture2D
 	if kind == "ult_homing_bazooka":
 		return _get_target_icon_texture()
 	if kind == "hook_drag":

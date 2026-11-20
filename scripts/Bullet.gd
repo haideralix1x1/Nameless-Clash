@@ -90,6 +90,8 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_age += delta
+	if visual_style == "plasma_ball":
+		queue_redraw()
 	if _age >= max_lifetime:
 		if is_explosive:
 			_trigger_explosion(global_position)
@@ -689,6 +691,22 @@ func _draw() -> void:
 			draw_polyline(PackedVector2Array([
 				Vector2(-11.0, -4.0), Vector2(-3.0, 3.0), Vector2(3.0, -3.0), Vector2(11.0, 4.0)
 			]), Color.WHITE, 3.0)
+		"plasma_ball":
+			var pulse: float = 1.0 + 0.14 * sin(_age * 28.0)
+			var flicker: float = sin(_age * 36.0) * 3.5
+			# Outer blue burning aura & flame tail
+			draw_circle(Vector2(-10.0, flicker * 0.5), 16.0 * pulse, Color(0.08, 0.42, 1.0, 0.30))
+			draw_circle(Vector2(-19.0, -flicker * 0.4), 10.5 * pulse, Color(0.90, 0.97, 1.0, 0.45))
+			draw_circle(Vector2.ZERO, 24.0 * pulse, Color(0.08, 0.48, 1.0, 0.34))
+			# Main electric-blue plasma sphere
+			draw_circle(Vector2.ZERO, 15.5 * pulse, Color(0.16, 0.76, 1.0, 0.94))
+			# White fire tongues flickering around the ball
+			for k in range(6):
+				var fang: float = float(k) * (TAU / 6.0) + _age * 9.0
+				var fpos := Vector2.from_angle(fang) * (12.0 + 2.5 * sin(_age * 30.0 + float(k)))
+				draw_circle(fpos, 4.2, Color(0.96, 0.99, 1.0, 0.88))
+			# Bright white-hot burning core
+			draw_circle(Vector2.ZERO, 9.2 * pulse, Color(0.96, 0.99, 1.0, 0.98))
 		"stun_bomb":
 			draw_circle(Vector2.ZERO, 14.0, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.30))
 			draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 20, Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.85), 2.5)

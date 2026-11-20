@@ -11,6 +11,7 @@ const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamet
 const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
+const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine"]
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
@@ -674,11 +675,28 @@ func _is_spot_clear(pos: Vector2, half_w: float, half_h: float, avoid_items: boo
 			return false
 	if avoid_items:
 		for inter in _interactables:
-			if is_instance_valid(inter) and inter.global_position.distance_to(pos) < 68.0:
+			if not is_instance_valid(inter):
+				continue
+			if "fan_pos" in inter:
+				if (inter.get("fan_pos") as Vector2).distance_to(pos) < 95.0:
+					return false
+				if "button_pos" in inter and (inter.get("button_pos") as Vector2).distance_to(pos) < 76.0:
+					return false
+			elif "door_pos" in inter:
+				if (inter.get("door_pos") as Vector2).distance_to(pos) < 90.0:
+					return false
+				if "button_pos" in inter and (inter.get("button_pos") as Vector2).distance_to(pos) < 76.0:
+					return false
+			elif "trap_pos" in inter:
+				if (inter.get("trap_pos") as Vector2).distance_to(pos) < 90.0:
+					return false
+				if "button_pos" in inter and (inter.get("button_pos") as Vector2).distance_to(pos) < 76.0:
+					return false
+			elif inter.global_position.distance_to(pos) < 85.0:
 				return false
 		for ce in _crate_nodes:
 			var a: Node2D = ce.get("area") as Node2D
-			if is_instance_valid(a) and a.global_position.distance_to(pos) < 62.0:
+			if is_instance_valid(a) and a.global_position.distance_to(pos) < 88.0:
 				return false
 		for up in _ult_pickups:
 			if is_instance_valid(up) and up.position.distance_to(pos) < 62.0:
@@ -695,11 +713,11 @@ func _is_spot_clear(pos: Vector2, half_w: float, half_h: float, avoid_items: boo
 
 func _snap_to_floor(raw_pos: Vector2, half_h: float = 14.0, avoid_items: bool = false) -> Vector2:
 	var base_x: float = clampf(raw_pos.x, 88.0, arena_width - 88.0)
-	for off_x in [0.0, 64.0, -64.0, 128.0, -128.0, 192.0, -192.0, 256.0, -256.0]:
+	for off_x in [0.0, 64.0, -64.0, 128.0, -128.0, 192.0, -192.0, 256.0, -256.0, 320.0, -320.0, 400.0, -400.0]:
 		var cx: float = clampf(base_x + off_x, 88.0, arena_width - 88.0)
 		var fy: float = _snap_floor_y_at(cx, raw_pos.y)
 		var cand := Vector2(cx, fy - half_h)
-		if _is_spot_clear(cand, 22.0, half_h, avoid_items):
+		if _is_spot_clear(cand, 28.0, half_h, avoid_items):
 			return cand
 	return Vector2(base_x, _snap_floor_y_at(base_x, raw_pos.y) - half_h)
 
@@ -1081,7 +1099,7 @@ func _on_interact_requested(inter_idx: int) -> void:
 					if p.has_method("set_nearby_interactable"):
 						p.set_nearby_interactable(-1, "")
 					break
-			NetworkManager.toggle_interactable(inter_idx, true)
+			NetworkManager.toggle_interactable(inter_idx, randi() % 2 == 0)
 
 
 func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
@@ -1107,20 +1125,29 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 	elif node is InteractableTreasureBox:
 		(node as InteractableTreasureBox).trigger_opened()
 		var origin_p: Vector2 = node.global_position
-		_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-58.0, 0.0), 15.0, false), "health", 100)
-		_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", 17)
-		if NetworkManager.allow_explosives:
-			var b_type_str: String = "frag"
-			var best_d: float = 1e9
-			for p in get_tree().get_nodes_in_group("players"):
-				if is_instance_valid(p) and (not p.has_method("is_alive") or p.is_alive()):
-					var d: float = (p as Node2D).global_position.distance_to(origin_p)
-					if d < best_d:
-						best_d = d
-						b_type_str = str(p.get("bomb_type"))
-			var b_idx: int = maxi(0, FLOOR_BOMB_TYPES.find(b_type_str))
-			for bx_off in [-36.0, 0.0, 36.0]:
-				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(bx_off, 0.0), 14.0, false), "bomb", b_idx)
+		if NetworkManager.is_agent_clash_mode():
+			if new_state:
+				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p, 16.0, false), "ult_full", 3)
+			else:
+				var slots: Array[int] = [0, 1, 2]
+				slots.shuffle()
+				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-42.0, 0.0), 12.0, false), "abil_orb", slots[0])
+				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(42.0, 0.0), 12.0, false), "abil_orb", slots[1])
+		else:
+			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-58.0, 0.0), 15.0, false), "health", 100)
+			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", 17)
+			if NetworkManager.allow_explosives:
+				var b_type_str: String = "frag"
+				var best_d: float = 1e9
+				for p in get_tree().get_nodes_in_group("players"):
+					if is_instance_valid(p) and (not p.has_method("is_alive") or p.is_alive()):
+						var d: float = (p as Node2D).global_position.distance_to(origin_p)
+						if d < best_d:
+							best_d = d
+							b_type_str = str(p.get("bomb_type"))
+				var b_idx: int = maxi(0, FLOOR_BOMB_TYPES.find(b_type_str))
+				for bx_off in [-36.0, 0.0, 36.0]:
+					_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(bx_off, 0.0), 14.0, false), "bomb", b_idx)
 
 
 func _on_barrel_detonated(inter_idx: int, attacker_id: int, attacker_name: String, attacker_team: int) -> void:
@@ -1185,6 +1212,11 @@ func _spawn_treasure_drop(origin_pos: Vector2, target_pos: Vector2, drop_type: S
 		var b_icon := GroundBombIcon.new()
 		b_icon.bomb_idx = drop_val
 		visual = b_icon
+	elif drop_type == "ult_full" or drop_type == "abil_orb":
+		var orb_vis := TreasurePointOrb.new()
+		orb_vis.orb_kind = drop_type
+		orb_vis.slot_idx = drop_val
+		visual = orb_vis
 	else:
 		var spr := Sprite2D.new()
 		spr.texture = TEX_CRATE
@@ -1326,6 +1358,18 @@ func _on_crate_body_entered(body: Node2D, crate_idx: int) -> void:
 			NetworkManager.consume_crate(crate_idx, randi() % FLOOR_BOMB_TYPES.size())
 			return
 
+		if p_type == "ult_full":
+			if body.has_method("grant_full_ult"):
+				body.grant_full_ult()
+			NetworkManager.consume_crate(crate_idx, 0)
+			return
+
+		if p_type == "abil_orb":
+			if body.has_method("ready_ability_slot"):
+				body.ready_ability_slot(int(entry["val"]))
+			NetworkManager.consume_crate(crate_idx, 0)
+			return
+
 		var val: int = int(entry["val"])
 		body.apply_pickup(p_type, val)
 		NetworkManager.consume_crate(crate_idx, val)
@@ -1367,12 +1411,12 @@ func _consume_weapon_crate(crate_idx: int, body: Node2D) -> void:
 
 
 func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
-	if w_id == 11 or w_id == 15 or w_id == 16 or w_id == 17:
-		w_spr.texture = TEX_FLAMETHROWER if w_id == 11 else (TEX_HOOK_GUN if w_id == 15 else (TEX_BUBBLE_GUN if w_id == 16 else TEX_MACHINE_GUN))
+	if w_id == 11 or w_id == 13 or w_id == 15 or w_id == 16 or w_id == 17:
+		w_spr.texture = TEX_FLAMETHROWER if w_id == 11 else (TEX_PLASMA_CANNON if w_id == 13 else (TEX_HOOK_GUN if w_id == 15 else (TEX_BUBBLE_GUN if w_id == 16 else TEX_MACHINE_GUN)))
 		w_spr.hframes = 1
 		w_spr.vframes = 1
 		w_spr.frame = 0
-		w_spr.scale = Vector2(0.55, 0.55) if w_id == 11 else Vector2(0.95, 0.95)
+		w_spr.scale = Vector2(0.55, 0.55) if w_id == 11 else (Vector2(1.20, 1.20) if w_id == 17 else Vector2(0.95, 0.95))
 	else:
 		w_spr.texture = TEX_WEAPONS
 		w_spr.hframes = 11
@@ -2753,19 +2797,44 @@ class GroundBombIcon extends Node2D:
 	var bomb_idx: int = 0
 
 	func _draw() -> void:
-		draw_circle(Vector2.ZERO, 14.0, Color(0.10, 0.14, 0.20, 0.75))
+		draw_circle(Vector2.ZERO, 15.0, Color(0.08, 0.12, 0.18, 0.55))
 		match bomb_idx:
 			1: # sticky
-				draw_circle(Vector2.ZERO, 9.0, Color(0.24, 0.78, 1.0))
-				draw_arc(Vector2.ZERO, 9.0, 0.0, TAU, 16, Color(0.88, 0.98, 1.0), 2.0)
+				draw_circle(Vector2.ZERO, 9.5, Color(0.14, 0.20, 0.32))
+				draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, Color(0.24, 0.78, 1.0), 2.5)
+				for k in range(4):
+					var ang: float = float(k) * PI * 0.5 + PI * 0.25
+					draw_line(Vector2.from_angle(ang) * 7.5, Vector2.from_angle(ang) * 12.0, Color(0.75, 0.85, 1.0), 2.0)
+				draw_circle(Vector2.ZERO, 3.5, Color(1.0, 0.35, 0.20))
 			2: # time
-				draw_rect(Rect2(-8.5, -7, 17, 14), Color(0.95, 0.28, 0.24))
-				draw_rect(Rect2(-8.5, -7, 17, 14), Color(1.0, 0.82, 0.35), false, 1.8)
-				draw_circle(Vector2.ZERO, 2.5, Color.WHITE)
+				draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), Color(0.16, 0.18, 0.22))
+				draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), Color(0.95, 0.28, 0.24), false, 2.0)
+				draw_rect(Rect2(-6.0, -5.0, 12.0, 5.0), Color(0.08, 0.12, 0.10))
+				draw_circle(Vector2(0.0, 3.5), 3.2, Color(1.0, 0.25, 0.20))
 			3: # mine
-				draw_rect(Rect2(-9.5, 1, 19, 5), Color(0.96, 0.62, 0.18))
-				draw_circle(Vector2(0, -1.5), 4.0, Color(1.0, 0.25, 0.22))
+				draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), Color(0.18, 0.22, 0.24))
+				draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), Color(0.95, 0.58, 0.16), false, 2.0)
+				draw_circle(Vector2(0.0, -5.0), 3.5, Color(1.0, 0.22, 0.16))
 			_: # frag
-				draw_circle(Vector2.ZERO, 9.0, Color(0.26, 0.88, 0.42))
-				draw_arc(Vector2.ZERO, 9.0, 0.0, TAU, 16, Color(0.12, 0.16, 0.14), 2.0)
-				draw_line(Vector2(0, -8.5), Vector2(4, -12.5), Color(1.0, 0.80, 0.28), 2.4)
+				draw_circle(Vector2.ZERO, 9.5, Color(0.16, 0.22, 0.18))
+				draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, Color(0.26, 0.88, 0.42), 2.5)
+				draw_rect(Rect2(-3.0, -12.0, 6.0, 4.0), Color(0.75, 0.78, 0.84))
+				draw_circle(Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))
+
+
+class TreasurePointOrb extends Node2D:
+	var orb_kind: String = "abil_orb"
+	var slot_idx: int = 0
+
+	func _draw() -> void:
+		if orb_kind == "ult_full":
+			draw_circle(Vector2.ZERO, 20.0, Color(1.0, 0.28, 0.22, 0.28))
+			draw_circle(Vector2.ZERO, 14.0, Color(1.0, 0.26, 0.24))
+			draw_arc(Vector2.ZERO, 14.0, 0.0, TAU, 24, Color(1.0, 0.86, 0.30), 2.8)
+			draw_circle(Vector2(-3.5, -3.5), 4.5, Color(1.0, 0.94, 0.78))
+		else:
+			var col: Color = Color(1.0, 0.84, 0.24) if slot_idx == 0 else (Color(0.32, 0.94, 0.56) if slot_idx == 1 else Color(0.76, 0.46, 1.0))
+			draw_circle(Vector2.ZERO, 12.5, Color(col.r, col.g, col.b, 0.28))
+			draw_circle(Vector2.ZERO, 8.5, col)
+			draw_arc(Vector2.ZERO, 8.5, 0.0, TAU, 20, Color.WHITE, 1.8)
+			draw_circle(Vector2(-2.0, -2.0), 2.5, Color(1.0, 1.0, 1.0, 0.9))

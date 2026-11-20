@@ -30,6 +30,7 @@ extends Resource
 @export var is_homing: bool = false
 @export var custom_visual_style: String = "bullet"
 @export var custom_lifetime: float = 1.6
+@export var stun_duration: float = 0.0
 @export var explosion_radius: float = 0.0
 @export var muzzle_flash_scale: float = 1.0
 @export var bullet_color: Color = Color(1.0, 0.85, 0.25)
@@ -272,18 +273,21 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 		13:
 			w.code_name = "plasma_cannon"
 			w.display_name = "Plasma Cannon"
-			w.description = "High-energy plasma bolt! Pickup only."
-			w.damage = 46
+			w.description = "High-energy plasma bolt! 50% damage + 3s stun. Pickup only."
+			w.damage = 50
+			w.stun_duration = 3.0
+			w.damage_falloff_start = 9999.0
+			w.min_damage_ratio = 1.0
 			w.fire_interval = 0.36
 			w.mag_size = 12
 			w.reload_time = 1.6
 			w.recoil_impulse = 95.0
-			w.bullet_speed = 1180.0
+			w.bullet_speed = 920.0
 			w.spread_deg = 1.0
 			w.max_zoom_level = 4
-			w.is_laser = true
-			w.bullet_color = Color(0.28, 0.94, 1.0)
-			w.custom_visual_style = "stun_bolt"
+			w.is_laser = false
+			w.bullet_color = Color(0.18, 0.72, 1.0)
+			w.custom_visual_style = "plasma_ball"
 			w.custom_lifetime = 1.4
 			w.sound_path = "res://assets/audio/shoot_sniper.wav"
 			w.sprite_frame = 2

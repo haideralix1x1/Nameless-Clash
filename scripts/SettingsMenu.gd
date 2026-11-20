@@ -466,8 +466,7 @@ func _build_touch_layout_overlay() -> void:
 		{"key": "btn_reload", "label": "RELOAD", "size": Vector2(116, 48), "col": Color(0.68, 0.80, 0.98)},
 		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(116, 48), "col": Color(1.0, 0.56, 0.16)},
 		{"key": "btn_dual", "label": "DUAL", "size": Vector2(116, 48), "col": Color(0.28, 0.92, 1.0)},
-		{"key": "ability_bar", "label": "ABILITY BAR\n(Q / E / C / X)", "size": Vector2(360, 76), "col": Color(0.78, 0.48, 1.0)},
-		{"key": "btn_presets", "label": "LOADOUT [B]", "size": Vector2(154, 38), "col": Color(1.0, 0.80, 0.24)}
+		{"key": "ability_bar", "label": "ABILITY BAR\n(Q / E / C / X)", "size": Vector2(360, 76), "col": Color(0.78, 0.48, 1.0)}
 	]
 
 	for spec in handle_specs:
