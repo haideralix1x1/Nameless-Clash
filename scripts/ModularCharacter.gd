@@ -140,28 +140,15 @@ func apply_loadout(config: Dictionary) -> void:
 	var hands_path := str(config.get("hands_texture",
 		"res://assets/sprites/modular/hands_%d.png" % hands_id))
 
-	if arch_idx == 22 and (ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png") or FileAccess.file_exists(ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png"))):
-		_custom_full_sheet = true
-		torso_path = "res://assets/sprites/characters/jackson_sheet.png"
-		_anim_head.visible = false
-		_sprite_gear.visible = false
-		_sprite_back.visible = false
-		_sprite_hands.visible = false
-		if _sprite_hand_far != null:
-			_sprite_hand_far.visible = false
-		_anim_legs.visible = true
-		_anim_torso.visible = true
-		_anim_torso.scale = Vector2(0.88, 0.88)
-	else:
-		_custom_full_sheet = false
-		_anim_head.visible = true
-		_sprite_gear.visible = true
-		_sprite_back.visible = true
-		_sprite_hands.visible = true
-		if _sprite_hand_far != null:
-			_sprite_hand_far.visible = true
-		_anim_legs.visible = true
-		_anim_torso.scale = Vector2.ONE
+	_custom_full_sheet = false
+	_anim_head.visible = true
+	_sprite_gear.visible = true
+	_sprite_back.visible = true
+	_sprite_hands.visible = true
+	if _sprite_hand_far != null:
+		_sprite_hand_far.visible = true
+	_anim_legs.visible = true
+	_anim_torso.scale = Vector2.ONE
 
 	_apply_animated_strip(_anim_head, head_path)
 	_apply_animated_strip(_anim_torso, torso_path)

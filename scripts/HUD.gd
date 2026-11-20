@@ -1545,15 +1545,10 @@ func _refresh_top_info_pill() -> void:
 		var arch_id: int = int(local_player.get("archetype_id"))
 		var ag: Dictionary = AgentData.get_agent(arch_id)
 		var part_id: int = ProfileManager.get_archetype_part_id(arch_id)
-		if arch_id == 22:
-			_set_portrait_frame(_agent_portrait, "res://assets/sprites/characters/jackson_sheet.png")
-			if is_instance_valid(_agent_hat_overlay):
-				_agent_hat_overlay.visible = false
-		else:
-			_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
-			_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
-			if is_instance_valid(_agent_hat_overlay):
-				_agent_hat_overlay.visible = true
+		_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
+		_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
+		if is_instance_valid(_agent_hat_overlay):
+			_agent_hat_overlay.visible = true
 		if is_instance_valid(_weapon_name_label):
 			_weapon_name_label.text = str(ag["agent_name"]).to_upper()
 		if is_instance_valid(_dual_badge):
@@ -1584,15 +1579,10 @@ func _refresh_top_info_pill() -> void:
 					var e_arch: int = int(best_enemy.get("archetype_id"))
 					var e_part: int = ProfileManager.get_archetype_part_id(e_arch)
 					_target_portrait.visible = true
-					if e_arch == 22:
-						_set_portrait_frame(_target_portrait, "res://assets/sprites/characters/jackson_sheet.png")
-						if is_instance_valid(_target_hat_overlay):
-							_target_hat_overlay.visible = false
-					else:
-						_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
-						_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
-						if is_instance_valid(_target_hat_overlay):
-							_target_hat_overlay.visible = true
+					_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
+					_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
+					if is_instance_valid(_target_hat_overlay):
+						_target_hat_overlay.visible = true
 			else:
 				_ammo_label.text = "NO TARGET"
 				_ammo_label.modulate = Color(0.65, 0.75, 0.85)

@@ -361,7 +361,7 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 				var stop_off: float = 42.0 if (collider as Node2D).global_position.x > boomerang_owner.global_position.x else -42.0
 				collider.request_hook_pull(boomerang_owner.global_position + Vector2(stop_off, -8.0))
 			elif on_hit_effect_kind == "bubble_trap" and collider.has_method("apply_bubble_trap"):
-				collider.apply_bubble_trap(10.0, 60)
+				collider.apply_bubble_trap(10.0, 120)
 			if stun_duration > 0.0 and collider.has_method("apply_stun"):
 				collider.apply_stun(stun_duration, shooter_peer_id)
 			if reverse_controls_dur > 0.0 and collider.has_method("apply_reverse_controls"):

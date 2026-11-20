@@ -208,8 +208,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"name": "Jackson (Heavyweight Boxer)",
 		"desc": "Heavyweight Black boxer champion delivering huge boxy punches, running spears, sky-smashes, and knockout flurries.",
 		"part_id": 23,
-		"shirt": Color(0.88, 0.16, 0.20), "pants": Color(0.18, 0.18, 0.24),
-		"skin": Color(0.38, 0.23, 0.15), "helmet": Color(0.22, 0.16, 0.14), "gear": Color(0.95, 0.78, 0.20),
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
 	}
 ]
@@ -410,6 +410,12 @@ func load_profile() -> void:
 	skin_color = cfg.get_value("colors", "skin_color", skin_color) as Color
 	helmet_color = cfg.get_value("colors", "helmet_color", helmet_color) as Color
 	gear_color = cfg.get_value("colors", "gear_color", gear_color) as Color
+	if archetype_id == 22 and (shirt_color.is_equal_approx(Color(0.88, 0.16, 0.20)) or skin_color.is_equal_approx(Color(0.38, 0.23, 0.15))):
+		shirt_color = Color.WHITE
+		pants_color = Color.WHITE
+		skin_color = Color.WHITE
+		helmet_color = Color.WHITE
+		gear_color = Color.WHITE
 
 	primary_weapon_id = clampi(int(cfg.get_value("loadout", "primary_weapon_id", 0)), 0, WEAPON_NAMES.size() - 1)
 	secondary_weapon_id = clampi(int(cfg.get_value("loadout", "secondary_weapon_id", 9)), 0, WEAPON_NAMES.size() - 1)

@@ -645,27 +645,6 @@ func _trigger_preview_ability(slot_i: int) -> void:
 
 
 func _make_agent_icon(arch_idx: int) -> Texture2D:
-	if arch_idx == 22:
-		var j_abs: String = ProjectSettings.globalize_path("res://assets/sprites/characters/jackson_sheet.png")
-		var j_img: Image = null
-		if ResourceLoader.exists("res://assets/sprites/characters/jackson_sheet.png"):
-			var jt: Texture2D = load("res://assets/sprites/characters/jackson_sheet.png") as Texture2D
-			if jt != null:
-				j_img = jt.get_image()
-		elif FileAccess.file_exists(j_abs):
-			j_img = Image.new()
-			if j_img.load(j_abs) != OK:
-				j_img = null
-		if j_img != null and j_img.get_width() >= 768:
-			var j_crop: Image = j_img.get_region(Rect2i(0, 0, 96, 56))
-			if j_crop.get_format() != Image.FORMAT_RGBA8:
-				j_crop.convert(Image.FORMAT_RGBA8)
-			var j_used: Rect2i = j_crop.get_used_rect()
-			if j_used.size.x > 0 and j_used.size.y > 0:
-				var j_trim: Image = j_crop.get_region(j_used)
-				var j_sc: float = 42.0 / float(maxi(j_used.size.x, j_used.size.y))
-				j_trim.resize(maxi(1, int(round(float(j_used.size.x) * j_sc))), maxi(1, int(round(float(j_used.size.y) * j_sc))), Image.INTERPOLATE_BILINEAR)
-				return ImageTexture.create_from_image(j_trim)
 	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
 	var parts: Dictionary = arch.get("parts", {})
 	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)

@@ -1644,7 +1644,7 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.52
+		_primary_weapon.scale = Vector2(0.55, 0.55)
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 15:
@@ -1652,7 +1652,7 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.56
+		_primary_weapon.scale = Vector2(0.95, 0.95)
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 16:
@@ -1660,7 +1660,7 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.56
+		_primary_weapon.scale = Vector2(0.95, 0.95)
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 17:
@@ -1668,7 +1668,7 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.95
+		_primary_weapon.scale = Vector2(1.20, 1.20)
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 13:
@@ -1676,14 +1676,14 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = _weapons_base_scale * 0.60
+		_primary_weapon.scale = Vector2(0.95, 0.95)
 		_secondary_weapon.visible = false
 		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
 		_primary_weapon.texture = _weapons_sheet_tex
 		_primary_weapon.hframes = 11
 		_primary_weapon.vframes = 3
-		_primary_weapon.scale = _weapons_base_scale
+	_primary_weapon.scale = Vector2(0.95, 0.95)
 	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
 	_primary_weapon.frame = sheet_frame
 	_secondary_weapon.frame = sheet_frame
@@ -3573,7 +3573,7 @@ func sync_hook_pull_rpc(target_pos: Vector2) -> void:
 	start_hook_pull(target_pos)
 
 
-func apply_bubble_trap(dur: float = 10.0, hp: int = 60) -> void:
+func apply_bubble_trap(dur: float = 10.0, hp: int = 120) -> void:
 	if is_dead or spawn_invuln_timer > 0.0:
 		return
 	if NetworkManager.is_network_active():
