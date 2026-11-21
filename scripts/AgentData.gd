@@ -886,7 +886,7 @@ const AGENTS: Array[Dictionary] = [
 		"accent": Color(0.76, 0.42, 0.96),
 		"base_weapon": {
 			"name": "Orc Skull Crusher",
-			"style": "axe",
+			"style": "orc_axe",
 			"damage": 26,
 			"cooldown": 0.36,
 			"range": 108.0,
@@ -1093,13 +1093,13 @@ const AGENTS: Array[Dictionary] = [
 		},
 		"abilities": [
 			{
-				"name": "Murder of Ravens",
+				"name": "Shadow Raven",
 				"kind": "raven_swarm",
 				"cooldown": 6.5,
-				"damage": 28,
-				"shots": 3,
+				"damage": 70,
+				"shots": 1,
 				"color": Color(0.28, 0.16, 0.45),
-				"desc": "Spawn 3 homing ravens that fly, track, and attack enemies."
+				"desc": "Launch a single homing raven that tracks and strikes an enemy for 70% damage."
 			},
 			{
 				"name": "Dark Telekinesis",
@@ -1277,6 +1277,57 @@ const AGENTS: Array[Dictionary] = [
 			"damage": 100,
 			"color": Color(0.20, 0.65, 1.0),
 			"desc": "Teleport behind a nearby enemy and execute them with a lethal slash."
+		}
+	},
+	# 25: Bramble // Crimson Hare
+	{
+		"id": 25,
+		"agent_name": "Bramble",
+		"title": "Crimson Hare",
+		"role": "Brawler Hare",
+		"accent": Color(0.88, 0.20, 0.28),
+		"base_weapon": {
+			"name": "Crimson Knuckles",
+			"style": "claws",
+			"damage": 24,
+			"cooldown": 0.28,
+			"range": 102.0,
+			"color": Color(0.88, 0.20, 0.28),
+			"ranged": false
+		},
+		"abilities": [
+			{
+				"name": "Fury Dash",
+				"kind": "dash_speed",
+				"damage": 32,
+				"duration": 3.0,
+				"speed_mult": 1.75,
+				"color": Color(0.92, 0.24, 0.30),
+				"desc": "Surge forward with boosted speed and fierce crimson strikes."
+			},
+			{
+				"name": "Hare Uppercut",
+				"kind": "boxer_huge_punch",
+				"damage": 48,
+				"stun": 0.7,
+				"color": Color(0.95, 0.28, 0.32),
+				"desc": "Deliver a heavy crimson uppercut that stuns and knocks enemies back."
+			},
+			{
+				"name": "Sky Drop",
+				"kind": "sky_smash_punch",
+				"damage": 55,
+				"stun": 0.9,
+				"color": Color(0.85, 0.18, 0.28),
+				"desc": "Smash down from above onto a nearby enemy."
+			}
+		],
+		"ultimate": {
+			"name": "Crimson Barrage",
+			"kind": "ult_boxer_flurry",
+			"damage": 100,
+			"color": Color(0.96, 0.20, 0.26),
+			"desc": "Rush a nearby forward enemy and unleash a rapid crimson punch barrage."
 		}
 	}
 ]

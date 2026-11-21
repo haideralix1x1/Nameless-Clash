@@ -1,6 +1,11 @@
 extends Node2D
 
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
+const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
+const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
+const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
+const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
+const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
 
 var bomb_type: String = "frag"
 var velocity: Vector2 = Vector2.ZERO
@@ -229,36 +234,25 @@ func _draw() -> void:
 				draw_arc(Vector2.ZERO, _trigger_radius, 0.0, TAU, 28, Color(1.0, 0.32, 0.22, 0.55 + 0.25 * pulse), 2.0)
 			elif _settled:
 				draw_arc(Vector2.ZERO, _trigger_radius, 0.0, TAU, 24, Color(1.0, 0.78, 0.25, 0.35), 1.5)
-			draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), Color(0.18, 0.22, 0.24))
-			draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), bomb_color, false, 2.0)
-			draw_circle(Vector2(0.0, -5.0), 3.5, Color(1.0, 0.22, 0.16) if (_armed or pulse > 0.5) else Color(0.4, 0.1, 0.1))
+			draw_texture_rect(TEX_BOMB_MINE, Rect2(-14.0, -14.0, 28.0, 28.0), false)
 		"time":
 			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
-			draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), Color(0.16, 0.18, 0.22))
-			draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), bomb_color, false, 2.0)
-			draw_rect(Rect2(-6.0, -5.0, 12.0, 5.0), Color(0.08, 0.12, 0.10))
-			var led_col: Color = Color(1.0, 0.25, 0.20) if _beep_flash > 0.15 else Color(0.65, 0.12, 0.12)
-			draw_circle(Vector2(0.0, 3.5), 3.2, led_col)
+			draw_texture_rect(TEX_BOMB_TIME, Rect2(-15.0, -15.0, 30.0, 30.0), false)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			if _beep_flash > 0.05:
 				draw_arc(Vector2.ZERO, 14.0 + (1.0 - _beep_flash) * 26.0, 0.0, TAU, 24, Color(1.0, 0.32, 0.22, _beep_flash * 0.85), 2.5)
 			var frac: float = clampf(1.0 - (_age / maxf(0.1, _fuse_time)), 0.0, 1.0)
-			draw_arc(Vector2.ZERO, 13.5, -PI * 0.5, -PI * 0.5 + TAU * frac, 20, Color(1.0, 0.72, 0.22, 0.8), 2.0)
+			draw_arc(Vector2.ZERO, 16.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 20, Color(1.0, 0.72, 0.22, 0.8), 2.0)
 		"sticky":
 			draw_set_transform(Vector2.ZERO, _spin if not _stuck else 0.0, Vector2.ONE)
-			draw_circle(Vector2.ZERO, 9.5, Color(0.14, 0.20, 0.32))
-			draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, bomb_color, 2.5)
-			for k in range(4):
-				var ang: float = float(k) * PI * 0.5 + PI * 0.25
-				draw_line(Vector2.from_angle(ang) * 7.5, Vector2.from_angle(ang) * 12.0, Color(0.75, 0.85, 1.0), 2.0)
-			var blink: bool = fmod(_age * 4.5, 1.0) < 0.5
-			draw_circle(Vector2.ZERO, 3.5, Color(1.0, 0.35, 0.2) if blink else Color(0.35, 0.75, 1.0))
+			draw_texture_rect(TEX_BOMB_STICKY, Rect2(-14.0, -14.0, 28.0, 28.0), false)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		"cluster":
+			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
+			draw_texture_rect(TEX_BOMB_CLUSTER, Rect2(-14.0, -14.0, 28.0, 28.0), false)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		_:
 			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
-			draw_circle(Vector2.ZERO, 9.5, Color(0.16, 0.22, 0.18))
-			draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, bomb_color, 2.5)
-			draw_rect(Rect2(-3.0, -12.0, 6.0, 4.0), Color(0.75, 0.78, 0.84))
-			var spark: bool = fmod(_age * 8.0, 1.0) < 0.5
-			draw_circle(Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22) if spark else Color(1.0, 0.40, 0.12))
+			draw_texture_rect(TEX_BOMB_FRAG, Rect2(-14.0, -14.0, 28.0, 28.0), false)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+

@@ -2,16 +2,16 @@
 
 [ext_resource type="Script" path="res://scripts/PlayerController.gd" id="1_player_script"]
 [ext_resource type="Script" path="res://scripts/ModularCharacter.gd" id="2_modular_script"]
-[ext_resource type="Texture2D" path="res://assets/sprites/modular/accessories_0.png" id="5_acc_tex"]
-[ext_resource type="Texture2D" path="res://assets/sprites/modular/head_0.png" id="6_head_tex"]
-[ext_resource type="Texture2D" path="res://assets/sprites/modular/hands_0.png" id="7_hands_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/contra_accessories.png" id="5_acc_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/contra_head.png" id="6_head_tex"]
+[ext_resource type="Texture2D" path="res://assets/sprites/modular/contra_hands.png" id="7_hands_tex"]
 [ext_resource type="Texture2D" path="res://assets/sprites/weapons_sheet.png" id="8_weapons_tex"]
 [ext_resource type="Texture2D" path="res://assets/sprites/muzzle_flash.png" id="9_flash_tex"]
 [ext_resource type="AudioStream" path="res://assets/audio/jetpack.wav" id="10_jet_snd"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_player"]
-radius = 14.0
-height = 48.0
+radius = 17.0
+height = 58.0
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_player"]
 properties/0/path = NodePath(".:global_position")
@@ -64,7 +64,7 @@ collision_mask = 1
 script = ExtResource("1_player_script")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2(0, 3)
+position = Vector2(0, 2)
 shape = SubResource("CapsuleShape2D_player")
 
 [node name="JetpackParticles" type="CPUParticles2D" parent="."]
@@ -82,7 +82,8 @@ scale_amount_max = 6.0
 color = Color(1, 0.62, 0.14, 0.9)
 
 [node name="ModularRig" type="Node2D" parent="."]
-scale = Vector2(0.72, 0.72)
+position = Vector2(0, -5)
+scale = Vector2(0.92, 0.92)
 script = ExtResource("2_modular_script")
 
 [node name="Sprite2D_Back" type="Sprite2D" parent="ModularRig"]
@@ -104,7 +105,8 @@ texture = ExtResource("7_hands_tex")
 hframes = 8
 
 [node name="WeaponPivot" type="Node2D" parent="."]
-position = Vector2(0, 6)
+position = Vector2(0, 5)
+scale = Vector2(1.16, 1.16)
 
 [node name="SecondaryWeapon" type="Sprite2D" parent="WeaponPivot"]
 visible = false
@@ -151,7 +153,7 @@ scale_amount_max = 11.0
 color = Color(0.82, 0.78, 0.72, 0.75)
 
 [node name="OverheadUI" type="Node2D" parent="."]
-position = Vector2(0, -44)
+position = Vector2(0, -58)
 
 [node name="NameLabel" type="Label" parent="OverheadUI"]
 offset_left = -56.0

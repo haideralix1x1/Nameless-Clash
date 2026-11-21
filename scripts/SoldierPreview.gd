@@ -5,6 +5,7 @@ const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 
 var anim_mode: int = 0
 var shuffle_guns: bool = false
+var hide_weapons: bool = false
 var _timer: float = 0.0
 var _preview_weapon_id: int = -1
 
@@ -28,8 +29,8 @@ func _ready() -> void:
 	_gun_s.texture = TEX_WEAPONS
 	_gun_s.hframes = 11
 	_gun_s.vframes = 3
-	_gun_s.position = Vector2(10, 4)
-	_gun_s.scale = Vector2(0.68, 0.68)
+	_gun_s.position = Vector2(12, 4)
+	_gun_s.scale = Vector2(0.215, 0.215)
 	_gun_s.z_index = -1
 	_weapon_pivot.add_child(_gun_s)
 
@@ -37,8 +38,8 @@ func _ready() -> void:
 	_gun_p.texture = TEX_WEAPONS
 	_gun_p.hframes = 11
 	_gun_p.vframes = 3
-	_gun_p.position = Vector2(14, 0)
-	_gun_p.scale = Vector2(0.72, 0.72)
+	_gun_p.position = Vector2(16, 0)
+	_gun_p.scale = Vector2(0.23, 0.23)
 	_weapon_pivot.add_child(_gun_p)
 
 	refresh_from_profile()
@@ -63,6 +64,10 @@ func refresh_from_profile() -> void:
 
 func _apply_preview_weapon(w_id: int) -> void:
 	_preview_weapon_id = w_id
+	if hide_weapons:
+		_weapon_pivot.visible = false
+		return
+	_weapon_pivot.visible = true
 	var w_frame: int = ProfileManager.weapon_skin_id * 11 + w_id
 	_gun_p.frame = w_frame
 	_gun_s.frame = w_frame
@@ -88,8 +93,24 @@ func _process(delta: float) -> void:
 
 	_modular.set_sync_frame(frame_idx, false)
 
-	_weapon_pivot.position.y = 11.0 if anim_mode == 3 else (7.0 if anim_mode == 2 else 9.0)
-	_weapon_pivot.rotation = sin(_timer * 2.0) * 0.08
+	if hide_weapons:
+		_weapon_pivot.visible = false
+		_modular.apply_weapon_arm_pose("none", 0.0, true, 0.0, -1.0)
+		return
 	var active_w: int = _preview_weapon_id if (shuffle_guns and _preview_weapon_id >= 0) else ProfileManager.primary_weapon_id
 	var stance: String = ModularCharacter.get_weapon_stance(active_w, _gun_s != null and _gun_s.visible)
-	_modular.apply_weapon_arm_pose(stance, _weapon_pivot.rotation, true, 0.0, -1.0)
+	var ov: Dictionary = ModularCharacter.get_pose_override(ProfileManager.head_id, stance, _modular._current_anim)
+	var w_ov: Dictionary = ov.get("weapon", {})
+	var base_wy: float = 11.0 if anim_mode == 3 else (7.0 if anim_mode == 2 else 9.0)
+	var idle_sway: float = sin(_timer * 2.0) * 0.08
+	_modular.apply_weapon_arm_pose(stance, idle_sway, true, 0.0, -1.0)
+	var sock: Dictionary = _modular.get_weapon_socket_transform(stance, true, w_ov, base_wy)
+	_weapon_pivot.position = sock["pos"] as Vector2
+	_weapon_pivot.z_index = int(sock["z"])
+	_weapon_pivot.rotation = float(sock["rot"]) + idle_sway
+	if _gun_s != null and _gun_s.visible:
+		var far_pos: Vector2 = sock["far_pos"] as Vector2
+		var far_rot: float = float(sock["far_rot"])
+		_gun_s.position = (far_pos - _weapon_pivot.position).rotated(-_weapon_pivot.rotation)
+		_gun_s.rotation = far_rot - _weapon_pivot.rotation
+

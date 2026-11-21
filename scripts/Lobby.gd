@@ -791,8 +791,8 @@ func _make_draft_agent_icon(arch_idx: int) -> Texture2D:
 	var parts: Dictionary = arch.get("parts", {})
 	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
 	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
-	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
-	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	var skin_tex: Texture2D = load(ModularCharacter.get_part_texture_path("skin", s_idx)) as Texture2D
+	var head_tex: Texture2D = load(ModularCharacter.get_part_texture_path("head", s_idx)) as Texture2D
 	if skin_tex == null:
 		return null
 	var fw: int = skin_tex.get_width() / 8

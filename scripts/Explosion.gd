@@ -54,8 +54,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_elapsed += delta
 	var progress: float = clampf(_elapsed / _duration, 0.0, 1.0)
-	var frame_idx: int = clampi(int(progress * 6.0), 0, 5)
-	_sprite.frame = frame_idx
+	if _elapsed >= _duration:
+		_sprite.visible = false
+	elif not custom_splash_only and not lightning_orb_only:
+		var frame_idx: int = clampi(int(progress * 8.0), 0, 7)
+		_sprite.frame = frame_idx
+		_sprite.modulate.a = clampf((1.0 - progress) * 3.0, 0.0, 1.0)
 	_ring_radius = lerpf(10.0, explosion_radius, progress)
 	_ring_alpha = 1.0 - progress
 	queue_redraw()

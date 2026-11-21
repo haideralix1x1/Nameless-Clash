@@ -648,10 +648,11 @@ func _build_weapons_tab(parent: VBoxContainer) -> Control:
 
 	var w_atlas := AtlasTexture.new()
 	w_atlas.atlas = TEX_WEAPONS
-	w_atlas.region = Rect2(0, 0, 64, 32)
+	w_atlas.region = Rect2(0, 0, 256, 128)
 	_weapon_icon_rect = TextureRect.new()
 	_weapon_icon_rect.texture = w_atlas
 	_weapon_icon_rect.custom_minimum_size = Vector2(96, 48)
+	_weapon_icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_weapon_icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	top_stat.add_child(_weapon_icon_rect)
 
@@ -926,7 +927,7 @@ func _refresh_ui() -> void:
 
 	var atlas: AtlasTexture = _weapon_icon_rect.texture as AtlasTexture
 	if atlas != null:
-		atlas.region = Rect2(w.sprite_frame * 64, ProfileManager.weapon_skin_id * 32, 64, 32)
+		atlas.region = Rect2(w.sprite_frame * 256, ProfileManager.weapon_skin_id * 128, 256, 128)
 
 	_weapon_title_label.text = w.display_name
 	_weapon_sub_label.text = "%s  •  %d Rounds" % [w.category, w.mag_size]
@@ -1057,8 +1058,8 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	var parts: Dictionary = arch.get("parts", {})
 	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
 	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
-	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
-	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	var skin_tex: Texture2D = load(ModularCharacter.get_part_texture_path("skin", s_idx)) as Texture2D
+	var head_tex: Texture2D = load(ModularCharacter.get_part_texture_path("head", s_idx)) as Texture2D
 	if skin_tex == null:
 		return null
 	var fw: int = skin_tex.get_width() / 8

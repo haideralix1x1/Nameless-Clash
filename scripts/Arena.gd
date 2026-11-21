@@ -12,7 +12,7 @@ const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.p
 const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
 const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
 const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
-const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine"]
+const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine", "cluster"]
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
 const DEFAULT_ARENA_HEIGHT: float = 1248.0
@@ -787,6 +787,7 @@ func _build_pickup_crates() -> void:
 		else:
 			var spr := Sprite2D.new()
 			spr.texture = TEX_CRATE
+			spr.scale = Vector2(0.25, 0.25)
 			visual = spr
 		area.add_child(visual)
 
@@ -1220,6 +1221,7 @@ func _spawn_treasure_drop(origin_pos: Vector2, target_pos: Vector2, drop_type: S
 	else:
 		var spr := Sprite2D.new()
 		spr.texture = TEX_CRATE
+		spr.scale = Vector2(0.25, 0.25)
 		visual = spr
 	area.add_child(visual)
 
@@ -1416,13 +1418,13 @@ func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
 		w_spr.hframes = 1
 		w_spr.vframes = 1
 		w_spr.frame = 0
-		w_spr.scale = Vector2(0.55, 0.55) if w_id == 11 else (Vector2(1.20, 1.20) if w_id == 17 else Vector2(0.95, 0.95))
+		w_spr.scale = (Vector2(0.55, 0.55) if w_id == 11 else (Vector2(1.20, 1.20) if w_id == 17 else Vector2(0.95, 0.95))) * 0.30
 	else:
 		w_spr.texture = TEX_WEAPONS
 		w_spr.hframes = 11
 		w_spr.vframes = 3
 		w_spr.frame = WeaponData.get_weapon(w_id, 0, 0).sprite_frame
-		w_spr.scale = Vector2(0.95, 0.95)
+		w_spr.scale = Vector2(0.95, 0.95) * 0.30
 
 
 func _pick_safest_spawn() -> Vector2:
@@ -2787,39 +2789,34 @@ class ArenaAutoMine extends Area2D:
 		queue_free()
 
 	func _draw() -> void:
-		draw_rect(Rect2(-11, -3, 22, 6), Color(0.22, 0.24, 0.28))
-		draw_rect(Rect2(-11, -3, 22, 6), Color(0.75, 0.55, 0.20), false, 1.8)
+		draw_texture_rect(GroundBombIcon.TEX_BOMB_MINE, Rect2(-13.0, -14.0, 26.0, 26.0), false)
 		var led_on: bool = _arm_timer <= 0.0 and sin(_pulse) > 0.0
-		draw_circle(Vector2(0, -4), 3.5, Color(1.0, 0.25, 0.18) if led_on else Color(0.95, 0.68, 0.20))
+		if led_on:
+			draw_circle(Vector2(0, -1), 3.0, Color(1.0, 0.25, 0.18, 0.85))
 
 
 class GroundBombIcon extends Node2D:
+	const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
+	const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
+	const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
+	const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
+	const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
 	var bomb_idx: int = 0
 
 	func _draw() -> void:
-		draw_circle(Vector2.ZERO, 15.0, Color(0.08, 0.12, 0.18, 0.55))
+		draw_circle(Vector2.ZERO, 16.0, Color(0.08, 0.12, 0.18, 0.45))
+		var r := Rect2(-15.0, -15.0, 30.0, 30.0)
 		match bomb_idx:
 			1: # sticky
-				draw_circle(Vector2.ZERO, 9.5, Color(0.14, 0.20, 0.32))
-				draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, Color(0.24, 0.78, 1.0), 2.5)
-				for k in range(4):
-					var ang: float = float(k) * PI * 0.5 + PI * 0.25
-					draw_line(Vector2.from_angle(ang) * 7.5, Vector2.from_angle(ang) * 12.0, Color(0.75, 0.85, 1.0), 2.0)
-				draw_circle(Vector2.ZERO, 3.5, Color(1.0, 0.35, 0.20))
+				draw_texture_rect(TEX_BOMB_STICKY, r, false)
 			2: # time
-				draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), Color(0.16, 0.18, 0.22))
-				draw_rect(Rect2(-10.0, -8.0, 20.0, 16.0), Color(0.95, 0.28, 0.24), false, 2.0)
-				draw_rect(Rect2(-6.0, -5.0, 12.0, 5.0), Color(0.08, 0.12, 0.10))
-				draw_circle(Vector2(0.0, 3.5), 3.2, Color(1.0, 0.25, 0.20))
+				draw_texture_rect(TEX_BOMB_TIME, r, false)
 			3: # mine
-				draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), Color(0.18, 0.22, 0.24))
-				draw_rect(Rect2(-11.0, -4.0, 22.0, 9.0), Color(0.95, 0.58, 0.16), false, 2.0)
-				draw_circle(Vector2(0.0, -5.0), 3.5, Color(1.0, 0.22, 0.16))
+				draw_texture_rect(TEX_BOMB_MINE, r, false)
+			4: # cluster
+				draw_texture_rect(TEX_BOMB_CLUSTER, r, false)
 			_: # frag
-				draw_circle(Vector2.ZERO, 9.5, Color(0.16, 0.22, 0.18))
-				draw_arc(Vector2.ZERO, 9.5, 0.0, TAU, 16, Color(0.26, 0.88, 0.42), 2.5)
-				draw_rect(Rect2(-3.0, -12.0, 6.0, 4.0), Color(0.75, 0.78, 0.84))
-				draw_circle(Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))
+				draw_texture_rect(TEX_BOMB_FRAG, r, false)
 
 
 class TreasurePointOrb extends Node2D:

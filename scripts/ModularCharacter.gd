@@ -6,7 +6,27 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 28
+const MAX_PART_INDEX := 30
+
+const PART_OWNER_NAMES: Array[String] = [
+	"contra", "mike_jones", "bruski", "commando", "rook_frost",
+	"spartan", "centurion", "warlord", "crusader", "king",
+	"pirate", "yagami", "dead_buddy", "nothing", "wraith",
+	"mummy", "jack_47", "viper_x", "nyx", "akuza",
+	"mirror_ogre", "ignis", "prism", "afera", "raven",
+	"ray_lina", "draken", "soulless", "kaito", "bramble",
+	"jackson"
+]
+
+
+static func get_part_owner_name(part_id: int) -> String:
+	var idx: int = clampi(part_id, 0, PART_OWNER_NAMES.size() - 1)
+	return PART_OWNER_NAMES[idx]
+
+
+static func get_part_texture_path(part_kind: String, part_id: int) -> String:
+	return "res://assets/sprites/modular/%s_%s.png" % [get_part_owner_name(part_id), part_kind]
+
 
 const ANIM_DEFS: Dictionary = {
 	"idle": {"frames": [0, 1], "fps": 3.5, "loop": true},
@@ -35,6 +55,7 @@ var _is_raven_wing: bool = false
 var _is_wraith_cape: bool = false
 var _is_ignis_head_fire: bool = false
 var _is_ignis_hands_fire: bool = false
+var _is_soulless_smoke: bool = false
 var _wing_flap_t: float = 0.0
 var _fire_anim_t: float = 0.0
 var hands_z_over_weapon: int = 0
@@ -49,6 +70,57 @@ var _base_colors: Dictionary = {
 
 var _tex_cache: Dictionary = {}
 var _frames_cache: Dictionary = {}
+var _current_part_id: int = 0
+
+static var _pose_overrides: Dictionary = {}
+static var _pose_overrides_loaded: bool = false
+
+
+static func reload_pose_overrides() -> void:
+	_pose_overrides = {"stances": {}, "agents": {}}
+	_pose_overrides_loaded = true
+	for path in ["res://assets/data/pose_overrides.json", "user://pose_overrides.json"]:
+		if FileAccess.file_exists(path):
+			var txt := FileAccess.get_file_as_string(path)
+			var parsed: Variant = JSON.parse_string(txt)
+			if parsed is Dictionary:
+				var d := parsed as Dictionary
+				if d.has("stances") and d["stances"] is Dictionary:
+					for k in d["stances"]:
+						_pose_overrides["stances"][k] = d["stances"][k]
+				if d.has("agents") and d["agents"] is Dictionary:
+					for ak in d["agents"]:
+						_pose_overrides["agents"][str(ak)] = d["agents"][ak]
+
+
+static func _merge_pose_bucket(dst: Dictionary, bucket: Variant) -> void:
+	if not (bucket is Dictionary):
+		return
+	var b := bucket as Dictionary
+	for pk in b:
+		if b[pk] is Dictionary:
+			dst[pk] = (b[pk] as Dictionary).duplicate(true)
+
+
+static func get_pose_override(part_id: int, stance: String, anim_name: String = "") -> Dictionary:
+	if not _pose_overrides_loaded:
+		reload_pose_overrides()
+	var merged: Dictionary = {}
+	var anim_key: String = (stance + "@" + anim_name) if anim_name != "" else ""
+	var stances: Dictionary = _pose_overrides.get("stances", {})
+	if stances.has(stance):
+		_merge_pose_bucket(merged, stances[stance])
+	if anim_key != "" and stances.has(anim_key):
+		_merge_pose_bucket(merged, stances[anim_key])
+	var agents: Dictionary = _pose_overrides.get("agents", {})
+	var ak := str(part_id)
+	if agents.has(ak) and agents[ak] is Dictionary:
+		var ast: Dictionary = agents[ak]
+		if ast.has(stance):
+			_merge_pose_bucket(merged, ast[stance])
+		if anim_key != "" and ast.has(anim_key):
+			_merge_pose_bucket(merged, ast[anim_key])
+	return merged
 
 
 func _ready() -> void:
@@ -79,7 +151,7 @@ func _process(delta: float) -> void:
 			_sprite_back.rotation = lerpf(_sprite_back.rotation, 0.0, clampf(delta * 14.0, 0.0, 1.0))
 			_sprite_back.position = _sprite_back.position.lerp(Vector2.ZERO, clampf(delta * 14.0, 0.0, 1.0))
 			_sprite_back.scale = Vector2.ONE * base_s
-	if _is_ignis_head_fire or _is_ignis_hands_fire:
+	if _is_ignis_head_fire or _is_ignis_hands_fire or _is_soulless_smoke:
 		_fire_anim_t += delta * 14.0
 		queue_redraw()
 	if _manual_sync_mode or _anim_legs == null:
@@ -103,8 +175,8 @@ func _ensure_layers() -> void:
 	_sprite_hands = _get_or_create_sprite("Sprite2D_Hands")
 	_sprite_hands.hframes = 1
 	_sprite_hands.region_enabled = true
-	if _sprite_hand_far.get_index() > _sprite_hands.get_index():
-		move_child(_sprite_hand_far, _sprite_hands.get_index())
+	if _sprite_hand_far.get_index() > _anim_torso.get_index():
+		move_child(_sprite_hand_far, _anim_torso.get_index())
 	_sprite_shoe_throw = _get_or_create_sprite("Sprite2D_ShoeThrow")
 	if ResourceLoader.exists("res://assets/sprites/modular/shoe_throw.png"):
 		_sprite_shoe_throw.texture = load("res://assets/sprites/modular/shoe_throw.png") as Texture2D
@@ -153,23 +225,24 @@ func apply_loadout(config: Dictionary) -> void:
 	var def_part := arch_idx
 	var skin_id := clampi(int(config.get("skin_id", def_part)), 0, MAX_PART_INDEX)
 	var head_id := clampi(int(config.get("head_id", def_part)), 0, MAX_PART_INDEX)
+	_current_part_id = head_id
 	var torso_id := clampi(int(config.get("torso_id", def_part)), 0, MAX_PART_INDEX)
 	var legs_id := clampi(int(config.get("legs_id", def_part)), 0, MAX_PART_INDEX)
 	var acc_id := clampi(int(config.get("accessories_id", def_part)), 0, MAX_PART_INDEX)
 	var hands_id := clampi(int(config.get("hands_id", def_part)), 0, MAX_PART_INDEX)
 
 	var head_path := str(config.get("head_texture", config.get("skin_texture",
-		"res://assets/sprites/modular/skin_%d.png" % skin_id)))
+		get_part_texture_path("skin", skin_id))))
 	var gear_path := str(config.get("gear_texture", config.get("helmet_texture",
-		"res://assets/sprites/modular/head_%d.png" % head_id)))
+		get_part_texture_path("head", head_id))))
 	var torso_path := str(config.get("torso_texture",
-		"res://assets/sprites/modular/torso_%d.png" % torso_id))
+		get_part_texture_path("torso", torso_id)))
 	var legs_path := str(config.get("legs_texture",
-		"res://assets/sprites/modular/legs_%d.png" % legs_id))
+		get_part_texture_path("legs", legs_id)))
 	var back_path := str(config.get("back_texture", config.get("accessories_texture",
-		"res://assets/sprites/modular/accessories_%d.png" % acc_id)))
+		get_part_texture_path("accessories", acc_id))))
 	var hands_path := str(config.get("hands_texture",
-		"res://assets/sprites/modular/hands_%d.png" % hands_id))
+		get_part_texture_path("hands", hands_id)))
 
 	_custom_full_sheet = false
 	_anim_head.visible = true
@@ -186,10 +259,11 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_animated_strip(_anim_legs, legs_path)
 	_apply_sprite_strip(_sprite_gear, gear_path)
 	_apply_sprite_strip(_sprite_back, back_path)
-	_is_raven_wing = (acc_id == 24) or back_path.ends_with("accessories_24.png")
-	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 27) or back_path.ends_with("accessories_14.png") or back_path.ends_with("accessories_21.png") or back_path.ends_with("accessories_27.png")
-	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("head_21.png")
-	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("hands_21.png")
+	_is_raven_wing = (acc_id == 24) or back_path.ends_with("raven_accessories.png")
+	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("soulless_accessories.png")
+	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("ignis_head.png")
+	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("ignis_hands.png")
+	_is_soulless_smoke = (head_id == 27) or gear_path.ends_with("soulless_head.png")
 	_apply_sprite_strip(_sprite_hands, hands_path)
 	_sprite_hands.hframes = 1
 	_sprite_hands.region_enabled = true
@@ -215,6 +289,7 @@ func apply_loadout(config: Dictionary) -> void:
 		set_sync_frame(_manual_frame, _flip_h)
 	else:
 		play_state(_current_anim, _flip_h)
+	queue_redraw()
 
 
 func apply_layer_colors(team_tint: Color = Color.WHITE, team_blend: float = 0.0) -> void:
@@ -444,11 +519,25 @@ func _draw() -> void:
 			_draw_animated_flame_cluster(_sprite_hands.position + Vector2(0.0, -3.0), 0.58, 1.7)
 		if is_instance_valid(_sprite_hand_far) and _sprite_hand_far.visible:
 			_draw_animated_flame_cluster(_sprite_hand_far.position + Vector2(0.0, -3.0), 0.50, 3.4)
+	if _is_soulless_smoke and is_instance_valid(_sprite_gear) and _sprite_gear.visible:
+		_draw_soulless_head_smoke(_sprite_gear.position + Vector2(0.0, -32.0))
+
+
+func _draw_soulless_head_smoke(origin: Vector2) -> void:
+	var t: float = _fire_anim_t * 0.11
+	for i in range(6):
+		var phase: float = fmod(t + float(i) / 6.0, 1.0)
+		var drift_x: float = sin((t + float(i)) * 4.2) * (6.0 + phase * 8.0) + (float(i % 3) - 1.0) * 5.0
+		var rise_y: float = -phase * 28.0
+		var r: float = lerpf(4.0, 10.5, phase)
+		var a: float = sin(phase * PI) * 0.52
+		var p: Vector2 = origin + Vector2(drift_x, rise_y)
+		draw_circle(p, r, Color(0.06, 0.07, 0.10, a))
+		draw_circle(p + Vector2(-1.5, -1.5), r * 0.55, Color(0.20, 0.22, 0.28, a * 0.65))
 
 
 func _draw_animated_flame_cluster(origin: Vector2, sc: float, phase: float) -> void:
 	var t: float = _fire_anim_t + phase
-	draw_circle(origin + Vector2(0.0, -4.0 * sc), 12.0 * sc, Color(1.0, 0.38, 0.06, 0.24))
 	for i in range(4):
 		var fi: float = float(i)
 		var ox: float = (fi - 1.5) * 4.5 * sc
@@ -580,14 +669,48 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	if _sprite_hands == null or _custom_full_sheet:
 		return
 	var dir: float = 1.0 if facing_r else -1.0
+	var active_stance: String = "throw_bomb" if (stance == "throw_bomb" or throw_prog >= 0.0) else stance
+	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim)
+
+	var head_ov: Dictionary = ov.get("head", {})
+	var head_pos := Vector2(float(head_ov.get("x", 0.0)) * dir, float(head_ov.get("y", 0.0)))
+	var head_rot: float = dir * deg_to_rad(float(head_ov.get("rot", 0.0)))
+	var head_z: int = int(head_ov.get("z", 0))
+	if _sprite_gear != null:
+		_sprite_gear.position = head_pos
+		_sprite_gear.rotation = head_rot
+		_sprite_gear.z_index = head_z
+	if _anim_head != null:
+		_anim_head.position = head_pos
+		_anim_head.rotation = head_rot
+		_anim_head.z_index = head_z
+	var torso_ov: Dictionary = ov.get("torso", {})
+	if _anim_torso != null:
+		_anim_torso.position = Vector2(float(torso_ov.get("x", 0.0)) * dir, float(torso_ov.get("y", 0.0)))
+		_anim_torso.rotation = dir * deg_to_rad(float(torso_ov.get("rot", 0.0)))
+		_anim_torso.z_index = int(torso_ov.get("z", 0))
+	var legs_ov: Dictionary = ov.get("legs", {})
+	if _anim_legs != null:
+		_anim_legs.position = Vector2(float(legs_ov.get("x", 0.0)) * dir, float(legs_ov.get("y", 0.0)))
+		_anim_legs.rotation = dir * deg_to_rad(float(legs_ov.get("rot", 0.0)))
+		_anim_legs.z_index = int(legs_ov.get("z", 0))
+	var back_ov: Dictionary = ov.get("back", {})
+	if _sprite_back != null and not ((_is_raven_wing or _is_wraith_cape) and _current_anim == "jetpack"):
+		_sprite_back.position = Vector2(float(back_ov.get("x", 0.0)) * dir, float(back_ov.get("y", 0.0)))
+		_sprite_back.rotation = dir * deg_to_rad(float(back_ov.get("rot", 0.0)))
+		_sprite_back.z_index = int(back_ov.get("z", 0))
+
 	if _current_anim == "dead" or stance == "none":
-		_sprite_hands.z_index = 0
-		_sprite_hands.position = Vector2(-26.0 * dir, 6.0)
-		_sprite_hands.rotation = 0.0
+		var hn_ov: Dictionary = ov.get("hand_near", {})
+		var hf_ov: Dictionary = ov.get("hand_far", {})
+		_sprite_hands.z_index = int(hn_ov.get("z", 1))
+		_sprite_hands.position = Vector2(float(hn_ov.get("x", -15.5)) * dir, float(hn_ov.get("y", 8.0)))
+		_sprite_hands.rotation = dir * deg_to_rad(float(hn_ov.get("rot", 0.0)))
 		if _sprite_hand_far != null:
-			_sprite_hand_far.position = Vector2(23.0 * dir, 6.0)
-			_sprite_hand_far.rotation = 0.0
-			_sprite_hand_far.scale = _sprite_hands.scale
+			_sprite_hand_far.z_index = int(hf_ov.get("z", 0))
+			_sprite_hand_far.position = Vector2(float(hf_ov.get("x", 23.0)) * dir, float(hf_ov.get("y", 7.5)))
+			_sprite_hand_far.rotation = dir * deg_to_rad(float(hf_ov.get("rot", 0.0)))
+			_sprite_hand_far.scale = _sprite_hands.scale * 0.92
 		return
 
 	var base_ang: float = 0.0 if facing_r else PI
@@ -613,33 +736,109 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		return
 
 	# Keep the near arm anchored at the real shoulder socket, resting over the gun grip
-	_sprite_hands.z_index = hands_z_over_weapon
+	var defs: Dictionary = get_default_hand_pose(stance)
+	var hn_def: Vector2 = defs["hn_pos"]
+	var hn_rot_def: float = float(defs["hn_rot"])
+	var hf_def: Vector2 = defs["hf_pos"]
+	var hf_rot_def: float = float(defs["hf_rot"])
+	var tilt_mul: float = float(defs["tilt_mul"])
+	var far_tilt_mul: float = float(defs["far_tilt_mul"])
+	var hn_w: Dictionary = ov.get("hand_near", {})
+	var hf_w: Dictionary = ov.get("hand_far", {})
+	var kick_px: float = 0.0
+	if fire_kick > 0.0:
+		kick_px = fire_kick if fire_kick > 0.5 else (fire_kick / 0.15) * 3.5
+	var kick_vec: Vector2 = Vector2.from_angle(aim_ang) * kick_px
+	var kick_rot: float = dir * deg_to_rad(kick_px * 1.8)
+	_sprite_hands.z_index = int(hn_w.get("z", maxi(1, hands_z_over_weapon)))
+	_sprite_hands.position = Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y))) - kick_vec
+	var hn_rot_rad: float = deg_to_rad(float(hn_w["rot"])) if hn_w.has("rot") else hn_rot_def
+	_sprite_hands.rotation = dir * hn_rot_rad + rel_tilt * tilt_mul - kick_rot
 	if _sprite_hand_far != null:
-		_sprite_hand_far.z_index = hands_z_over_weapon
+		_sprite_hand_far.z_index = int(hf_w.get("z", 0))
 		_sprite_hand_far.scale = _sprite_hands.scale * 0.82
+		var far_kick: Vector2 = kick_vec * 0.65 if stance == "dual" else Vector2.ZERO
+		_sprite_hand_far.position = Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y))) - far_kick
+		var hf_rot_rad: float = deg_to_rad(float(hf_w["rot"])) if hf_w.has("rot") else hf_rot_def
+		_sprite_hand_far.rotation = dir * hf_rot_rad + rel_tilt * far_tilt_mul
+
+
+static func get_default_hand_pose(stance: String) -> Dictionary:
+	var hn_def := Vector2(-18.0, 6.0)
+	var hn_rot_def: float = -1.18
+	var hf_def := Vector2(20.0, 6.0)
+	var hf_rot_def: float = -0.22
+	var tilt_mul: float = 0.25
+	var far_tilt_mul: float = 0.0
 	match stance:
 		"pistol":
-			_sprite_hands.position = Vector2(-17.0 * dir, 6.0)
-			_sprite_hands.rotation = -dir * 1.20 + rel_tilt * 0.18
-			if _sprite_hand_far != null:
-				_sprite_hand_far.position = Vector2(21.0 * dir, 6.0)
-				_sprite_hand_far.rotation = -dir * 0.15
+			hn_def = Vector2(-17.0, 6.0); hn_rot_def = -1.20; tilt_mul = 0.28
+			hf_def = Vector2(21.0, 6.0); hf_rot_def = -0.15
 		"bazooka":
-			_sprite_hands.position = Vector2(-18.0 * dir, 3.0)
-			_sprite_hands.rotation = -dir * 1.28 + rel_tilt * 0.18
-			if _sprite_hand_far != null:
-				_sprite_hand_far.position = Vector2(18.0 * dir, 5.0)
-				_sprite_hand_far.rotation = -dir * 0.35
+			hn_def = Vector2(-18.0, 3.0); hn_rot_def = -1.28; tilt_mul = 0.25
+			hf_def = Vector2(18.0, 5.0); hf_rot_def = -0.35
 		"dual":
-			_sprite_hands.position = Vector2(-17.0 * dir, 6.0)
-			_sprite_hands.rotation = -dir * 1.18 + rel_tilt * 0.18
-			if _sprite_hand_far != null:
-				_sprite_hand_far.position = Vector2(17.0 * dir, 5.0)
-				_sprite_hand_far.rotation = -dir * 0.90 + rel_tilt * 0.18
-		_:
-			# "rifle" — anchored at shoulder (-18, 6), forearm & fist resting over gun
-			_sprite_hands.position = Vector2(-18.0 * dir, 6.0)
-			_sprite_hands.rotation = -dir * 1.18 + rel_tilt * 0.15
-			if _sprite_hand_far != null:
-				_sprite_hand_far.position = Vector2(20.0 * dir, 6.0)
-				_sprite_hand_far.rotation = -dir * 0.22
+			hn_def = Vector2(-17.0, 6.0); hn_rot_def = -1.18; tilt_mul = 0.28
+			hf_def = Vector2(17.0, 5.0); hf_rot_def = -0.90; far_tilt_mul = 0.28
+	return {
+		"hn_pos": hn_def,
+		"hn_rot": hn_rot_def,
+		"hf_pos": hf_def,
+		"hf_rot": hf_rot_def,
+		"tilt_mul": tilt_mul,
+		"far_tilt_mul": far_tilt_mul,
+	}
+
+
+func get_weapon_socket_transform(stance: String, facing_r: bool, w_ov: Dictionary = {}, default_wy: float = 9.0) -> Dictionary:
+	var dir: float = 1.0 if facing_r else -1.0
+	var defs: Dictionary = get_default_hand_pose(stance)
+	var hn_def: Vector2 = defs["hn_pos"]
+	var hn_rot_def: float = float(defs["hn_rot"])
+
+	var active_stance: String = "throw_bomb" if stance == "throw_bomb" else stance
+	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim)
+	var hn_w: Dictionary = ov.get("hand_near", {})
+	var pose_hn_pos := Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y)))
+	var hn_pose_rot_rad: float = deg_to_rad(float(hn_w["rot"])) if hn_w.has("rot") else hn_rot_def
+	var pose_hn_rot: float = dir * hn_pose_rot_rad
+
+	var cur_hn_pos: Vector2 = _sprite_hands.position if _sprite_hands != null else pose_hn_pos
+	var cur_hn_rot: float = _sprite_hands.rotation if _sprite_hands != null else pose_hn_rot
+	var runtime_delta_rot: float = cur_hn_rot - pose_hn_rot
+
+	var wx: float = float(w_ov.get("x", 2.0))
+	var wy: float = float(w_ov.get("y", default_wy))
+	var wrot: float = dir * deg_to_rad(float(w_ov.get("rot", 0.0)))
+	var wz: int = int(w_ov.get("z", 0))
+
+	# Socket grip offset from the posed Near Hand pivot to the Weapon pivot
+	var grip_offset: Vector2 = Vector2(wx * dir, wy) - pose_hn_pos
+	var socket_pos: Vector2 = cur_hn_pos + grip_offset.rotated(runtime_delta_rot)
+	var socket_rot: float = wrot + runtime_delta_rot
+
+	# Off-hand socket for Dual Stance secondary gun attached to Far Hand
+	var hf_def: Vector2 = defs["hf_pos"]
+	var hf_rot_def: float = float(defs["hf_rot"])
+	var hf_w: Dictionary = ov.get("hand_far", {})
+	var pose_hf_pos := Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y)))
+	var hf_pose_rot_rad: float = deg_to_rad(float(hf_w["rot"])) if hf_w.has("rot") else hf_rot_def
+	var pose_hf_rot: float = dir * hf_pose_rot_rad
+	var cur_hf_pos: Vector2 = _sprite_hand_far.position if _sprite_hand_far != null else pose_hf_pos
+	var cur_hf_rot: float = _sprite_hand_far.rotation if _sprite_hand_far != null else pose_hf_rot
+	var far_runtime_rot: float = cur_hf_rot - pose_hf_rot
+	var far_grip_offset: Vector2 = Vector2((wx + 12.0) * dir, wy + 4.0) - pose_hf_pos
+	var far_socket_pos: Vector2 = cur_hf_pos + far_grip_offset.rotated(far_runtime_rot)
+	var far_socket_rot: float = wrot + far_runtime_rot
+
+	return {
+		"pos": socket_pos,
+		"rot": socket_rot,
+		"pose_rot": wrot,
+		"hand_delta_rot": runtime_delta_rot,
+		"z": wz,
+		"far_pos": far_socket_pos,
+		"far_rot": far_socket_rot,
+	}
+
+

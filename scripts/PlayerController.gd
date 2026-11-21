@@ -261,7 +261,7 @@ var _agent_hud_sync_accum: float = 0.0
 
 # Normal Gunfight Mode Preset & Bomb state
 var selected_gun_preset_id: int = 0
-const BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine"]
+const BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine", "cluster"]
 var bomb_count: int = 3
 var max_bombs: int = 3
 var bomb_inventory: Dictionary = {}
@@ -1219,13 +1219,14 @@ func _fire_weapon() -> void:
 	velocity -= aim_dir * _weapon.recoil_impulse * (1.25 if shots_to_fire == 2 else 1.0)
 	add_screen_shake(clampf(_weapon.recoil_impulse * 0.004, 0.15, 0.85))
 
-	# Predictable vertical recoil bias (positive climbs upward; Kriss Vector negative compensates downward)
-	var recoil_sign: float = -1.0 if cos(aim_angle) >= 0.0 else 1.0
-	aim_angle = wrapf(aim_angle + recoil_sign * _weapon.vertical_recoil_bias, -PI, PI)
-
+	_sync_muzzle_positions(fire_angle)
 	var muzzle_positions := PackedVector2Array([_get_safe_muzzle_pos(_muzzle_primary.global_position)])
 	if shots_to_fire == 2:
 		muzzle_positions.append(_get_safe_muzzle_pos(_muzzle_secondary.global_position))
+
+	# Predictable vertical recoil bias (positive climbs upward; Kriss Vector negative compensates downward)
+	var recoil_sign: float = -1.0 if cos(aim_angle) >= 0.0 else 1.0
+	aim_angle = wrapf(aim_angle + recoil_sign * _weapon.vertical_recoil_bias, -PI, PI)
 
 	var seed_val: int = int(Time.get_ticks_usec() % 1000000)
 	if NetworkManager.is_network_active():
@@ -1667,12 +1668,15 @@ func _apply_weapon_visuals() -> void:
 	if _agent_weapon_node != null:
 		_agent_weapon_node.visible = false
 	var w: WeaponData = WeaponData.get_weapon(current_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	if _weapon_pivot != null:
+		_weapon_pivot.scale = Vector2(1.16, 1.16)
 	if current_weapon_id == 11:
 		_primary_weapon.texture = TEX_FLAMETHROWER
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = Vector2(0.55, 0.55)
+		_primary_weapon.position = Vector2(16, 0)
+		_primary_weapon.scale = Vector2(0.55, 0.55) * 0.32
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 15:
@@ -1680,7 +1684,8 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = Vector2(0.95, 0.95)
+		_primary_weapon.position = Vector2(16, 0)
+		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 16:
@@ -1688,7 +1693,8 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = Vector2(0.95, 0.95)
+		_primary_weapon.position = Vector2(16, 0)
+		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 17:
@@ -1696,7 +1702,8 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = Vector2(1.20, 1.20)
+		_primary_weapon.position = Vector2(18, 0)
+		_primary_weapon.scale = Vector2(1.20, 1.20) * 0.32
 		_secondary_weapon.visible = false
 		return
 	if current_weapon_id == 13:
@@ -1704,18 +1711,62 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.hframes = 1
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
-		_primary_weapon.scale = Vector2(0.95, 0.95)
+		_primary_weapon.position = Vector2(16, 0)
+		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
 		_secondary_weapon.visible = false
 		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
 		_primary_weapon.texture = _weapons_sheet_tex
 		_primary_weapon.hframes = 11
 		_primary_weapon.vframes = 3
-	_primary_weapon.scale = Vector2(0.95, 0.95)
+	_primary_weapon.position = Vector2(16, 0)
+	_primary_weapon.scale = Vector2(0.24, 0.24)
+	_secondary_weapon.position = Vector2(12, 4)
+	_secondary_weapon.scale = Vector2(0.225, 0.225)
 	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
 	_primary_weapon.frame = sheet_frame
 	_secondary_weapon.frame = sheet_frame
 	_secondary_weapon.visible = is_dual_wielding and w.supports_dual_wield and not is_dead
+	_sync_muzzle_positions(aim_angle)
+
+
+static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) -> Vector2:
+	match weapon_id:
+		11: return Vector2(45.0, -4.3) # Flamethrower
+		13: return Vector2(48.8, -3.1) # Plasma Cannon
+		15: return Vector2(49.4, -5.9) # Hook Gun
+		16: return Vector2(43.4, -2.1) # Bubble Gun
+		17: return Vector2(62.9, -7.3) # Machine Gun
+	var f: int = sprite_frame if sprite_frame >= 0 else clampi(weapon_id, 0, 10)
+	match f % 11:
+		0: return Vector2(44.1, -5.2) # AK-47
+		1: return Vector2(44.1, -1.9) # M4A1
+		2: return Vector2(44.1, -1.3) # SCAR-H
+		3: return Vector2(40.2, 0.6)  # MP5 / SMG
+		4: return Vector2(38.1, -5.7) # Vector / Deagle
+		5: return Vector2(44.1, -4.5) # SPAS-12 Shotgun
+		6: return Vector2(43.8, -4.9) # Remington 870
+		7: return Vector2(44.1, -1.5) # AWM Sniper
+		8: return Vector2(44.1, -1.6) # SVD Auto-Sniper
+		9: return Vector2(30.0, -7.5) # Glock 17 / Pistol
+		10: return Vector2(44.1, -2.1) # RPG-7 Bazooka
+	return Vector2(44.0, -3.0)
+
+
+func _sync_muzzle_positions(ref_aim_angle: float) -> void:
+	if _muzzle_primary == null or _muzzle_secondary == null or _muzzle_flash == null:
+		return
+	var spr_f: int = _weapon.sprite_frame if _weapon != null else clampi(current_weapon_id, 0, 10)
+	var base_muz: Vector2 = get_weapon_muzzle_local_pos(current_weapon_id, spr_f)
+	var flip_gun: bool = cos(ref_aim_angle) < 0.0
+	var muz_y: float = -base_muz.y if flip_gun else base_muz.y
+	_muzzle_primary.position = Vector2(base_muz.x, muz_y)
+	_muzzle_flash.position = Vector2(base_muz.x + 2.0, muz_y)
+	_muzzle_flash.flip_v = flip_gun
+	var sec_ratio: float = 0.225 / 0.24
+	var sec_x: float = 12.0 + (base_muz.x - 16.0) * sec_ratio
+	var sec_dy: float = base_muz.y * sec_ratio
+	_muzzle_secondary.position = Vector2(sec_x, 4.0 + (-sec_dy if flip_gun else sec_dy))
 
 
 func can_grab_throwable() -> bool:
@@ -2273,7 +2324,17 @@ func _update_visual_state(delta: float) -> void:
 	else:
 		_weapon_pivot.visible = not is_dead
 		_weapon_pivot.modulate.a = 1.0
-	_weapon_pivot.position.y = 9.0 if is_crouching else 6.0
+	var is_dual: bool = is_dual_wielding and _weapon != null and _weapon.supports_dual_wield
+	var active_stance: String = "none" if is_dead else ("throw_bomb" if _bomb_throw_timer > 0.0 else ("rifle" if NetworkManager.is_agent_clash_mode() else ModularCharacter.get_weapon_stance(current_weapon_id, is_dual)))
+	var w_ov: Dictionary = {}
+	if is_instance_valid(_modular_rig):
+		if NetworkManager.is_agent_clash_mode() and not is_dead:
+			if _melee_swing_timer > 0.0 or _fire_anim_timer > 0.0:
+				_modular_rig._current_anim = "agent_attack"
+			elif _modular_rig._current_anim == "idle":
+				_modular_rig._current_anim = "agent_idle"
+		var full_ov: Dictionary = ModularCharacter.get_pose_override(_modular_rig._current_part_id, active_stance, _modular_rig._current_anim)
+		w_ov = full_ov.get("weapon", {})
 	var swing_offset: float = 0.0
 	var is_boxing_glove: bool = (_agent_weapon_node != null and str(_agent_weapon_node.get("weapon_style")) == "boxing_glove")
 	if NetworkManager.is_agent_clash_mode() and _melee_swing_timer > 0.0:
@@ -2285,14 +2346,6 @@ func _update_visual_state(delta: float) -> void:
 			swing_offset = lerpf(-0.95, 0.95, swing_prog) * swing_dir
 	elif _agent_weapon_node != null:
 		_agent_weapon_node.position.x = 0.0
-	_weapon_pivot.rotation = aim_angle + swing_offset
-	var flip_gun: bool = cos(aim_angle) < 0.0
-	_primary_weapon.flip_v = flip_gun
-	_secondary_weapon.flip_v = flip_gun
-	if _agent_weapon_node != null:
-		_agent_weapon_node.scale.y = -1.0 if flip_gun else 1.0
-		if _is_agent_logic_active() and is_boxing_glove:
-			_agent_weapon_node.visible = _melee_swing_timer > 0.0 and not is_dead
 	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
 		_modular_rig.hands_z_over_weapon = 2
 		if is_dead:
@@ -2303,9 +2356,36 @@ func _update_visual_state(delta: float) -> void:
 		elif NetworkManager.is_agent_clash_mode():
 			_modular_rig.apply_weapon_arm_pose("rifle", aim_angle + swing_offset, facing_right, _fire_anim_timer, -1.0)
 		else:
-			var is_dual: bool = is_dual_wielding and _weapon != null and _weapon.supports_dual_wield
-			var stance: String = ModularCharacter.get_weapon_stance(current_weapon_id, is_dual)
-			_modular_rig.apply_weapon_arm_pose(stance, aim_angle, facing_right, _fire_anim_timer, -1.0)
+			_modular_rig.apply_weapon_arm_pose(active_stance, aim_angle, facing_right, _fire_anim_timer, -1.0)
+
+	var def_wy: float = 9.0 if is_crouching else 6.0
+	var extra_pose_rot: float = 0.0
+	if is_instance_valid(_modular_rig):
+		var sock: Dictionary = _modular_rig.get_weapon_socket_transform(active_stance, facing_right, w_ov, def_wy)
+		var crouch_y: float = 3.0 if (is_crouching and w_ov.has("y")) else 0.0
+		_weapon_pivot.position = (sock["pos"] as Vector2) + Vector2(0.0, crouch_y)
+		_weapon_pivot.z_index = int(sock["z"])
+		if NetworkManager.is_agent_clash_mode():
+			extra_pose_rot = float(sock["pose_rot"])
+		_weapon_pivot.rotation = aim_angle + swing_offset + extra_pose_rot
+	else:
+		var w_dir: float = 1.0 if facing_right else -1.0
+		var saved_wy: float = float(w_ov.get("y", def_wy)) + (3.0 if (is_crouching and w_ov.has("y")) else 0.0)
+		_weapon_pivot.position = Vector2(float(w_ov.get("x", 2.0)) * w_dir, saved_wy)
+		_weapon_pivot.z_index = int(w_ov.get("z", 0))
+		if NetworkManager.is_agent_clash_mode():
+			extra_pose_rot = w_dir * deg_to_rad(float(w_ov.get("rot", 0.0)))
+		_weapon_pivot.rotation = aim_angle + swing_offset + extra_pose_rot
+	var flip_gun: bool = cos(aim_angle) < 0.0
+	_primary_weapon.flip_v = flip_gun
+	_secondary_weapon.flip_v = flip_gun
+	_sync_muzzle_positions(aim_angle)
+	if is_local_human and SettingsManager.sight_laser and not is_dead:
+		queue_redraw()
+	if _agent_weapon_node != null:
+		_agent_weapon_node.scale.y = -1.0 if flip_gun else 1.0
+		if _is_agent_logic_active() and is_boxing_glove:
+			_agent_weapon_node.visible = _melee_swing_timer > 0.0 and not is_dead
 
 	var p_ratio: float = clampf(SettingsManager.particle_intensity, 0.0, 1.5)
 	var target_amt: int = clampi(int(round(24.0 * p_ratio)), 1, 36)
@@ -3125,10 +3205,11 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			if not up_hit.is_empty():
 				drop_pos.y = maxf(drop_pos.y, up_hit["position"].y + 28.0)
 			drop_pos.y = maxf(76.0, drop_pos.y)
-			var fg := _spawn_custom_bullet(drop_pos, PI * 0.5, 0.0, 100, "heavy_forge", col, ab_name, 0.0, 0.45, false, 2.5, local_auth)
+			var fg := _spawn_custom_bullet(drop_pos, PI * 0.5, 0.0, 100, "heavy_forge", col, ab_name, 0.0, 2.4, false, 3.5, local_auth)
 			if fg != null:
 				fg.radius_scale = 2.0
 				fg.knockback_mult = 2.5
+				fg.pierce_players = true
 			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.75)
 		"ult_jump_execute":
 			control_lock_timer = 0.95
@@ -3449,52 +3530,24 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				rf.wall_bounces_left = 5
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -2.0, 0.8)
 		"ult_inferno_ring":
-			_spawn_rising_particles(cast_pos, Color(1.0, 0.42, 0.08), false, 14)
-			var tgt_inf: Node2D = _find_nearest_enemy_player(cast_pos, 360.0)
-			if tgt_inf != null:
-				control_lock_timer = 1.55
-				gravity_lock_timer = 1.55
-				velocity = Vector2.ZERO
-				var dir_x: float = 1.0 if tgt_inf.global_position.x >= cast_pos.x else -1.0
-				facing_right = dir_x >= 0.0
-				aim_angle = 0.0 if facing_right else PI
-				var grab_pos: Vector2 = cast_pos + Vector2(30.0 * dir_x, 0.0)
-				if tgt_inf.has_method("apply_stun"):
-					tgt_inf.apply_stun(1.55, peer_id)
-				if "gravity_lock_timer" in tgt_inf:
-					tgt_inf.set("gravity_lock_timer", 1.55)
-					tgt_inf.set("velocity", Vector2.ZERO)
-				var pull_tw := create_tween()
-				pull_tw.tween_property(tgt_inf, "global_position", grab_pos, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-				var parent_inf: Node = get_parent()
-				if parent_inf != null:
-					var ig_vfx := InfernoGrabVfx.new()
-					ig_vfx.caster = self
-					ig_vfx.victim = tgt_inf
-					ig_vfx.global_position = cast_pos
-					parent_inf.add_child(ig_vfx)
-				for ti in range(5):
-					var burn_tw := create_tween()
-					burn_tw.tween_interval(0.30 * float(ti + 1))
-					burn_tw.finished.connect(func():
-						if is_dead or not is_instance_valid(tgt_inf):
-							return
-						if tgt_inf.has_method("is_alive") and not tgt_inf.is_alive():
-							return
-						if local_auth and tgt_inf.has_method("apply_hit"):
-							var mhp: float = float(tgt_inf.get("max_health")) if "max_health" in tgt_inf else 100.0
-							var tick_dmg: int = maxi(20, int(ceil(mhp / 5.0)))
-							tgt_inf.apply_hit(tick_dmg, peer_id, ab_name, player_name, Vector2.ZERO)
-						_spawn_rising_particles(tgt_inf.global_position, Color(1.0, 0.48, 0.10), false, 8)
-						_play_local_sfx("res://assets/audio/explosion.wav", -6.0, 1.35)
-					)
-				_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
-			else:
-				var ir_hz := _spawn_hazard_zone("inferno_ring", cast_pos, 2.0, 150.0, 70, ab_name, local_auth)
-				if ir_hz != null:
-					ir_hz.set("follow_target", self)
-				_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
-			add_screen_shake(2.4)
+			var tgt_near: Node2D = _find_nearest_enemy_player(cast_pos, 440.0)
+			var hook_angle: float = cast_angle
+			if tgt_near != null:
+				hook_angle = (tgt_near.global_position - cast_pos).angle()
+			facing_right = cos(hook_angle) >= 0.0
+			aim_angle = hook_angle
+			control_lock_timer = maxf(control_lock_timer, 0.25)
+			var parent_hook: Node = get_parent()
+			if parent_hook != null:
+				var gh := InfernoGrappleHook.new()
+				gh.caster = self
+				gh.cast_pos = cast_pos
+				gh.dir = Vector2.from_angle(hook_angle)
+				gh.ab_name = ab_name
+				gh.local_auth = local_auth
+				gh.global_position = cast_pos
+				parent_hook.add_child(gh)
+			_play_local_sfx("res://assets/audio/shoot_vector.wav", -2.0, 0.85)
 		"meteor_boulder":
 			var mb := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "thrown_stone", col, ab_name, 0.6, 0.95, false, 5.0, local_auth)
 			if mb != null:
@@ -3587,7 +3640,36 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 					_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.85)
 			)
 		"ult_boxer_flurry":
-			var tgt_bf: Node2D = _find_nearest_enemy_player(cast_pos, 560.0)
+			var tgt_bf: Node2D = null
+			var best_bf_d: float = 320.0
+			var aim_fwd: Vector2 = Vector2.from_angle(cast_angle)
+			var space_bf := get_world_2d().direct_space_state
+			for node in get_tree().get_nodes_in_group("players"):
+				if not (node is Node2D) or node == self:
+					continue
+				if node.has_method("is_alive") and not node.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(node.get("team_id")) == team_id:
+					continue
+				var e_pos: Vector2 = (node as Node2D).global_position
+				var delta_v: Vector2 = e_pos - cast_pos
+				var dist_v: float = delta_v.length()
+				if dist_v > best_bf_d or dist_v < 1.0:
+					continue
+				# Same floor/elevation band (not above/below floor or roof)
+				if absf(delta_v.y) > 95.0:
+					continue
+				# Must be in front / forward-aimed cone
+				if aim_fwd.dot(delta_v / dist_v) < 0.35:
+					continue
+				# Must have clear line of sight (no wall/floor/roof blocking)
+				var rq_bf := PhysicsRayQueryParameters2D.create(cast_pos, e_pos, 1)
+				rq_bf.collide_with_areas = false
+				rq_bf.collide_with_bodies = true
+				if not space_bf.intersect_ray(rq_bf).is_empty():
+					continue
+				best_bf_d = dist_v
+				tgt_bf = node as Node2D
 			if tgt_bf != null:
 				_flurry_target = tgt_bf
 				_flurry_state = 1
@@ -3802,7 +3884,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		else:
 			var to_f: Vector2 = _flurry_target.global_position - global_position
 			var dist_f: float = to_f.length()
-			if dist_f <= 54.0 or _flurry_timer <= 0.0:
+			if dist_f <= 58.0:
 				_flurry_state = 2
 				_flurry_timer = 2.0
 				_flurry_hit_accum = 0.0
@@ -3811,6 +3893,10 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 				if _flurry_auth and _flurry_target.has_method("apply_stun"):
 					_flurry_target.apply_stun(2.1, peer_id)
 				_spawn_flurry_dust_puff(_flurry_target.global_position)
+			elif _flurry_timer <= 0.0:
+				_flurry_state = 0
+				_flurry_target = null
+				control_lock_timer = 0.0
 			else:
 				var rush_dir: Vector2 = to_f / maxf(1.0, dist_f)
 				velocity = rush_dir * 1350.0
@@ -4108,7 +4194,7 @@ func _update_dual_shotgun_visuals(show: bool) -> void:
 				spr.hframes = 11
 				spr.vframes = 3
 				spr.frame = 5 # Shotgun sprite
-				spr.scale = Vector2(0.85, 0.85)
+				spr.scale = Vector2(0.28, 0.28)
 				spr.z_index = 6 if idx == 0 else 4
 				add_child(spr)
 				if idx == 0:
@@ -4316,26 +4402,24 @@ func _cast_raven_swarm(origin: Vector2, angle: float, dmg: int, col: Color, ab_n
 	var parent_node: Node = get_parent()
 	if parent_node == null:
 		return
-	for i in range(3):
-		var spread_off: float = (float(i) - 1.0) * 0.45
-		var b := BULLET_SCENE.instantiate()
-		b.global_position = origin + Vector2(0.0, (float(i) - 1.0) * 26.0)
-		b.velocity = Vector2.from_angle(angle + spread_off) * 370.0
-		b.damage = dmg
-		b.shooter_peer_id = peer_id
-		b.shooter_team = team_id
-		b.shooter_name = player_name
-		b.shooter_rid = get_rid()
-		b.weapon_name = ab_name
-		b.bullet_color = col
-		b.visual_style = "raven"
-		b.scale = Vector2(1.20, 1.20)
-		b.is_homing = true
-		b.homing_turn_rate = 9.0
-		b.allow_self_damage = false
-		b.can_deal_damage = local_auth
-		b.max_lifetime = 4.2
-		parent_node.add_child(b)
+	var b := BULLET_SCENE.instantiate()
+	b.global_position = origin
+	b.velocity = Vector2.from_angle(angle) * 370.0
+	b.damage = dmg
+	b.shooter_peer_id = peer_id
+	b.shooter_team = team_id
+	b.shooter_name = player_name
+	b.shooter_rid = get_rid()
+	b.weapon_name = ab_name
+	b.bullet_color = col
+	b.visual_style = "raven"
+	b.scale = Vector2(1.25, 1.25)
+	b.is_homing = true
+	b.homing_turn_rate = 9.0
+	b.allow_self_damage = false
+	b.can_deal_damage = local_auth
+	b.max_lifetime = 4.2
+	parent_node.add_child(b)
 
 
 func _cast_telekinesis(cast_pos: Vector2, cast_angle: float, dmg: int, col: Color, ab_name: String, local_auth: bool) -> void:
@@ -5234,30 +5318,37 @@ class BloodPuff extends Node2D:
 class AgentWeaponVisual extends Node2D:
 	const TEX_REAPER_SCYTHE: Texture2D = preload("res://assets/sprites/weapons/reaper_scythe.png")
 	const TEX_MAGMA_HAMMER: Texture2D = preload("res://assets/sprites/weapons/magma_hammer.png")
+	const TEX_RAVEN_BOW: Texture2D = preload("res://assets/sprites/weapons/raven_shadow_bow.png")
+	const TEX_ORC_SKULL_CRUSHER: Texture2D = preload("res://assets/sprites/weapons/orc_skull_crusher.png")
+	const TEX_JACKSON_GLOVE: Texture2D = preload("res://assets/sprites/weapons/jackson_boxing_glove.png")
 	var weapon_style: String = "sword"
 	var weapon_color: Color = Color(0.85, 0.90, 0.98)
+	var _flame_t: float = 0.0
+
+	func _process(delta: float) -> void:
+		if weapon_style == "magma_hammer":
+			_flame_t += delta * 14.0
+			queue_redraw()
 
 	func _draw() -> void:
 		match weapon_style:
 			"boxing_glove":
-				var ink := Color(0.08, 0.06, 0.08)
-				draw_rect(Rect2(6, -8, 10, 16), ink)
-				draw_rect(Rect2(7, -6, 8, 12), Color(0.95, 0.78, 0.24))
-				draw_circle(Vector2(26, 0), 14.5, ink)
-				draw_circle(Vector2(26, 0), 12.0, weapon_color)
-				draw_circle(Vector2(28, -3), 5.0, weapon_color.lightened(0.35))
+				draw_texture_rect(TEX_JACKSON_GLOVE, Rect2(2.0, -16.0, 32.0, 32.0), false)
 			"greatsword":
 				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
 				draw_line(Vector2(10, -8), Vector2(10, 8), Color(0.95, 0.78, 0.28), 4.0)
+			"orc_axe":
+				draw_texture_rect(TEX_ORC_SKULL_CRUSHER, Rect2(-6.0, -17.0, 52.0, 34.0), false)
 			"axe":
-				draw_line(Vector2(4, 0), Vector2(36, 0), Color(0.55, 0.34, 0.16), 4.0)
-				draw_colored_polygon(PackedVector2Array([Vector2(24, -13), Vector2(38, -8), Vector2(38, 10), Vector2(24, 12)]), weapon_color)
+				var ink_a := Color(0.06, 0.05, 0.09)
+				draw_line(Vector2(2, 0), Vector2(38, 0), ink_a, 7.5)
+				draw_line(Vector2(4, 0), Vector2(36, 0), Color(0.48, 0.28, 0.14), 4.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(21, -15), Vector2(41, -10), Vector2(41, 12), Vector2(21, 14)]), ink_a)
+				draw_colored_polygon(PackedVector2Array([Vector2(24, -12), Vector2(38, -8), Vector2(38, 10), Vector2(24, 11)]), weapon_color)
+				draw_colored_polygon(PackedVector2Array([Vector2(33, -7), Vector2(38, -8), Vector2(38, 10), Vector2(33, 9)]), weapon_color.lightened(0.35))
 			"bow":
-				draw_arc(Vector2(10, 0), 18.0, -1.18, 1.18, 18, Color(0.06, 0.06, 0.09), 7.5)
-				draw_arc(Vector2(10, 0), 18.0, -1.15, 1.15, 18, Color(0.76, 0.52, 0.24), 4.2)
-				draw_line(Vector2(17, -16), Vector2(17, 16), Color(0.06, 0.06, 0.09), 3.6)
-				draw_line(Vector2(17, -16), Vector2(17, 16), weapon_color, 2.0)
+				draw_texture_rect(TEX_RAVEN_BOW, Rect2(2.0, -24.0, 32.0, 48.0), false)
 			"scythe":
 				draw_texture_rect(TEX_REAPER_SCYTHE, Rect2(-12.0, -9.0, 56.0, 32.0), false)
 			"spear":
@@ -5265,6 +5356,29 @@ class AgentWeaponVisual extends Node2D:
 				draw_colored_polygon(PackedVector2Array([Vector2(36, -5), Vector2(50, 0), Vector2(36, 5)]), weapon_color)
 			"magma_hammer":
 				draw_texture_rect(TEX_MAGMA_HAMMER, Rect2(-12.0, -14.0, 56.0, 32.0), false)
+				var h_center := Vector2(31.0, 1.0)
+				for fi in range(5):
+					var ang: float = -1.7 + float(fi) * 0.85
+					var dir_v := Vector2.from_angle(ang)
+					var sway: float = sin(_flame_t * 1.2 + float(fi) * 1.9) * 2.6
+					var h: float = 7.5 + sin(_flame_t * 1.5 + float(fi) * 2.3) * 3.0
+					var base := h_center + dir_v * 11.0
+					var perp := Vector2(-dir_v.y, dir_v.x)
+					var tip := base + dir_v * h + perp * sway
+					var pts := PackedVector2Array([
+						base - perp * 3.2,
+						base + dir_v * (h * 0.55) - perp * 1.8 + perp * (sway * 0.4),
+						tip,
+						base + dir_v * (h * 0.55) + perp * 1.8 + perp * (sway * 0.4),
+						base + perp * 3.2,
+					])
+					draw_colored_polygon(pts, Color(1.0, 0.36, 0.05, 0.82))
+					var core := PackedVector2Array([
+						base - perp * 1.6,
+						base + dir_v * (h * 0.7) + perp * (sway * 0.45),
+						base + perp * 1.6,
+					])
+					draw_colored_polygon(core, Color(1.0, 0.86, 0.24, 0.88))
 			"hammer":
 				draw_line(Vector2(4, 0), Vector2(34, 0), Color(0.50, 0.30, 0.15), 4.0)
 				draw_rect(Rect2(28.0, -11.0, 13.0, 22.0), weapon_color)
@@ -5988,13 +6102,17 @@ class ScreamWaveWifiVfx extends Node2D:
 
 
 class InfernoGrabVfx extends Node2D:
+	const TEX_FLAME_SHEET: Texture2D = preload("res://assets/sprites/vfx/inferno_anim_sheet.png")
+	const FRAME_COUNT: int = 10
+	const FRAME_W: float = 160.0
+	const FRAME_H: float = 192.0
 	var caster: Node2D = null
 	var victim: Node2D = null
 	var _t: float = 0.0
 	var _dur: float = 1.55
 
 	func _ready() -> void:
-		z_index = 22
+		z_index = 2
 		global_position = Vector2.ZERO
 
 	func _process(delta: float) -> void:
@@ -6007,32 +6125,184 @@ class InfernoGrabVfx extends Node2D:
 	func _draw() -> void:
 		var prog: float = clampf(_t / _dur, 0.0, 1.0)
 		var alpha: float = 1.0 - maxf(0.0, (prog - 0.80) / 0.20)
-		var centers: Array[Vector2] = []
-		if is_instance_valid(caster):
-			centers.append(caster.global_position)
+		if not is_instance_valid(caster):
+			return
+		var center: Vector2 = caster.global_position
 		if is_instance_valid(victim):
-			centers.append(victim.global_position)
-		for c in centers:
-			var r_glow: float = 52.0 + sin(_t * 18.0) * 6.0
-			draw_circle(c, r_glow, Color(1.0, 0.28, 0.04, 0.30 * alpha))
-			draw_arc(c, r_glow, 0.0, TAU, 28, Color(1.0, 0.56, 0.12, 0.65 * alpha), 3.2)
-			for fi in range(7):
-				var ang_off: float = (float(fi) - 3.0) * 10.0
-				var sway: float = sin(_t * 20.0 + float(fi) * 1.7) * 8.0
-				var h: float = 54.0 + sin(_t * 24.0 + float(fi) * 2.1) * 16.0
-				var base := c + Vector2(ang_off, 24.0)
-				var tip := base + Vector2(sway, -h)
-				var pts := PackedVector2Array([
-					base + Vector2(-9.0, 0.0),
-					base + Vector2(-5.0 + sway * 0.4, -h * 0.55),
-					tip,
-					base + Vector2(5.0 + sway * 0.4, -h * 0.55),
-					base + Vector2(9.0, 0.0),
-				])
-				draw_colored_polygon(pts, Color(1.0, 0.32, 0.04, 0.78 * alpha))
-				var core := PackedVector2Array([
-					base + Vector2(-4.5, 0.0),
-					base + Vector2(sway * 0.45, -h * 0.72),
-					base + Vector2(4.5, 0.0),
-				])
-				draw_colored_polygon(core, Color(1.0, 0.84, 0.22, 0.88 * alpha))
+			center = (caster.global_position + victim.global_position) * 0.5
+		var f_idx: int = int(_t * 14.0) % FRAME_COUNT
+		var src_rect := Rect2(float(f_idx) * FRAME_W, 0.0, FRAME_W, FRAME_H)
+		var fw: float = 185.0
+		var fh: float = 215.0
+		draw_set_transform(center + Vector2(0.0, 62.0), 0.0, Vector2.ONE)
+		draw_texture_rect_region(TEX_FLAME_SHEET, Rect2(-fw * 0.5, -fh, fw, fh), src_rect, Color(1.0, 1.0, 1.0, 0.96 * alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+func _perform_inferno_ult_on_victim(tgt_inf: Node2D, cast_pos: Vector2, ab_name: String, local_auth: bool) -> void:
+	if is_dead or not is_instance_valid(tgt_inf):
+		return
+	if tgt_inf.has_method("is_alive") and not tgt_inf.is_alive():
+		return
+	var land_pos: Vector2 = global_position
+	# Only snap onto the nearest platform if Ignis successfully hooked an enemy while airborne
+	if not is_on_floor():
+		var space_inf := get_world_2d().direct_space_state
+		for dx_off in [0.0, 120.0, -120.0, 240.0, -240.0]:
+			var ray_start: Vector2 = land_pos + Vector2(dx_off, -10.0)
+			var ray_end: Vector2 = ray_start + Vector2(0.0, 900.0)
+			var rq := PhysicsRayQueryParameters2D.create(ray_start, ray_end, 1)
+			rq.collide_with_areas = false
+			rq.collide_with_bodies = true
+			var rhit: Dictionary = space_inf.intersect_ray(rq)
+			if not rhit.is_empty():
+				global_position = _clamp_to_arena((rhit["position"] as Vector2) + Vector2(0.0, -30.0))
+				land_pos = global_position
+				break
+	control_lock_timer = 1.55
+	gravity_lock_timer = 1.55
+	velocity = Vector2.ZERO
+	var dir_x: float = 1.0 if tgt_inf.global_position.x >= land_pos.x else -1.0
+	facing_right = dir_x >= 0.0
+	aim_angle = 0.0 if facing_right else PI
+	var grab_pos: Vector2 = land_pos + Vector2(30.0 * dir_x, 0.0)
+	if tgt_inf.has_method("apply_stun"):
+		tgt_inf.apply_stun(1.55, peer_id)
+	if "gravity_lock_timer" in tgt_inf:
+		tgt_inf.set("gravity_lock_timer", 1.55)
+		tgt_inf.set("velocity", Vector2.ZERO)
+	var pull_tw := create_tween()
+	pull_tw.tween_property(tgt_inf, "global_position", grab_pos, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var parent_inf: Node = get_parent()
+	if parent_inf != null:
+		var ig_vfx := InfernoGrabVfx.new()
+		ig_vfx.caster = self
+		ig_vfx.victim = tgt_inf
+		ig_vfx.global_position = land_pos
+		parent_inf.add_child(ig_vfx)
+	for ti in range(5):
+		var burn_tw := create_tween()
+		burn_tw.tween_interval(0.30 * float(ti + 1))
+		burn_tw.finished.connect(func():
+			if is_dead or not is_instance_valid(tgt_inf):
+				return
+			if tgt_inf.has_method("is_alive") and not tgt_inf.is_alive():
+				return
+			if local_auth and tgt_inf.has_method("apply_hit"):
+				var mhp: float = float(tgt_inf.get("max_health")) if "max_health" in tgt_inf else 100.0
+				var tick_dmg: int = maxi(20, int(ceil(mhp / 5.0)))
+				tgt_inf.apply_hit(tick_dmg, peer_id, ab_name, player_name, Vector2.ZERO)
+			_play_local_sfx("res://assets/audio/explosion.wav", -6.0, 1.35)
+		)
+	_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+	add_screen_shake(2.4)
+
+
+class InfernoGrappleHook extends Node2D:
+	var caster: Node2D = null
+	var cast_pos: Vector2 = Vector2.ZERO
+	var dir: Vector2 = Vector2.RIGHT
+	var ab_name: String = ""
+	var local_auth: bool = false
+	var speed: float = 1220.0
+	var max_dist: float = 440.0
+	var _traveled: float = 0.0
+	var _state: int = 0 # 0=flying, 1=pulling, 2=missed/retracting
+	var _state_t: float = 0.0
+	var _hooked_victim: Node2D = null
+	var _tip_pos: Vector2 = Vector2.ZERO
+
+	func _ready() -> void:
+		z_index = 18
+		_tip_pos = cast_pos
+		global_position = Vector2.ZERO
+
+	func _physics_process(delta: float) -> void:
+		if not is_instance_valid(caster) or (caster.has_method("is_alive") and not caster.is_alive()):
+			queue_free()
+			return
+		if _state == 0:
+			var step: float = speed * delta
+			var prev_pos: Vector2 = _tip_pos
+			var next_pos: Vector2 = prev_pos + dir * step
+			_traveled += step
+
+			# Check wall collision first
+			var space := get_world_2d().direct_space_state
+			var rq := PhysicsRayQueryParameters2D.create(prev_pos, next_pos, 1)
+			rq.collide_with_areas = false
+			rq.collide_with_bodies = true
+			var wall_hit: Dictionary = space.intersect_ray(rq)
+			var check_end: Vector2 = wall_hit["position"] if not wall_hit.is_empty() else next_pos
+
+			# Check enemy player hit along segment
+			var hit_enemy: Node2D = null
+			var best_d: float = 30.0
+			var caster_team: int = int(caster.get("team_id")) if "team_id" in caster else 0
+			for node in get_tree().get_nodes_in_group("players"):
+				if not (node is Node2D) or node == caster:
+					continue
+				if node.has_method("is_alive") and not node.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(node.get("team_id")) == caster_team:
+					continue
+				var npos: Vector2 = (node as Node2D).global_position
+				var closest: Vector2 = Geometry2D.get_closest_point_to_segment(npos, prev_pos, check_end)
+				var d: float = npos.distance_to(closest)
+				if d <= best_d:
+					best_d = d
+					hit_enemy = node as Node2D
+
+			if hit_enemy != null:
+				_hooked_victim = hit_enemy
+				_tip_pos = hit_enemy.global_position
+				_state = 1
+				_state_t = 0.0
+				caster.call("_perform_inferno_ult_on_victim", hit_enemy, cast_pos, ab_name, local_auth)
+			elif not wall_hit.is_empty() or _traveled >= max_dist:
+				_tip_pos = check_end
+				_state = 2
+				_state_t = 0.0
+			else:
+				_tip_pos = next_pos
+		elif _state == 1:
+			_state_t += delta
+			if is_instance_valid(_hooked_victim):
+				_tip_pos = _hooked_victim.global_position
+			if _state_t >= 0.24:
+				queue_free()
+				return
+		elif _state == 2:
+			_state_t += delta
+			var origin_now: Vector2 = caster.global_position
+			_tip_pos = _tip_pos.lerp(origin_now, clampf(_state_t / 0.14, 0.0, 1.0))
+			if _state_t >= 0.14:
+				queue_free()
+				return
+		queue_redraw()
+
+	func _draw() -> void:
+		if not is_instance_valid(caster):
+			return
+		var start_pos: Vector2 = caster.global_position + Vector2(0.0, -4.0)
+		var seg: Vector2 = _tip_pos - start_pos
+		var seg_len: float = seg.length()
+		if seg_len < 2.0:
+			return
+		var alpha: float = 1.0 if _state != 2 else clampf(1.0 - _state_t / 0.14, 0.0, 1.0)
+		# Cel-shaded magma chain + glowing core
+		draw_line(start_pos, _tip_pos, Color(0.14, 0.04, 0.02, 0.9 * alpha), 7.0)
+		draw_line(start_pos, _tip_pos, Color(0.98, 0.34, 0.04, 0.95 * alpha), 4.0)
+		draw_line(start_pos, _tip_pos, Color(1.0, 0.88, 0.35, 0.95 * alpha), 1.8)
+		# Fiery grapple claw head
+		var ang: float = seg.angle()
+		var fwd: Vector2 = Vector2.from_angle(ang)
+		var side: Vector2 = Vector2(-fwd.y, fwd.x)
+		var claw := PackedVector2Array([
+			_tip_pos + fwd * 10.0,
+			_tip_pos - fwd * 6.0 + side * 9.0,
+			_tip_pos - fwd * 2.0,
+			_tip_pos - fwd * 6.0 - side * 9.0,
+		])
+		draw_colored_polygon(claw, Color(1.0, 0.72, 0.12, alpha))
+		draw_polyline(claw + PackedVector2Array([claw[0]]), Color(0.14, 0.04, 0.02, alpha), 2.2)

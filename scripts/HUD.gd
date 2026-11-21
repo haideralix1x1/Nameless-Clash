@@ -815,7 +815,7 @@ func _build_ui() -> void:
 
 	var atlas := AtlasTexture.new()
 	atlas.atlas = WEAPONS_TEX
-	atlas.region = Rect2(0, 0, 64, 32)
+	atlas.region = Rect2(0, 0, 256, 128)
 	_weapon_icon = TextureRect.new()
 	_weapon_icon.texture = atlas
 	_weapon_icon.custom_minimum_size = Vector2(52, 26)
@@ -880,7 +880,7 @@ func _build_ui() -> void:
 
 	var sec_atlas := AtlasTexture.new()
 	sec_atlas.atlas = WEAPONS_TEX
-	sec_atlas.region = Rect2(0, 0, 64, 32)
+	sec_atlas.region = Rect2(0, 0, 256, 128)
 	_secondary_weapon_icon = TextureRect.new()
 	_secondary_weapon_icon.texture = sec_atlas
 	_secondary_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1527,7 +1527,7 @@ func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_r
 		atlas = AtlasTexture.new()
 		atlas.atlas = WEAPONS_TEX
 		icon_rect.texture = atlas
-	atlas.region = Rect2(w_data.sprite_frame * 64, skin_row * 32, 64, 32)
+	atlas.region = Rect2(w_data.sprite_frame * 256, skin_row * 128, 256, 128)
 
 
 func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
@@ -1566,8 +1566,8 @@ func _refresh_top_info_pill() -> void:
 		var arch_id: int = int(local_player.get("archetype_id"))
 		var ag: Dictionary = AgentData.get_agent(arch_id)
 		var part_id: int = ProfileManager.get_archetype_part_id(arch_id)
-		_set_portrait_frame(_agent_portrait, "res://assets/sprites/modular/skin_%d.png" % part_id)
-		_set_portrait_frame(_agent_hat_overlay, "res://assets/sprites/modular/head_%d.png" % part_id)
+		_set_portrait_frame(_agent_portrait, ModularCharacter.get_part_texture_path("skin", part_id))
+		_set_portrait_frame(_agent_hat_overlay, ModularCharacter.get_part_texture_path("head", part_id))
 		if is_instance_valid(_agent_hat_overlay):
 			_agent_hat_overlay.visible = true
 		if is_instance_valid(_weapon_name_label):
@@ -1600,8 +1600,8 @@ func _refresh_top_info_pill() -> void:
 					var e_arch: int = int(best_enemy.get("archetype_id"))
 					var e_part: int = ProfileManager.get_archetype_part_id(e_arch)
 					_target_portrait.visible = true
-					_set_portrait_frame(_target_portrait, "res://assets/sprites/modular/skin_%d.png" % e_part)
-					_set_portrait_frame(_target_hat_overlay, "res://assets/sprites/modular/head_%d.png" % e_part)
+					_set_portrait_frame(_target_portrait, ModularCharacter.get_part_texture_path("skin", e_part))
+					_set_portrait_frame(_target_hat_overlay, ModularCharacter.get_part_texture_path("head", e_part))
 					if is_instance_valid(_target_hat_overlay):
 						_target_hat_overlay.visible = true
 			else:
@@ -2165,11 +2165,11 @@ func _refresh_preset_cards() -> void:
 			(row_h.get_node("SecLbl") as Label).text = s_name
 			var at_p := AtlasTexture.new()
 			at_p.atlas = WEAPONS_TEX
-			at_p.region = Rect2(w_pri.sprite_frame * 64, 0, 64, 32)
+			at_p.region = Rect2(w_pri.sprite_frame * 256, 0, 256, 128)
 			(row_h.get_node("PriIcon") as TextureRect).texture = at_p
 			var at_s := AtlasTexture.new()
 			at_s.atlas = WEAPONS_TEX
-			at_s.region = Rect2(w_sec.sprite_frame * 64, 0, 64, 32)
+			at_s.region = Rect2(w_sec.sprite_frame * 256, 0, 256, 128)
 			(row_h.get_node("SecIcon") as TextureRect).texture = at_s
 			var b_icon := row_h.get_node("BombIcon") as TextureRect
 			b_icon.visible = bombs_n > 0
@@ -2617,34 +2617,25 @@ func _move_hud_layout_handle(key: String, center_screen_pos: Vector2) -> void:
 
 
 class BombHudIcon extends Control:
+	const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
+	const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
+	const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
+	const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
+	const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
 	var bomb_type: String = "frag"
 
 	func _draw() -> void:
-		var c := Vector2(size.x * 0.5, size.y * 0.56)
+		var c := Vector2(size.x * 0.5, size.y * 0.52)
+		var r := Rect2(c - Vector2(14.0, 14.0), Vector2(28.0, 28.0))
 		match bomb_type:
 			"cluster":
-				draw_circle(c, 9.5, Color(0.24, 0.16, 0.14))
-				draw_arc(c, 9.5, 0.0, TAU, 16, Color(1.0, 0.45, 0.16), 2.5)
-				draw_rect(Rect2(c + Vector2(-3.0, -12.0), Vector2(6.0, 4.0)), Color(0.75, 0.78, 0.84))
-				draw_circle(c + Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))
+				draw_texture_rect(TEX_BOMB_CLUSTER, r, false)
 			"sticky":
-				draw_circle(c, 9.5, Color(0.14, 0.20, 0.32))
-				draw_arc(c, 9.5, 0.0, TAU, 16, Color(0.24, 0.78, 1.0), 2.5)
-				for k in range(4):
-					var ang: float = float(k) * PI * 0.5 + PI * 0.25
-					draw_line(c + Vector2.from_angle(ang) * 7.5, c + Vector2.from_angle(ang) * 12.0, Color(0.75, 0.85, 1.0), 2.0)
-				draw_circle(c, 3.5, Color(1.0, 0.35, 0.20))
+				draw_texture_rect(TEX_BOMB_STICKY, r, false)
 			"time":
-				draw_rect(Rect2(c + Vector2(-10.0, -8.0), Vector2(20.0, 16.0)), Color(0.16, 0.18, 0.22))
-				draw_rect(Rect2(c + Vector2(-10.0, -8.0), Vector2(20.0, 16.0)), Color(0.95, 0.28, 0.24), false, 2.0)
-				draw_rect(Rect2(c + Vector2(-6.0, -5.0), Vector2(12.0, 5.0)), Color(0.08, 0.12, 0.10))
-				draw_circle(c + Vector2(0.0, 3.5), 3.2, Color(1.0, 0.25, 0.20))
+				draw_texture_rect(TEX_BOMB_TIME, r, false)
 			"mine":
-				draw_rect(Rect2(c + Vector2(-11.0, -4.0), Vector2(22.0, 9.0)), Color(0.18, 0.22, 0.24))
-				draw_rect(Rect2(c + Vector2(-11.0, -4.0), Vector2(22.0, 9.0)), Color(0.95, 0.58, 0.16), false, 2.0)
-				draw_circle(c + Vector2(0.0, -5.0), 3.5, Color(1.0, 0.22, 0.16))
+				draw_texture_rect(TEX_BOMB_MINE, r, false)
 			_:
-				draw_circle(c, 9.5, Color(0.16, 0.22, 0.18))
-				draw_arc(c, 9.5, 0.0, TAU, 16, Color(0.26, 0.88, 0.42), 2.5)
-				draw_rect(Rect2(c + Vector2(-3.0, -12.0), Vector2(6.0, 4.0)), Color(0.75, 0.78, 0.84))
-				draw_circle(c + Vector2(2.0, -12.0), 3.0, Color(1.0, 0.75, 0.22))
+				draw_texture_rect(TEX_BOMB_FRAG, r, false)
+

@@ -200,7 +200,7 @@ func _build_ui() -> void:
 	preview_panel.add_child(pv)
 
 	var p_hdr := Label.new()
-	p_hdr.text = "YOUR SOLDIER"
+	p_hdr.text = "YOUR AGENT"
 	p_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	p_hdr.add_theme_font_size_override("font_size", 16)
 	p_hdr.modulate = Color(0.76, 0.82, 0.94)
@@ -228,9 +228,30 @@ func _build_ui() -> void:
 	anchor_wrap.add_child(anchor)
 
 	_preview = SoldierPreview.new()
-	_preview.shuffle_guns = true
+	_preview.shuffle_guns = false
+	_preview.hide_weapons = true
 	_preview.scale = Vector2(3.8, 3.8)
 	anchor.add_child(_preview)
+
+	var prev_agent_btn := _make_arcade_button("<", Color(0.28, 0.56, 0.96), 60.0, 26, Color(0.10, 0.15, 0.26, 0.92))
+	prev_agent_btn.custom_minimum_size = Vector2(46, 60)
+	prev_agent_btn.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	prev_agent_btn.offset_left = 12.0
+	prev_agent_btn.offset_top = -30.0
+	prev_agent_btn.offset_right = 58.0
+	prev_agent_btn.offset_bottom = 30.0
+	prev_agent_btn.pressed.connect(func(): _cycle_main_agent(-1))
+	anchor_wrap.add_child(prev_agent_btn)
+
+	var next_agent_btn := _make_arcade_button(">", Color(0.28, 0.56, 0.96), 60.0, 26, Color(0.10, 0.15, 0.26, 0.92))
+	next_agent_btn.custom_minimum_size = Vector2(46, 60)
+	next_agent_btn.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	next_agent_btn.offset_left = -58.0
+	next_agent_btn.offset_top = -30.0
+	next_agent_btn.offset_right = -12.0
+	next_agent_btn.offset_bottom = 30.0
+	next_agent_btn.pressed.connect(func(): _cycle_main_agent(1))
+	anchor_wrap.add_child(next_agent_btn)
 
 	_loadout_label = Label.new()
 	_loadout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -619,6 +640,14 @@ func _update_loadout_label() -> void:
 	_loadout_label.text = ("%s\n%s" % [callsign, role_sub]) if not role_sub.is_empty() else callsign
 
 
+func _cycle_main_agent(step: int) -> void:
+	var count: int = ProfileManager.ARCHETYPES.size()
+	if count <= 0:
+		return
+	var next_idx: int = posmod(ProfileManager.archetype_id + step, count)
+	_select_agent(next_idx)
+
+
 func _select_agent(idx: int) -> void:
 	ProfileManager.apply_archetype_preset(idx, true)
 	if is_instance_valid(_preview):
@@ -672,8 +701,8 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	var parts: Dictionary = arch.get("parts", {})
 	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
 	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
-	var skin_tex: Texture2D = load("res://assets/sprites/modular/skin_%d.png" % s_idx) as Texture2D
-	var head_tex: Texture2D = load("res://assets/sprites/modular/head_%d.png" % s_idx) as Texture2D
+	var skin_tex: Texture2D = load(ModularCharacter.get_part_texture_path("skin", s_idx)) as Texture2D
+	var head_tex: Texture2D = load(ModularCharacter.get_part_texture_path("head", s_idx)) as Texture2D
 	if skin_tex == null:
 		return null
 	var fw: int = skin_tex.get_width() / 8

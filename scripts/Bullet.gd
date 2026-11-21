@@ -4,6 +4,7 @@ const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const TEX_BULLET: Texture2D = preload("res://assets/sprites/bullet.png")
 const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
 const TEX_RAVEN: Texture2D = preload("res://assets/sprites/characters/summons/raven_proj.png")
+const TEX_HEAVY_FORGE: Texture2D = preload("res://assets/sprites/vfx/ogre_falling_forge.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -74,7 +75,7 @@ func _ready() -> void:
 
 	_trail.default_color = Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.75)
 	_trail.width = 6.0 if is_explosive else (5.0 if is_laser else 3.0)
-	if visual_style == "slash_wave":
+	if visual_style == "slash_wave" or visual_style == "smoke_orb":
 		_trail.visible = false
 	if on_hit_effect_kind == "hook_drag":
 		_trail.visible = false
@@ -101,6 +102,14 @@ func _physics_process(delta: float) -> void:
 			_spawn_impact_flash(global_position, bullet_color)
 		queue_free()
 		return
+
+	if visual_style == "heavy_forge":
+		if _age < 1.0:
+			velocity = Vector2.ZERO
+			queue_redraw()
+			return
+		elif _age - delta < 1.0:
+			velocity = Vector2(0.0, 340.0)
 
 	if gravity_mult > 0.0:
 		velocity.y += 980.0 * gravity_mult * maxf(0.15, NetworkManager.gravity_scale) * delta
@@ -416,6 +425,21 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			_trigger_on_hit_effect(hit_pos)
 		else:
 			_spawn_impact_flash(hit_pos, Color(1.0, 0.85, 0.45))
+		if visual_style == "heavy_forge":
+			_spawn_impact_flash(hit_pos, Color(0.78, 0.34, 1.0))
+			if can_deal_damage:
+				for p in get_tree().get_nodes_in_group("players"):
+					if not is_instance_valid(p) or int(p.get("peer_id")) == shooter_peer_id:
+						continue
+					if p.has_method("is_alive") and not p.is_alive():
+						continue
+					if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+						continue
+					if p is CollisionObject2D and _pierced_rids.has((p as CollisionObject2D).get_rid()):
+						continue
+					var p_pos: Vector2 = (p as Node2D).global_position
+					if absf(p_pos.x - hit_pos.x) <= 58.0 and absf(p_pos.y - hit_pos.y) <= 54.0 and p.has_method("apply_hit"):
+						p.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, Vector2(0.0, 260.0))
 		if visual_style == "smoke_orb" and reverse_controls_dur > 0.0 and can_deal_damage:
 			for p in get_tree().get_nodes_in_group("players"):
 				if is_instance_valid(p) and int(p.get("peer_id")) != shooter_peer_id:
@@ -605,11 +629,6 @@ func _spawn_impact_flash(pos: Vector2, col: Color) -> void:
 func _draw() -> void:
 	if on_hit_effect_kind == "hook_drag" and is_instance_valid(boomerang_owner):
 		draw_line(Vector2.ZERO, to_local(boomerang_owner.global_position), Color(0.88, 0.72, 0.32), 3.0)
-	elif visual_style == "raven":
-		var flap_y: float = 0.44 - sin(_age * 18.0) * 0.06
-		var r_sz := Vector2(128.0 * 0.44, 128.0 * flap_y)
-		draw_texture_rect(TEX_RAVEN, Rect2(-r_sz * 0.5, r_sz), false)
-		return
 	if visual_style == "bullet":
 		return
 	if visual_style in ["rocket", "homing_rocket"]:
@@ -684,10 +703,26 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 7.5, bullet_color)
 			draw_circle(Vector2(1.5, -1.5), 3.0, Color.WHITE)
 		"arrow":
-			draw_line(Vector2(-12.0, 0.0), Vector2(10.0, 0.0), Color(0.06, 0.06, 0.09), 5.0)
-			draw_line(Vector2(-12.0, 0.0), Vector2(10.0, 0.0), Color(0.68, 0.45, 0.22), 2.8)
-			draw_colored_polygon(PackedVector2Array([Vector2(15.5, 0.0), Vector2(5.0, -6.0), Vector2(5.0, 6.0)]), Color(0.06, 0.06, 0.09))
-			draw_colored_polygon(PackedVector2Array([Vector2(14.0, 0.0), Vector2(6.0, -4.5), Vector2(6.0, 4.5)]), bullet_color)
+			var lt_step: int = int(_age * 28.0)
+			var zig_a: float = sin(float(lt_step) * 2.3 + _age * 36.0) * 5.0
+			var zig_b: float = cos(float(lt_step) * 1.9 + _age * 42.0) * 5.5
+			var bolt_pts := PackedVector2Array([
+				Vector2(-20.0, zig_a * 0.4),
+				Vector2(-10.0, -zig_b),
+				Vector2(-2.0, zig_a),
+				Vector2(7.0, -zig_b * 0.75),
+				Vector2(17.0, 0.0),
+			])
+			var neon_glow := Color(0.66, 0.18, 1.0, 0.36)
+			var neon_mid := Color(0.84, 0.38, 1.0, 0.96)
+			var neon_core := Color(0.98, 0.90, 1.0, 1.0)
+			draw_circle(Vector2(12.0, 0.0), 11.0, Color(0.68, 0.20, 1.0, 0.28))
+			draw_polyline(bolt_pts, neon_glow, 9.0)
+			draw_polyline(bolt_pts, neon_mid, 4.4)
+			draw_polyline(bolt_pts, neon_core, 2.0)
+			# Small crackling side arcs
+			draw_line(Vector2(-2.0, zig_a), Vector2(-6.0, zig_a + (8.0 if lt_step % 2 == 0 else -8.0)), neon_mid, 1.8)
+			draw_line(Vector2(7.0, -zig_b * 0.75), Vector2(4.0, -zig_b * 0.75 + (-7.0 if lt_step % 2 == 0 else 7.0)), neon_core, 1.4)
 		"slash_wave":
 			var age_frac: float = clampf(_age / maxf(max_lifetime, 0.01), 0.0, 1.0)
 			var fade: float = 1.0 - age_frac * 0.45
@@ -837,15 +872,15 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, 10.5, -2.3, -1.0, 10, Color(1.0, 1.0, 1.0, 0.85), 2.0)
 			draw_arc(Vector2.ZERO, 11.0, 0.4, 1.4, 10, Color(1.0, 0.58, 0.92, 0.7), 1.8)
 		"heavy_forge":
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			# Heavy blacksmith anvil/forge falling straight down
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(-24, -14), Vector2(20, -14), Vector2(30, -8),
-				Vector2(14, -4), Vector2(12, 8), Vector2(20, 16),
-				Vector2(-20, 16), Vector2(-12, 8), Vector2(-14, -4), Vector2(-26, -6)
-			]), Color(0.24, 0.27, 0.34))
-			draw_rect(Rect2(-20, -14, 40, 5), Color(0.58, 0.64, 0.76))
-			draw_rect(Rect2(-18, 12, 36, 4), Color(0.14, 0.16, 0.20))
+			draw_set_transform(Vector2.ZERO, -rotation, Vector2.ONE)
+			# Animated purple & cyan falling shockwave streaks above the upright forge (60% scale)
+			var f_pulse: float = 0.65 + 0.35 * sin(_age * 24.0)
+			for si in range(5):
+				var sx: float = (float(si) - 2.0) * 6.5
+				var sy_len: float = 14.0 + float((si * 7) % 8) + sin(_age * 28.0 + float(si)) * 3.5
+				var s_col := Color(0.76, 0.32, 1.0, 0.50 * f_pulse) if si % 2 == 0 else Color(0.24, 0.92, 1.0, 0.50 * f_pulse)
+				draw_line(Vector2(sx, -8.0), Vector2(sx, -8.0 - sy_len), s_col, 2.0)
+			draw_texture_rect(TEX_HEAVY_FORGE, Rect2(-20.0, -13.0, 40.0, 26.0), false)
 		"prop_chair":
 			draw_line(Vector2(-16, -28), Vector2(-16, 20), Color(0.55, 0.60, 0.68), 6.0)
 			draw_line(Vector2(-16, -2), Vector2(18, -2), Color(0.55, 0.60, 0.68), 6.0)
@@ -886,16 +921,55 @@ func _draw() -> void:
 			var flap_s: float = sin(_age * 20.0)
 			var flip_y: float = -1.0 if velocity.x < 0.0 else 1.0
 			draw_set_transform(Vector2.ZERO, velocity.angle() - rotation - _visual_spin, Vector2(1.0 + flap_s * 0.06, (1.0 - flap_s * 0.14) * flip_y))
-			draw_texture_rect(TEX_RAVEN, Rect2(-22.0, -22.0, 44.0, 44.0), false)
+			# Glowing neon purple shadow trail behind each raven
+			draw_line(Vector2(-32.0, 0.0), Vector2(-6.0, 0.0), Color(0.66, 0.18, 1.0, 0.34), 10.0)
+			draw_line(Vector2(-24.0, -4.0), Vector2(-4.0, -2.0), Color(0.82, 0.36, 1.0, 0.55), 3.2)
+			draw_line(Vector2(-22.0, 4.0), Vector2(-4.0, 2.0), Color(0.82, 0.36, 1.0, 0.55), 3.2)
+			draw_circle(Vector2.ZERO, 20.0, Color(0.68, 0.20, 1.0, 0.16))
+			draw_texture_rect(TEX_RAVEN, Rect2(-25.0, -25.0, 50.0, 50.0), false)
 		"smoke_orb":
-			var pulse: float = 1.0 + sin(_age * 10.0) * 0.08
-			var bc: Color = bullet_color
-			draw_circle(Vector2.ZERO, 46.0 * pulse, Color(bc.r * 0.22, bc.g * 0.22, bc.b * 0.22, 0.42))
-			draw_circle(Vector2(-14, -10), 28.0 * pulse, Color(bc.r * 0.30, bc.g * 0.30, bc.b * 0.30, 0.72))
-			draw_circle(Vector2(15, 10), 26.0 * pulse, Color(bc.r * 0.16, bc.g * 0.16, bc.b * 0.16, 0.78))
-			draw_circle(Vector2(12, -14), 22.0 * pulse, Color(bc.r * 0.40, bc.g * 0.40, bc.b * 0.40, 0.68))
-			draw_circle(Vector2(-12, 14), 24.0 * pulse, Color(bc.r * 0.20, bc.g * 0.20, bc.b * 0.20, 0.72))
-			draw_arc(Vector2.ZERO, 38.0 * pulse, 0.0, TAU, 28, Color(bc.r, bc.g, bc.b, 0.78), 3.0)
+			draw_set_transform(Vector2.ZERO, -rotation, Vector2.ONE)
+			var pulse: float = 1.0 + sin(_age * 6.5) * 0.06
+			var smoke_outer := Color(0.08, 0.09, 0.13, 0.36)
+			var smoke_mid := Color(0.14, 0.16, 0.22, 0.46)
+			var smoke_hi := Color(0.28, 0.32, 0.40, 0.34)
+			var smoke_core := Color(0.20, 0.23, 0.30, 0.42)
+			# Soft outer billowing smoke cloud puffs (semi-transparent)
+			var outer_puffs: Array[Vector4] = [
+				Vector4(0.0, 2.0, 36.0, 0.0),
+				Vector4(-22.0, 4.0, 25.0, 1.1),
+				Vector4(22.0, 5.0, 24.0, 2.3),
+				Vector4(-14.0, -14.0, 23.0, 3.5),
+				Vector4(14.0, -13.0, 22.0, 4.7),
+				Vector4(0.0, -20.0, 20.0, 5.4),
+			]
+			for po in outer_puffs:
+				var drift := Vector2(sin(_age * 3.8 + po.w) * 3.5, cos(_age * 3.2 + po.w) * 2.5)
+				var rad: float = po.z * pulse
+				draw_circle(Vector2(po.x, po.y) + drift, rad + 5.0, smoke_outer)
+				draw_circle(Vector2(po.x, po.y) + drift, rad, smoke_mid)
+			# Inner swirling smoke highlights (gives soft layered cloud volume)
+			var hi_puffs: Array[Vector3] = [
+				Vector3(-12.0, -10.0, 15.0),
+				Vector3(10.0, -12.0, 13.5),
+				Vector3(-18.0, 6.0, 12.0),
+				Vector3(16.0, 4.0, 12.5),
+				Vector3(0.0, -2.0, 18.0),
+			]
+			for hp in hi_puffs:
+				var h_drift := Vector2(cos(_age * 4.5 + hp.x) * 2.5, sin(_age * 4.0 + hp.y) * 2.0)
+				draw_circle(Vector2(hp.x, hp.y) + h_drift, hp.z * pulse, smoke_core)
+				draw_circle(Vector2(hp.x - 3.0, hp.y - 3.0) + h_drift, hp.z * 0.68 * pulse, smoke_hi)
+			# Rising & curling transparent vapor puffs
+			for vi in range(10):
+				var v_phase: float = fmod(_age * 1.15 + float(vi) / 10.0, 1.0)
+				var swirl_a: float = float(vi) * 1.3 + _age * 2.4
+				var vx: float = sin(swirl_a) * (10.0 + v_phase * 14.0) + (float(vi % 5) - 2.0) * 7.0
+				var vy: float = -10.0 - v_phase * 42.0
+				var vr: float = lerpf(8.0, 18.0, v_phase)
+				var va: float = sin(v_phase * PI) * 0.42
+				draw_circle(Vector2(vx, vy), vr, Color(0.11, 0.13, 0.18, va))
+				draw_circle(Vector2(vx - 2.5, vy - 2.5), vr * 0.62, Color(0.26, 0.30, 0.38, va * 0.72))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

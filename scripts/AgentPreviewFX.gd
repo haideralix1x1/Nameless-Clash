@@ -92,7 +92,7 @@ func _draw() -> void:
 
 	if _tex != null:
 		if _active_kind == "dual_shotguns":
-			var reg := Rect2(5 * 64, 0, 64, 32)
+			var reg := Rect2(5 * 256, 0, 256, 128)
 			draw_texture_rect_region(_tex, Rect2(8, -18, 42, 21), reg)
 			draw_texture_rect_region(_tex, Rect2(8, -4, 42, 21), reg)
 			draw_line(Vector2(50, -8), Vector2(130, -14 + sin(_phase) * 8), Color(1.0, 0.85, 0.3, a), 3.0)
