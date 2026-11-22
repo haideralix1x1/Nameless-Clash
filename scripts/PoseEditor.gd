@@ -1423,13 +1423,21 @@ func _on_ui_canvas_draw() -> void:
 		_ui_canvas.draw_set_transform(elem_pos, elem_rot, Vector2(elem_scale, elem_scale))
 		if kind == "stick":
 			var r := base_sz.x * 0.5
-			_ui_canvas.draw_circle(Vector2.ZERO, r, Color(col.r, col.g, col.b, 0.16))
-			_ui_canvas.draw_arc(Vector2.ZERO, r, 0.0, TAU, 36, Color(col.r, col.g, col.b, 0.85), 2.5)
-			_ui_canvas.draw_circle(Vector2.ZERO, r * 0.42, Color(col.r, col.g, col.b, 0.42))
-			_ui_canvas.draw_arc(Vector2.ZERO, r * 0.42, 0.0, TAU, 24, Color.WHITE, 1.8)
+			if id == "right_stick":
+				var aim_r: float = r * 0.78
+				var band_mid: float = (r + aim_r) * 0.5
+				_ui_canvas.draw_arc(Vector2.ZERO, band_mid, 0.0, TAU, 40, Color(0.96, 0.24, 0.20, 0.28), r - aim_r)
+				_ui_canvas.draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(1.0, 0.38, 0.30, 0.92), 2.8)
+				_ui_canvas.draw_circle(Vector2.ZERO, aim_r, Color(0.06, 0.10, 0.16, 0.45))
+				_ui_canvas.draw_arc(Vector2.ZERO, aim_r, 0.0, TAU, 36, Color(1.0, 1.0, 1.0, 0.85), 2.0)
+			else:
+				_ui_canvas.draw_circle(Vector2.ZERO, r, Color(col.r, col.g, col.b, 0.16))
+				_ui_canvas.draw_arc(Vector2.ZERO, r, 0.0, TAU, 36, Color(col.r, col.g, col.b, 0.85), 2.5)
+			_ui_canvas.draw_circle(Vector2.ZERO, r * 0.38, Color(col.r, col.g, col.b, 0.42))
+			_ui_canvas.draw_arc(Vector2.ZERO, r * 0.38, 0.0, TAU, 24, Color.WHITE, 1.8)
 			if TEX_UI_BUTTON_ICONS != null:
 				var s_cell := Vector2i(4, 0) if id == "left_stick" else Vector2i(4, 1)
-				var s_sz := r * 0.62
+				var s_sz := r * 0.58
 				var s_dst := Rect2(-Vector2(s_sz, s_sz) * 0.5, Vector2(s_sz, s_sz))
 				var s_src := Rect2(Vector2(s_cell.x * 128.0, s_cell.y * 128.0), Vector2(128.0, 128.0))
 				_ui_canvas.draw_texture_rect_region(TEX_UI_BUTTON_ICONS, s_dst, s_src, Color.WHITE)

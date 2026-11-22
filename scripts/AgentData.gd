@@ -722,12 +722,12 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Launch 5 fireball shots from both robotic arms."
 		}
 	},
-	# 14: Viper-X // Bio-Hazard Cyborg
+	# 14: Viper-X // Venom Snake
 	{
 		"id": 14,
 		"agent_name": "Viper-X",
-		"title": "Bio-Hazard Cyborg",
-		"role": "Bio Specialist",
+		"title": "Venom Snake",
+		"role": "Venom Serpent",
 		"accent": Color(0.28, 0.96, 0.42),
 		"base_weapon": {
 			"name": "Venom Injector Spear",
@@ -900,7 +900,7 @@ const AGENTS: Array[Dictionary] = [
 				"damage": 10,
 				"duration": 3.0,
 				"color": Color(0.78, 0.45, 1.0),
-				"desc": "Activate for 3s: tap/click any enemy player or bot to randomly teleport them."
+				"desc": "Activate and tap any area to spawn a giant 3s portal circle that randomly teleports any enemies inside or entering it."
 			},
 			{
 				"name": "Position Swap",

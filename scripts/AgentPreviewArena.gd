@@ -20,16 +20,16 @@ var _touch_marker_pos: Vector2 = Vector2.ZERO
 var _touch_marker_timer: float = 0.0
 
 
-const HERO_HOME_X: float = 82.0
-const BOT_HOME_X: float = 398.0
-const PREVIEW_CHAR_SCALE: Vector2 = Vector2(1.32, 1.32)
-const PREVIEW_CAM_ZOOM: Vector2 = Vector2(1.56, 1.56)
+const HERO_HOME_X: float = 115.0
+const BOT_HOME_X: float = 365.0
+const PREVIEW_CHAR_SCALE: Vector2 = Vector2(1.22, 1.22)
+const PREVIEW_CAM_ZOOM: Vector2 = Vector2(1.18, 1.18)
 
 
 func _ready() -> void:
 	_build_bounds()
 	_cam = Camera2D.new()
-	_cam.position = Vector2(arena_width * 0.5, arena_height - 72.0)
+	_cam.position = Vector2(arena_width * 0.5, arena_height - 76.0)
 	_cam.zoom = PREVIEW_CAM_ZOOM
 	_cam.enabled = true
 	add_child(_cam)

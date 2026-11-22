@@ -168,6 +168,8 @@ var time_stop_timer: float = 0.0
 var touch_teleport_timer: float = 0.0
 var touch_fire_timer: float = 0.0
 var touch_banish_timer: float = 0.0
+var banish_after_fx_timer: float = 0.0
+var _banish_fx_accum: float = 0.0
 var bubble_trap_timer: float = 0.0
 var bubble_trap_hp: int = 0
 var bubble_trap_lock_timer: float = 0.0
@@ -659,6 +661,14 @@ func _physics_process(delta: float) -> void:
 		touch_fire_timer = maxf(0.0, touch_fire_timer - delta)
 	if touch_banish_timer > 0.0:
 		touch_banish_timer = maxf(0.0, touch_banish_timer - delta)
+		queue_redraw()
+	if banish_after_fx_timer > 0.0:
+		banish_after_fx_timer = maxf(0.0, banish_after_fx_timer - delta)
+		_banish_fx_accum += delta
+		if _banish_fx_accum >= 0.09 and not is_dead:
+			_banish_fx_accum = 0.0
+			_spawn_rising_particles(global_position + Vector2(randf_range(-16.0, 16.0), randf_range(-20.0, 12.0)), Color(0.84, 0.48, 1.0), false, 5)
+			_spawn_rising_particles(global_position + Vector2(randf_range(-12.0, 12.0), randf_range(-18.0, 10.0)), Color(0.45, 0.90, 1.0), false, 3)
 		queue_redraw()
 	if bubble_trap_lock_timer > 0.0:
 		bubble_trap_lock_timer = maxf(0.0, bubble_trap_lock_timer - delta)
@@ -2469,7 +2479,7 @@ func _update_overhead_ui() -> void:
 		_name_label.modulate = Color(1.0, 0.45, 0.16)
 	elif ag_active and touch_banish_timer > 0.0:
 		_name_label.visible = true
-		_name_label.text = ("TAP ENEMY TO TELEPORT %.1fs" % touch_banish_timer) if is_local_human else ("BANISH TARGETING %.1fs" % touch_banish_timer)
+		_name_label.text = ("TAP AREA TO BANISH %.1fs" % touch_banish_timer) if is_local_human else ("BANISH TARGETING %.1fs" % touch_banish_timer)
 		_name_label.modulate = Color(0.84, 0.52, 1.0)
 	elif ag_active and ability_lock_timer > 0.0:
 		_name_label.text = "SUPPRESSED %.1fs" % ability_lock_timer
@@ -3529,11 +3539,10 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"banish_enemy":
 			if is_bot or is_preview_dummy:
 				var tgt_bn: Node2D = _find_nearest_enemy_player(cast_pos, 650.0)
-				if tgt_bn != null:
-					var dest_b: Vector2 = _pick_random_banish_pos(tgt_bn.global_position)
-					_execute_touch_banish_local(int(tgt_bn.get("peer_id")), dest_b)
+				var zone_center: Vector2 = tgt_bn.global_position if tgt_bn != null else (cast_pos + Vector2.from_angle(cast_angle) * 200.0)
+				_spawn_banish_circle_local(_clamp_to_arena(zone_center))
 			else:
-				touch_banish_timer = float(ab.get("duration", 3.0))
+				touch_banish_timer = 5.0
 				_spawn_air_wave_circle(cast_pos, 68.0, Color(0.78, 0.45, 1.0))
 				_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.8)
 		"swap_enemy":
@@ -5139,6 +5148,14 @@ func _draw() -> void:
 		if touch_banish_timer > 0.0:
 			var pulse_r: float = 42.0 + sin(Time.get_ticks_msec() * 0.012) * 5.0
 			draw_arc(Vector2.ZERO, pulse_r, 0.0, TAU, 32, Color(0.84, 0.48, 1.0, 0.85), 3.0)
+		if banish_after_fx_timer > 0.0:
+			var bf_a: float = clampf(banish_after_fx_timer, 0.0, 1.0)
+			var bf_r: float = 34.0 + sin(Time.get_ticks_msec() * 0.022) * 5.0
+			draw_circle(Vector2.ZERO, bf_r, Color(0.76, 0.36, 1.0, 0.22 * bf_a))
+			draw_arc(Vector2.ZERO, bf_r, 0.0, TAU, 28, Color(0.88, 0.56, 1.0, 0.92 * bf_a), 3.0)
+			for si in range(4):
+				var sp_ang: float = Time.get_ticks_msec() * 0.01 + float(si) * (TAU * 0.25)
+				draw_circle(Vector2.from_angle(sp_ang) * (bf_r * 0.78), 3.5, Color(0.55, 0.95, 1.0, 0.95 * bf_a))
 		if _hook_pull_timer > 0.0 and _hook_pull_target != Vector2.INF:
 			draw_line(Vector2.ZERO, to_local(_hook_pull_target), Color(0.88, 0.72, 0.32), 3.5)
 			draw_circle(to_local(_hook_pull_target), 7.0, Color(0.95, 0.82, 0.38))
@@ -6008,45 +6025,70 @@ func _execute_touch_fire_local(target_pid: int) -> void:
 
 
 func _pick_random_banish_pos(from_pos: Vector2) -> Vector2:
+	if is_preview_dummy:
+		var p_xs: Array[float] = [95.0, 175.0, 250.0, 385.0]
+		var best_px: float = 220.0
+		for cand_x in p_xs:
+			if absf(cand_x - from_pos.x) >= 85.0:
+				best_px = cand_x
+				break
+		return Vector2(best_px, randf_range(72.0, 142.0))
 	if not _spawn_points.is_empty():
 		var far_pts: Array[Vector2] = []
 		for sp in _spawn_points:
 			if sp.distance_to(from_pos) >= 280.0:
 				far_pts.append(sp)
 		if not far_pts.is_empty():
-			return _clamp_to_arena(far_pts[randi() % far_pts.size()])
+			var base_sp: Vector2 = far_pts[randi() % far_pts.size()]
+			return _clamp_to_arena(base_sp + Vector2(randf_range(-65.0, 65.0), randf_range(-20.0, 10.0)))
 		return _clamp_to_arena(_spawn_points[randi() % _spawn_points.size()])
-	var rx: float = randf_range(260.0, 1940.0)
-	var ry: float = randf_range(220.0, 620.0)
+	var bounds: Vector2 = _get_arena_bounds()
+	var rx: float = randf_range(160.0, maxf(240.0, bounds.x - 160.0))
+	var ry: float = randf_range(160.0, maxf(220.0, bounds.y - 180.0))
 	return _clamp_to_arena(Vector2(rx, ry))
 
 
 func execute_touch_banish(world_pos: Vector2) -> bool:
 	if touch_banish_timer <= 0.0 or is_dead:
 		return false
-	var best_p: Node2D = null
-	var best_d: float = 68.0
-	for p in get_tree().get_nodes_in_group("players"):
-		if not is_instance_valid(p) or p == self:
-			continue
-		if p.has_method("is_alive") and not p.is_alive():
-			continue
-		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
-			continue
-		var d: float = (p as Node2D).global_position.distance_to(world_pos)
-		if d <= best_d:
-			best_d = d
-			best_p = p as Node2D
-	if best_p == null:
-		return false
 	touch_banish_timer = 0.0
-	var target_pid: int = int(best_p.get("peer_id"))
-	var dest_pos: Vector2 = _pick_random_banish_pos(best_p.global_position)
+	_fire_cooldown = maxf(_fire_cooldown, 0.22)
+	var center_pos: Vector2 = _clamp_to_arena(world_pos)
+	if NetworkManager.is_network_active():
+		spawn_banish_circle_rpc.rpc(center_pos)
+	else:
+		_spawn_banish_circle_local(center_pos)
+	return true
+
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_banish_circle_rpc(center_pos: Vector2) -> void:
+	_spawn_banish_circle_local(center_pos)
+
+
+func _spawn_banish_circle_local(center_pos: Vector2) -> void:
+	touch_banish_timer = 0.0
+	var parent_node: Node = get_parent()
+	if parent_node == null:
+		return
+	var zone := BanishTeleportCircleZone.new()
+	zone.caster = self
+	zone.caster_peer_id = peer_id
+	zone.caster_team = team_id
+	zone.local_auth = _is_controlled_locally()
+	zone.radius = 115.0 if is_preview_dummy else 165.0
+	zone.duration = 3.0
+	zone.global_position = center_pos
+	parent_node.add_child(zone)
+	_spawn_air_wave_circle(center_pos, zone.radius, Color(0.84, 0.48, 1.0))
+	_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.78)
+
+
+func trigger_banish_on_victim(target_pid: int, dest_pos: Vector2) -> void:
 	if NetworkManager.is_network_active():
 		execute_touch_banish_rpc.rpc(target_pid, dest_pos)
 	else:
 		_execute_touch_banish_local(target_pid, dest_pos)
-	return true
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -6055,19 +6097,86 @@ func execute_touch_banish_rpc(target_pid: int, dest_pos: Vector2) -> void:
 
 
 func _execute_touch_banish_local(target_pid: int, dest_pos: Vector2) -> void:
-	touch_banish_timer = 0.0
 	var target: Node2D = _find_player_by_peer_id(target_pid)
 	if target == null or (target.has_method("is_alive") and not target.is_alive()):
 		return
 	var old_pos: Vector2 = target.global_position
 	_spawn_air_wave_circle(old_pos, 90.0, Color(0.84, 0.48, 1.0))
 	_spawn_vfx_burst(old_pos, 85.0, Color(0.78, 0.45, 1.0))
+	_spawn_rising_particles(old_pos, Color(0.84, 0.56, 1.0), false, 14)
 	target.global_position = dest_pos
 	if "velocity" in target:
 		target.set("velocity", Vector2.ZERO)
+	if "banish_after_fx_timer" in target:
+		target.set("banish_after_fx_timer", 1.0)
+		target.set("_banish_fx_accum", 0.0)
+	if _is_controlled_locally() and target.has_method("apply_hit"):
+		target.apply_hit(10, peer_id, "Banish Teleport", player_name, Vector2.ZERO)
 	_spawn_air_wave_circle(dest_pos, 95.0, Color(0.84, 0.48, 1.0))
-	_spawn_rising_particles(dest_pos, Color(0.84, 0.56, 1.0), false, 16)
+	_spawn_vfx_burst(dest_pos, 75.0, Color(0.78, 0.45, 1.0), false, true)
+	_spawn_rising_particles(dest_pos, Color(0.84, 0.56, 1.0), false, 18)
 	_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.9)
+
+
+class BanishTeleportCircleZone extends Node2D:
+	var caster: Node2D = null
+	var caster_peer_id: int = 0
+	var caster_team: int = 0
+	var local_auth: bool = false
+	var radius: float = 165.0
+	var duration: float = 3.0
+	var _t: float = 0.0
+	var _banished_cooldowns: Dictionary = {}
+
+	func _ready() -> void:
+		z_index = 14
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= duration:
+			queue_free()
+			return
+		for k in _banished_cooldowns.keys().duplicate():
+			var rem: float = float(_banished_cooldowns[k]) - delta
+			if rem <= 0.0:
+				_banished_cooldowns.erase(k)
+			else:
+				_banished_cooldowns[k] = rem
+		if local_auth and is_instance_valid(caster):
+			for p in get_tree().get_nodes_in_group("players"):
+				if not is_instance_valid(p) or p == caster or int(p.get("peer_id")) == caster_peer_id:
+					continue
+				if p.has_method("is_alive") and not p.is_alive():
+					continue
+				if NetworkManager.is_team_mode() and int(p.get("team_id")) == caster_team:
+					continue
+				var pid: int = int(p.get("peer_id"))
+				if _banished_cooldowns.has(pid):
+					continue
+				var p_node := p as Node2D
+				if p_node.global_position.distance_to(global_position) <= radius:
+					_banished_cooldowns[pid] = 0.45
+					var dest: Vector2 = caster.call("_pick_random_banish_pos", p_node.global_position)
+					caster.call("trigger_banish_on_victim", pid, dest)
+		queue_redraw()
+
+	func _draw() -> void:
+		var rem: float = maxf(0.0, duration - _t)
+		var fade: float = clampf(rem / 0.35, 0.0, 1.0) if rem < 0.35 else clampf(_t / 0.15, 0.25, 1.0)
+		var pulse: float = 0.5 + 0.5 * sin(_t * 10.0)
+		var r: float = radius + sin(_t * 7.5) * 4.0
+		# Swirling arcane portal field
+		draw_circle(Vector2.ZERO, r, Color(0.56, 0.22, 0.92, 0.20 * fade))
+		draw_circle(Vector2.ZERO, r * 0.65, Color(0.76, 0.38, 1.0, (0.12 + pulse * 0.08) * fade))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 56, Color(0.84, 0.48, 1.0, 0.94 * fade), 4.5)
+		draw_arc(Vector2.ZERO, r - 6.0, 0.0, TAU, 48, Color(0.45, 0.92, 1.0, (0.55 + pulse * 0.35) * fade), 2.2)
+		# Rotating inner runes/segments
+		for i in range(6):
+			var a0: float = _t * 2.4 + float(i) * (TAU / 6.0)
+			draw_arc(Vector2.ZERO, r * 0.52, a0, a0 + 0.55, 12, Color(0.95, 0.75, 1.0, 0.78 * fade), 3.0)
+			var pt: Vector2 = Vector2.from_angle(-_t * 3.0 + float(i) * (TAU / 6.0)) * (r * 0.78)
+			draw_circle(pt, 4.5, Color(0.92, 0.68, 1.0, 0.85 * fade))
 
 
 class TimeFreezeWaveVfx extends Node2D:

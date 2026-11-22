@@ -438,6 +438,21 @@ func _input(event: InputEvent) -> void:
 		if te.pressed:
 			if _is_over_control(te.position):
 				return
+			var l_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("left_stick")
+			var r_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("right_stick")
+			var tap_targeting: bool = (
+				local_player != null
+				and is_instance_valid(local_player)
+				and (float(local_player.get("touch_teleport_timer")) > 0.0 or float(local_player.get("touch_banish_timer")) > 0.0)
+			)
+			if tap_targeting:
+				if te.position.distance_to(_left_center) <= l_rad + 14.0 and _left_touch_idx == -1:
+					_left_touch_idx = te.index
+					_update_left_stick(te.position)
+				elif te.position.distance_to(_right_center) <= r_rad + 14.0 and _right_touch_idx == -1:
+					_right_touch_idx = te.index
+					_update_right_stick(te.position)
+				return
 			var half_w: float = get_viewport().get_visible_rect().size.x * 0.5
 			if te.position.x < half_w and _left_touch_idx == -1:
 				_left_touch_idx = te.index
@@ -584,17 +599,30 @@ func _on_stick_canvas_draw() -> void:
 	_stick_canvas.draw_circle(_left_center + _left_knob_offset, KNOB_RADIUS * l_sc, Color(0.48, 0.62, 0.84, 0.75))
 	_stick_canvas.draw_arc(_left_center + _left_knob_offset, KNOB_RADIUS * l_sc, 0.0, TAU, 24, ring_col, 2.0)
 
-	# Right Stick: Red crosshair target ring
+	# Right Stick: Inner Aim Zone + Outer Firing Zone Ring
 	_stick_canvas.draw_set_transform(_right_center, r_rot, Vector2(r_sc, r_sc))
-	_stick_canvas.draw_circle(Vector2.ZERO, STICK_RADIUS, bg_col)
-	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS, 0.0, TAU, 40, ring_col, 2.5)
-	var target_col := Color(0.86, 0.28, 0.24, 0.82)
-	_stick_canvas.draw_circle(Vector2.ZERO, STICK_RADIUS * AIM_FIRE_THRESHOLD, Color(0.86, 0.26, 0.22, 0.22))
-	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS * AIM_FIRE_THRESHOLD, 0.0, TAU, 32, target_col, 2.5)
-	_stick_canvas.draw_line(Vector2(-22.0, 0.0), Vector2(22.0, 0.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
-	_stick_canvas.draw_line(Vector2(0.0, -22.0), Vector2(0.0, 22.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
+	var is_firing_zone: bool = (_right_knob_offset.length() > STICK_RADIUS * r_sc * AIM_FIRE_THRESHOLD)
+	var outer_fill_col: Color = Color(0.96, 0.24, 0.20, 0.36) if is_firing_zone else Color(0.88, 0.24, 0.20, 0.22)
+	var outer_ring_col: Color = Color(1.0, 0.36, 0.28, 0.96) if is_firing_zone else Color(1.0, 0.42, 0.34, 0.88)
+	var aim_r: float = STICK_RADIUS * AIM_FIRE_THRESHOLD
+	var band_mid_r: float = (STICK_RADIUS + aim_r) * 0.5
+	var band_w: float = STICK_RADIUS - aim_r
+	# Outer shooting band (between aim_r and STICK_RADIUS)
+	_stick_canvas.draw_arc(Vector2.ZERO, band_mid_r, 0.0, TAU, 48, outer_fill_col, band_w)
+	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS, 0.0, TAU, 48, outer_ring_col, 3.0)
+	# Tick marks around the outer shooting ring
+	for ti in range(8):
+		var tang: float = float(ti) * (TAU / 8.0)
+		var tdir: Vector2 = Vector2.from_angle(tang)
+		_stick_canvas.draw_line(tdir * (aim_r + 3.0), tdir * (STICK_RADIUS - 3.0), Color(1.0, 0.55, 0.45, 0.55), 2.0)
+	# Inner aim-only circle (0..aim_r)
+	_stick_canvas.draw_circle(Vector2.ZERO, aim_r, Color(0.06, 0.10, 0.16, 0.48))
+	_stick_canvas.draw_arc(Vector2.ZERO, aim_r, 0.0, TAU, 40, Color(1.0, 1.0, 1.0, 0.85), 2.2)
+	_stick_canvas.draw_line(Vector2(-20.0, 0.0), Vector2(20.0, 0.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
+	_stick_canvas.draw_line(Vector2(0.0, -20.0), Vector2(0.0, 20.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
 	_stick_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_stick_canvas.draw_circle(_right_center + _right_knob_offset, KNOB_RADIUS * r_sc, Color(0.92, 0.32, 0.26, 0.78))
+	var knob_col: Color = Color(1.0, 0.25, 0.20, 0.92) if is_firing_zone else Color(0.92, 0.42, 0.30, 0.80)
+	_stick_canvas.draw_circle(_right_center + _right_knob_offset, KNOB_RADIUS * r_sc, knob_col)
 	_stick_canvas.draw_arc(_right_center + _right_knob_offset, KNOB_RADIUS * r_sc, 0.0, TAU, 24, ring_col, 2.0)
 
 

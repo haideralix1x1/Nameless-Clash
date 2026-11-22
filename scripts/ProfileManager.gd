@@ -124,8 +124,8 @@ const ARCHETYPES: Array[Dictionary] = [
 	},
 	{
 		"callsign": "Viper-X",
-		"name": "Viper-X (Bio-Hazard Cyborg)",
-		"desc": "Toxic hazard trooper sealed inside an emerald gas-mask visor and pressurized rig.",
+		"name": "Viper-X (Venom Snake)",
+		"desc": "Deadly serpent warrior with emerald scales, flared cobra hood, and lethal venom fangs.",
 		"part_id": 17,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
