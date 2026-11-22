@@ -109,11 +109,15 @@ var selected_map_id: int = 0    # 0 = Bunker Base, 1 = Factory Ruins, 2 = Desert
 var test_mode_enabled: bool = false
 var test_bot_behavior: int = 0   # 0 = Still, 1 = Move, 2 = Fight
 var test_bot_count: int = 6      # 1..MAX_BOTS in Test/Practice Mode
+var practice_bot_agent_id: int = -1 # -1 = Unique Agents (No Duplicates), 0..N = All Bots Spawn as Specific Agent
+var practice_shooting_range: bool = false
 
 # Custom Game Rules / Mutators
 var unlimited_jetpack: bool = false
 var unlimited_abilities_practice: bool = true
 var gravity_scale: float = 1.0
+var jet_speed_scale: float = 0.5
+var random_guns_mode: bool = false
 var only_pistols: bool = false
 var allow_snipers: bool = true
 var allow_shotguns: bool = true
@@ -180,7 +184,6 @@ func _ensure_input_map() -> void:
 		"jetpack": [KEY_SPACE],
 		"reload": [KEY_R],
 		"switch_weapon": [KEY_Q],
-		"toggle_dual_wield": [KEY_E],
 		"open_lobby": [KEY_L],
 		"ability_1": [KEY_Q, KEY_1],
 		"ability_2": [KEY_E, KEY_2],
@@ -229,6 +232,10 @@ func is_team_mode() -> bool:
 
 func is_test_mode() -> bool:
 	return test_mode_enabled
+
+
+func is_shooting_range_mode() -> bool:
+	return test_mode_enabled and practice_shooting_range
 
 
 func get_team_color(color_index: int) -> Color:
@@ -425,6 +432,8 @@ func get_rules_dict() -> Dictionary:
 	return {
 		"unlimited_jetpack": unlimited_jetpack,
 		"gravity_scale": clampf(gravity_scale, 0.0, 1.0),
+		"jet_speed_scale": clampf(jet_speed_scale, 0.1, 1.0),
+		"random_guns_mode": random_guns_mode,
 		"only_pistols": only_pistols,
 		"allow_snipers": allow_snipers,
 		"allow_shotguns": allow_shotguns,
@@ -439,6 +448,8 @@ func get_rules_dict() -> Dictionary:
 func apply_rules_dict(rules: Dictionary) -> void:
 	unlimited_jetpack = bool(rules.get("unlimited_jetpack", unlimited_jetpack))
 	gravity_scale = clampf(float(rules.get("gravity_scale", gravity_scale)), 0.0, 1.0)
+	jet_speed_scale = clampf(float(rules.get("jet_speed_scale", jet_speed_scale)), 0.1, 1.0)
+	random_guns_mode = bool(rules.get("random_guns_mode", random_guns_mode))
 	only_pistols = bool(rules.get("only_pistols", only_pistols))
 	allow_snipers = bool(rules.get("allow_snipers", allow_snipers))
 	allow_shotguns = bool(rules.get("allow_shotguns", allow_shotguns))

@@ -3,7 +3,7 @@ extends CharacterBody2D
 signal health_changed(current: int, maximum: int)
 signal fuel_changed(current: float, maximum: float)
 signal ammo_changed(current: int, mag_size: int, is_reloading: bool)
-signal weapon_changed(weapon_data: WeaponData, dual_wield: bool)
+signal weapon_changed(weapon_data: WeaponData)
 signal died_signal(respawn_seconds: float)
 signal respawned_signal
 signal bombs_changed(count: int, bomb_type: String)
@@ -18,7 +18,7 @@ const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const BOMB_SCRIPT: Script = preload("res://scripts/Bomb.gd")
 const TEX_SOUL_GHOST: Texture2D = preload("res://assets/sprites/soul_ghost.png")
-const ZOOM_LEVEL_VALUES: Array[float] = [1.05, 0.94, 0.85, 0.77, 0.70, 0.64, 0.58]
+const ZOOM_LEVEL_VALUES: Array[float] = [1.30, 1.12, 0.98, 0.86, 0.76, 0.68, 0.60]
 
 const MOVE_SPEED: float = 310.0
 const CROUCH_SPEED: float = 165.0
@@ -74,7 +74,6 @@ var gear_color: Color = Color.WHITE
 @export var secondary_weapon_id: int = 9
 @export var weapon_skin_id: int = 0
 @export var m4a1_rail_mod: int = 0
-@export var is_dual_wielding: bool = false
 @export var is_dead: bool = false
 @export var anim_frame: int = 0
 
@@ -193,6 +192,7 @@ var _contra_ult_col: Color = Color(1.0, 0.35, 0.20)
 var _contra_ult_name: String = "Target-Follow Bazooka"
 var _contra_ult_local: bool = false
 var _magnet_timer: float = 0.0
+var _magnet_anchor: Vector2 = Vector2.ZERO
 var _fly_kick_timer: float = 0.0
 var _fly_kick_dir: Vector2 = Vector2.RIGHT
 var _fly_kick_target: Node2D = null
@@ -354,7 +354,10 @@ func _ready() -> void:
 	spawn_invuln_timer = SPAWN_INVULN_SEC
 	_init_agent_kit()
 	_apply_modular_textures()
-	_apply_weapon(current_weapon_id)
+	if NetworkManager.random_guns_mode and not _is_agent_logic_active() and not is_preview_dummy:
+		assign_random_loadout()
+	else:
+		_apply_weapon(current_weapon_id)
 	_apply_team_visuals()
 	_camera.enabled = is_local_human
 	if is_local_human:
@@ -823,10 +826,10 @@ func _process_alive(delta: float) -> void:
 				for pk in get_tree().get_nodes_in_group("throwable_pickups"):
 					if is_instance_valid(pk) and (pk as Node2D).visible:
 						var p2 := pk as Node2D
-						var to_me: Vector2 = global_position - p2.global_position
-						var dist: float = to_me.length()
-						if dist <= 680.0 and dist > 6.0:
-							p2.global_position += (to_me / dist) * minf(dist, 560.0 * delta)
+						var to_anchor: Vector2 = _magnet_anchor - p2.global_position
+						var dist: float = to_anchor.length()
+						if dist <= 680.0 and dist > 28.0:
+							p2.global_position += (to_anchor / dist) * minf(dist - 28.0, 720.0 * delta)
 		_agent_hud_sync_accum += delta
 		if not is_preview_dummy and NetworkManager.is_agent_clash_mode():
 			if _has_locked_ability_or_ult():
@@ -1009,8 +1012,6 @@ func _process_alive(delta: float) -> void:
 				start_reload()
 			if Input.is_action_just_pressed("switch_weapon"):
 				cycle_weapon()
-			if Input.is_action_just_pressed("toggle_dual_wield"):
-				toggle_dual_wield()
 			if Input.is_action_just_pressed("throw_item"):
 				throw_bomb()
 		if Input.is_action_just_pressed("taunt"):
@@ -1113,8 +1114,9 @@ func _process_alive(delta: float) -> void:
 		is_jetpacking = false
 	elif want_jet and has_fuel and not is_crouching:
 		is_jetpacking = true
-		var max_up_spd: float = JETPACK_MAX_UP_SPEED * (0.35 if slow_mo_timer > 0.0 else 1.0)
-		velocity.y = maxf(velocity.y - JETPACK_THRUST * act_delta, max_up_spd)
+		var jet_spd_mult: float = clampf(NetworkManager.jet_speed_scale, 0.1, 1.0)
+		var max_up_spd: float = JETPACK_MAX_UP_SPEED * jet_spd_mult * (0.35 if slow_mo_timer > 0.0 else 1.0)
+		velocity.y = maxf(velocity.y - JETPACK_THRUST * jet_spd_mult * act_delta, max_up_spd)
 		if NetworkManager.unlimited_jetpack:
 			jetpack_fuel = MAX_FUEL
 		else:
@@ -1203,14 +1205,12 @@ func get_current_weapon() -> WeaponData:
 
 func _fire_weapon() -> void:
 	_fire_cooldown = _weapon.fire_interval
-	if is_dual_wielding and _weapon.supports_dual_wield:
-		_fire_cooldown *= 0.72
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		var fire_delay_mult: float = 1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0)
 		_fire_cooldown *= fire_delay_mult
 
-	var shots_to_fire: int = 2 if (is_dual_wielding and _weapon.supports_dual_wield and current_ammo >= 2) else 1
+	var shots_to_fire: int = 1
 	current_ammo = maxi(0, current_ammo - shots_to_fire)
 	_emit_ammo()
 
@@ -1307,6 +1307,9 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 					b.close_lethal_dist = 135.0
 			else:
 				b.max_lifetime = w.custom_lifetime
+			if w.bullet_range > 0.0:
+				b.max_range = w.bullet_range
+				b.max_lifetime = maxf(b.max_lifetime, (w.bullet_range / maxf(100.0, b.velocity.length())) + 0.25)
 			if w.id == 15:
 				b.boomerang_owner = self
 				b.on_hit_effect_kind = "hook_gun"
@@ -1417,11 +1420,14 @@ func set_weapon(new_weapon_id: int) -> void:
 	current_weapon_id = WeaponData.sanitize_weapon_id(new_weapon_id)
 	_apply_weapon(current_weapon_id)
 	if NetworkManager.is_network_active() and _is_controlled_locally():
-		sync_weapon_rpc.rpc(current_weapon_id, is_dual_wielding, m4a1_rail_mod)
+		sync_weapon_rpc.rpc(current_weapon_id, m4a1_rail_mod)
 
 
 func apply_gun_preset(preset_idx: int) -> void:
 	if _is_agent_logic_active():
+		return
+	if NetworkManager.random_guns_mode:
+		assign_random_loadout()
 		return
 	selected_gun_preset_id = clampi(preset_idx, 0, WeaponData.GUN_PRESETS.size() - 1)
 	var preset: Dictionary = WeaponData.get_effective_preset(selected_gun_preset_id)
@@ -1436,6 +1442,42 @@ func apply_gun_preset(preset_idx: int) -> void:
 	_secondary_saved_ammo = -1
 	bomb_type = str(preset.get("bomb_type", "frag"))
 	max_bombs = int(preset.get("bombs", 3))
+	bomb_count = max_bombs
+	bomb_inventory.clear()
+	if max_bombs > 0:
+		bomb_inventory[bomb_type] = max_bombs
+	set_weapon(primary_weapon_id)
+	if is_local_human:
+		bombs_changed.emit(bomb_count, bomb_type)
+
+
+func assign_random_loadout() -> void:
+	if _is_agent_logic_active():
+		return
+	var allowed: Array[int] = []
+	for wid in range(WeaponData.get_weapon_count()):
+		if WeaponData.sanitize_weapon_id(wid) == wid:
+			allowed.append(wid)
+	if allowed.is_empty():
+		allowed.append(0)
+	primary_weapon_id = allowed[randi() % allowed.size()]
+	if allowed.size() > 1:
+		var sec_pool: Array[int] = []
+		for wid in allowed:
+			if wid != primary_weapon_id:
+				sec_pool.append(wid)
+		secondary_weapon_id = sec_pool[randi() % sec_pool.size()] if not sec_pool.is_empty() else primary_weapon_id
+	else:
+		secondary_weapon_id = primary_weapon_id
+	_equipped_primary_id = primary_weapon_id
+	_original_secondary_id = secondary_weapon_id
+	_active_slot = 0
+	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
+	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+	_primary_saved_ammo = -1
+	_secondary_saved_ammo = -1
+	bomb_type = str(BOMB_TYPES[randi() % BOMB_TYPES.size()]) if not BOMB_TYPES.is_empty() else "frag"
+	max_bombs = 3 if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
 	bomb_inventory.clear()
 	if max_bombs > 0:
@@ -1545,7 +1587,7 @@ func _throw_bomb_local(origin: Vector2, angle: float, b_type: String) -> void:
 		"mine":
 			_spawn_bomb_instance(origin, angle, "mine", 380.0, 95, 150.0, Color(1.0, 0.62, 0.18), "Mine Bomb", local_auth)
 		_:
-			_spawn_bomb_instance(origin, angle, "frag", 600.0, 82, 155.0, Color(0.28, 0.92, 0.42), "Frag Bomb", local_auth)
+			_spawn_bomb_instance(origin, angle, "frag", 600.0, 125, 195.0, Color(0.28, 0.92, 0.42), "Frag Bomb", local_auth)
 	_play_local_sfx("res://assets/audio/jump.wav", -2.0, 0.65)
 
 
@@ -1570,22 +1612,9 @@ func _spawn_bomb_instance(origin: Vector2, angle: float, b_type: String, speed: 
 	return bomb
 
 
-func toggle_dual_wield() -> void:
-	if _is_agent_logic_active():
-		return
-	if not _weapon.supports_dual_wield or is_dead:
-		return
-	is_dual_wielding = not is_dual_wielding
-	_apply_weapon_visuals()
-	_emit_hud_signals()
-	if NetworkManager.is_network_active() and _is_controlled_locally():
-		sync_weapon_rpc.rpc(current_weapon_id, is_dual_wielding, m4a1_rail_mod)
-
-
 @rpc("any_peer", "call_local", "reliable")
-func sync_weapon_rpc(weapon_id: int, dual: bool, rail_mod: int = 0) -> void:
+func sync_weapon_rpc(weapon_id: int, rail_mod: int = 0) -> void:
 	current_weapon_id = weapon_id
-	is_dual_wielding = dual
 	m4a1_rail_mod = rail_mod
 	_apply_weapon(weapon_id)
 
@@ -1594,8 +1623,6 @@ func _apply_weapon(weapon_id: int) -> void:
 	var safe_id: int = WeaponData.sanitize_weapon_id(weapon_id)
 	current_weapon_id = safe_id
 	_weapon = WeaponData.get_weapon(safe_id, weapon_skin_id, m4a1_rail_mod)
-	if not _weapon.supports_dual_wield:
-		is_dual_wielding = false
 	is_reloading = false
 	var active_res: int = get_active_reserve_ammo()
 	var saved_ammo: int = _secondary_saved_ammo if _is_using_secondary_slot() else _primary_saved_ammo
@@ -1623,7 +1650,7 @@ func get_target_camera_zoom() -> float:
 			return clampf(full_map_zoom, 0.15, 1.05)
 		return 0.58
 	if NetworkManager.is_agent_clash_mode() or is_dead or _weapon == null:
-		return 1.05
+		return 1.30
 	var lvl: int = clampi(current_zoom_level, 1, get_max_zoom_level())
 	return ZOOM_LEVEL_VALUES[lvl - 1]
 
@@ -1676,8 +1703,9 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
 		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.55, 0.55) * 0.32
+		_primary_weapon.scale = Vector2(0.165, 0.165)
 		_secondary_weapon.visible = false
+		_sync_muzzle_positions(aim_angle)
 		return
 	if current_weapon_id == 15:
 		_primary_weapon.texture = TEX_HOOK_GUN
@@ -1685,8 +1713,9 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
 		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
+		_primary_weapon.scale = Vector2(0.24, 0.24)
 		_secondary_weapon.visible = false
+		_sync_muzzle_positions(aim_angle)
 		return
 	if current_weapon_id == 16:
 		_primary_weapon.texture = TEX_BUBBLE_GUN
@@ -1694,8 +1723,9 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
 		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
+		_primary_weapon.scale = Vector2(0.24, 0.24)
 		_secondary_weapon.visible = false
+		_sync_muzzle_positions(aim_angle)
 		return
 	if current_weapon_id == 17:
 		_primary_weapon.texture = TEX_MACHINE_GUN
@@ -1703,8 +1733,9 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
 		_primary_weapon.position = Vector2(18, 0)
-		_primary_weapon.scale = Vector2(1.20, 1.20) * 0.32
+		_primary_weapon.scale = Vector2(0.27, 0.27)
 		_secondary_weapon.visible = false
+		_sync_muzzle_positions(aim_angle)
 		return
 	if current_weapon_id == 13:
 		_primary_weapon.texture = TEX_PLASMA_CANNON
@@ -1712,8 +1743,9 @@ func _apply_weapon_visuals() -> void:
 		_primary_weapon.vframes = 1
 		_primary_weapon.frame = 0
 		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.95, 0.95) * 0.32
+		_primary_weapon.scale = Vector2(0.24, 0.24)
 		_secondary_weapon.visible = false
+		_sync_muzzle_positions(aim_angle)
 		return
 	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
 		_primary_weapon.texture = _weapons_sheet_tex
@@ -1726,17 +1758,17 @@ func _apply_weapon_visuals() -> void:
 	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
 	_primary_weapon.frame = sheet_frame
 	_secondary_weapon.frame = sheet_frame
-	_secondary_weapon.visible = is_dual_wielding and w.supports_dual_wield and not is_dead
+	_secondary_weapon.visible = false
 	_sync_muzzle_positions(aim_angle)
 
 
 static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) -> Vector2:
 	match weapon_id:
-		11: return Vector2(45.0, -4.3) # Flamethrower
-		13: return Vector2(48.8, -3.1) # Plasma Cannon
-		15: return Vector2(49.4, -5.9) # Hook Gun
-		16: return Vector2(43.4, -2.1) # Bubble Gun
-		17: return Vector2(62.9, -7.3) # Machine Gun
+		11: return Vector2(43.2, -4.0) # Flamethrower
+		13: return Vector2(41.9, -2.5) # Plasma Cannon
+		15: return Vector2(42.4, -4.7) # Hook Gun
+		16: return Vector2(37.6, -1.7) # Bubble Gun
+		17: return Vector2(49.5, -5.1) # Machine Gun
 	var f: int = sprite_frame if sprite_frame >= 0 else clampi(weapon_id, 0, 10)
 	match f % 11:
 		0: return Vector2(44.1, -5.2) # AK-47
@@ -2181,15 +2213,18 @@ func _respawn_self() -> void:
 		ability_cooldowns = [0.0, 0.0, 0.0, 0.0]
 	else:
 		ability_cooldowns[3] = 0.0 if ult_points >= 4 else 1.0
-	bomb_count = max_bombs if NetworkManager.allow_explosives else 0
-	bomb_inventory.clear()
-	if bomb_count > 0:
-		bomb_inventory[bomb_type] = bomb_count
-	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
-	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
-	_primary_saved_ammo = -1
-	_secondary_saved_ammo = -1
-	current_ammo = _weapon.mag_size
+	if NetworkManager.random_guns_mode and not _is_agent_logic_active():
+		assign_random_loadout()
+	else:
+		bomb_count = max_bombs if NetworkManager.allow_explosives else 0
+		bomb_inventory.clear()
+		if bomb_count > 0:
+			bomb_inventory[bomb_type] = bomb_count
+		_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
+		_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+		_primary_saved_ammo = -1
+		_secondary_saved_ammo = -1
+		current_ammo = _weapon.mag_size
 	spawn_invuln_timer = SPAWN_INVULN_SEC
 
 	if NetworkManager.is_network_active():
@@ -2324,8 +2359,7 @@ func _update_visual_state(delta: float) -> void:
 	else:
 		_weapon_pivot.visible = not is_dead
 		_weapon_pivot.modulate.a = 1.0
-	var is_dual: bool = is_dual_wielding and _weapon != null and _weapon.supports_dual_wield
-	var active_stance: String = "none" if is_dead else ("throw_bomb" if _bomb_throw_timer > 0.0 else ("rifle" if NetworkManager.is_agent_clash_mode() else ModularCharacter.get_weapon_stance(current_weapon_id, is_dual)))
+	var active_stance: String = "none" if is_dead else ("throw_bomb" if _bomb_throw_timer > 0.0 else ("rifle" if NetworkManager.is_agent_clash_mode() else ModularCharacter.get_weapon_stance(current_weapon_id)))
 	var w_ov: Dictionary = {}
 	if is_instance_valid(_modular_rig):
 		if NetworkManager.is_agent_clash_mode() and not is_dead:
@@ -2458,7 +2492,7 @@ func _emit_hud_signals() -> void:
 		return
 	health_changed.emit(health, max_health)
 	fuel_changed.emit(jetpack_fuel, MAX_FUEL)
-	weapon_changed.emit(_weapon, is_dual_wielding)
+	weapon_changed.emit(_weapon)
 	_emit_ammo()
 	if _is_agent_logic_active():
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
@@ -3088,7 +3122,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				bax.boomerang_return_time = 0.01
 				bax.spin_speed = 18.0
 				bax.pierce_players = true
-				bax.pierce_walls = true
+				bax.pierce_walls = false
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.85)
 		"barbarian_squad":
 			_spawn_barbarian_squad(origin, cast_angle, dmg, float(ab.get("duration", 6.0)), col, ab_name, local_auth)
@@ -3320,7 +3354,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				bs.boomerang_return_time = 0.42
 				bs.spin_speed = 14.0 if is_head else 18.0
 				bs.pierce_players = true
-				bs.pierce_walls = true
+				bs.pierce_walls = false
 				if is_head:
 					bs.radius_scale = 1.35
 					headless_timer = 1.85
@@ -3405,13 +3439,14 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_spawn_summon("shadow_mummy", sm_pos, dmg, float(ab.get("duration", 5.0)), col, ab_name, local_auth)
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 0.75)
 		"throwable_magnet":
-			_magnet_timer = float(ab.get("duration", 5.0))
+			_magnet_anchor = cast_pos
+			_magnet_timer = 0.65
 			if local_auth:
 				for pk in get_tree().get_nodes_in_group("throwable_pickups"):
 					if is_instance_valid(pk) and (pk as Node2D).visible:
 						var p2 := pk as Node2D
 						if p2.global_position.distance_to(cast_pos) <= 680.0:
-							p2.global_position = p2.global_position.lerp(cast_pos, 0.45)
+							p2.global_position = p2.global_position.lerp(cast_pos, 0.35)
 			var mag_col := Color(0.28, 0.80, 1.0)
 			var parent_mag: Node = get_parent()
 			if parent_mag != null:
@@ -4901,8 +4936,10 @@ func throw_held_item() -> void:
 		else:
 			_throw_item_local(item_id, safe_m, aim_angle)
 		return
-	# Default throwable: 1.0s windup to take off shoe, then throw with 5s cooldown
-	throw_shoe()
+	# Shoe throwing disabled for now (kept intact in throw_shoe() for future use)
+	const SHOE_THROW_ENABLED: bool = false
+	if SHOE_THROW_ENABLED:
+		throw_shoe()
 
 
 func throw_shoe() -> void:
@@ -5137,7 +5174,7 @@ func _draw() -> void:
 		return
 	if _muzzle_primary == null or not is_instance_valid(_muzzle_primary):
 		return
-	var laser_len: float = 1400.0 if (_weapon != null and _weapon.max_zoom_level >= 6) else 460.0
+	var laser_len: float = _weapon.bullet_range if (_weapon != null and _weapon.bullet_range > 0.0) else (1400.0 if (_weapon != null and _weapon.max_zoom_level >= 6) else 460.0)
 	var start_world: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 	var end_world: Vector2 = start_world + Vector2.from_angle(aim_angle) * laser_len
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state

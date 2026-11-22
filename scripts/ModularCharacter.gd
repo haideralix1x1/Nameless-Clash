@@ -260,7 +260,7 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_sprite_strip(_sprite_gear, gear_path)
 	_apply_sprite_strip(_sprite_back, back_path)
 	_is_raven_wing = (acc_id == 24) or back_path.ends_with("raven_accessories.png")
-	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("soulless_accessories.png")
+	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 26) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("draken_accessories.png") or back_path.ends_with("soulless_accessories.png")
 	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("ignis_head.png")
 	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("ignis_hands.png")
 	_is_soulless_smoke = (head_id == 27) or gear_path.ends_with("soulless_head.png")
@@ -511,14 +511,6 @@ func _apply_flip_to_sprites(flip_h: bool) -> void:
 
 
 func _draw() -> void:
-	if _is_ignis_head_fire and is_instance_valid(_sprite_gear) and _sprite_gear.visible:
-		var head_top: Vector2 = _sprite_gear.position + Vector2(0.0, -34.0)
-		_draw_animated_flame_cluster(head_top, 1.15, 0.0)
-	if _is_ignis_hands_fire:
-		if is_instance_valid(_sprite_hands) and _sprite_hands.visible:
-			_draw_animated_flame_cluster(_sprite_hands.position + Vector2(0.0, -3.0), 0.58, 1.7)
-		if is_instance_valid(_sprite_hand_far) and _sprite_hand_far.visible:
-			_draw_animated_flame_cluster(_sprite_hand_far.position + Vector2(0.0, -3.0), 0.50, 3.4)
 	if _is_soulless_smoke and is_instance_valid(_sprite_gear) and _sprite_gear.visible:
 		_draw_soulless_head_smoke(_sprite_gear.position + Vector2(0.0, -32.0))
 
@@ -655,9 +647,7 @@ func stop_shoe_throw() -> void:
 		_sprite_hand_far.position = Vector2(23.0 * sign_x, 6.0)
 
 
-static func get_weapon_stance(w_id: int, dual: bool = false) -> String:
-	if dual:
-		return "dual"
+static func get_weapon_stance(w_id: int) -> String:
 	if w_id in [3, 4, 9]:
 		return "pistol"
 	if w_id in [10, 11, 12]:
@@ -710,7 +700,7 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 			_sprite_hand_far.z_index = int(hf_ov.get("z", 0))
 			_sprite_hand_far.position = Vector2(float(hf_ov.get("x", 23.0)) * dir, float(hf_ov.get("y", 7.5)))
 			_sprite_hand_far.rotation = dir * deg_to_rad(float(hf_ov.get("rot", 0.0)))
-			_sprite_hand_far.scale = _sprite_hands.scale * 0.92
+			_sprite_hand_far.scale = _sprite_hands.scale
 		return
 
 	var base_ang: float = 0.0 if facing_r else PI
@@ -756,7 +746,7 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	_sprite_hands.rotation = dir * hn_rot_rad + rel_tilt * tilt_mul - kick_rot
 	if _sprite_hand_far != null:
 		_sprite_hand_far.z_index = int(hf_w.get("z", 0))
-		_sprite_hand_far.scale = _sprite_hands.scale * 0.82
+		_sprite_hand_far.scale = _sprite_hands.scale
 		var far_kick: Vector2 = kick_vec * 0.65 if stance == "dual" else Vector2.ZERO
 		_sprite_hand_far.position = Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y))) - far_kick
 		var hf_rot_rad: float = deg_to_rad(float(hf_w["rot"])) if hf_w.has("rot") else hf_rot_def

@@ -23,7 +23,6 @@ const REBINDABLE_ACTIONS: Array[Dictionary] = [
 	{"action": "jetpack", "label": "Jetpack Thrust", "default": KEY_SPACE},
 	{"action": "reload", "label": "Reload Weapon", "default": KEY_R},
 	{"action": "switch_weapon", "label": "Switch Weapon", "default": KEY_Q},
-	{"action": "toggle_dual_wield", "label": "Toggle Dual-Wield", "default": KEY_E},
 	{"action": "open_lobby", "label": "Open LAN Lobby", "default": KEY_L}
 ]
 
@@ -33,8 +32,12 @@ var aim_stick_sensitivity: float = 1.0
 var invert_y_axis: bool = false
 var auto_aim_assist: bool = true
 
+const DEFAULT_UI_LAYOUT_PATH := "res://assets/data/default_ui_layout.json"
+const USER_DEFAULT_UI_LAYOUT_PATH := "user://default_ui_layout.json"
+
 var touch_layout: Dictionary = {}
-var touch_layout_version: int = 4
+var touch_layout_transforms: Dictionary = {}
+var touch_layout_version: int = 5
 
 # Audio
 var master_volume: float = 0.85
@@ -60,6 +63,8 @@ var show_diagnostics: bool = false
 # Match Game Rules / Mutators (synced with NetworkManager)
 var unlimited_jetpack: bool = false
 var gravity_scale: float = 1.0
+var jet_speed_scale: float = 0.5
+var random_guns_mode: bool = false
 var only_pistols: bool = false
 var allow_snipers: bool = true
 var allow_shotguns: bool = true
@@ -83,18 +88,61 @@ func _exit_tree() -> void:
 		_bgm_player.stream = null
 
 
-func _reset_default_touch_layout(emit_save: bool = true) -> void:
-	touch_layout = {
-		"left_stick": Vector2(0.12, 0.76),
-		"right_stick": Vector2(0.88, 0.76),
-		"btn_reload": Vector2(0.75, 0.85),
-		"btn_switch": Vector2(0.76, 0.66),
-		"btn_bomb": Vector2(0.90, 0.50),
-		"btn_dual": Vector2(0.24, 0.85),
-		"ability_bar": Vector2(0.50, 0.84),
-		"btn_presets": Vector2(0.10, 0.06)
+static func get_builtin_default_ui_layout() -> Dictionary:
+	return {
+		"left_stick": {"x": 0.12, "y": 0.76, "scale": 1.0, "rot": 0.0},
+		"right_stick": {"x": 0.88, "y": 0.76, "scale": 1.0, "rot": 0.0},
+		"btn_reload": {"x": 0.75, "y": 0.85, "scale": 1.0, "rot": 0.0},
+		"btn_switch": {"x": 0.76, "y": 0.66, "scale": 1.0, "rot": 0.0},
+		"btn_bomb": {"x": 0.90, "y": 0.50, "scale": 1.0, "rot": 0.0},
+		"btn_shoe": {"x": 0.042, "y": 0.189, "scale": 1.0, "rot": 0.0},
+		"btn_zoom": {"x": 0.045, "y": 0.065, "scale": 1.0, "rot": 0.0},
+		"btn_presets": {"x": 0.105, "y": 0.065, "scale": 1.0, "rot": 0.0},
+		"btn_pickup": {"x": 0.88, "y": 0.558, "scale": 1.0, "rot": 0.0},
+		"btn_interact": {"x": 0.68, "y": 0.85, "scale": 1.0, "rot": 0.0},
+		"btn_throw_prop": {"x": 0.045, "y": 0.325, "scale": 1.0, "rot": 0.0},
+		"ability_0": {"x": 0.36, "y": 0.86, "scale": 1.0, "rot": 0.0},
+		"ability_1": {"x": 0.45, "y": 0.86, "scale": 1.0, "rot": 0.0},
+		"ability_2": {"x": 0.54, "y": 0.86, "scale": 1.0, "rot": 0.0},
+		"ability_3": {"x": 0.63, "y": 0.86, "scale": 1.0, "rot": 0.0},
+		"top_bar_hud": {"x": 0.50, "y": 0.055, "scale": 1.0, "rot": 0.0},
 	}
-	touch_layout_version = 4
+
+
+static func load_default_ui_layout_dict() -> Dictionary:
+	var out: Dictionary = get_builtin_default_ui_layout()
+	for path in [DEFAULT_UI_LAYOUT_PATH, USER_DEFAULT_UI_LAYOUT_PATH]:
+		if FileAccess.file_exists(path):
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if parsed is Dictionary:
+				var d := parsed as Dictionary
+				var elems: Variant = d.get("elements", d)
+				if elems is Dictionary:
+					for k in (elems as Dictionary):
+						var v: Variant = (elems as Dictionary)[k]
+						if v is Dictionary:
+							var vd := v as Dictionary
+							out[k] = {
+								"x": clampf(float(vd.get("x", 0.5)), 0.02, 0.98),
+								"y": clampf(float(vd.get("y", 0.5)), 0.02, 0.98),
+								"scale": clampf(float(vd.get("scale", 1.0)), 0.35, 2.5),
+								"rot": clampf(float(vd.get("rot", 0.0)), -180.0, 180.0),
+							}
+	return out
+
+
+func _reset_default_touch_layout(emit_save: bool = true) -> void:
+	var def_map: Dictionary = load_default_ui_layout_dict()
+	touch_layout.clear()
+	touch_layout_transforms.clear()
+	for k in def_map.keys():
+		var item: Dictionary = def_map[k]
+		touch_layout[k] = Vector2(float(item["x"]), float(item["y"]))
+		touch_layout_transforms[k] = {
+			"scale": float(item.get("scale", 1.0)),
+			"rot": float(item.get("rot", 0.0)),
+		}
+	touch_layout_version = 6
 	if emit_save:
 		save_settings()
 		touch_layout_changed.emit()
@@ -111,7 +159,17 @@ func restore_touch_layout(saved_layout: Dictionary) -> void:
 
 
 func set_touch_element_pos(key: String, norm_pos: Vector2) -> void:
-	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.04, 0.96), clampf(norm_pos.y, 0.05, 0.95))
+	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.02, 0.98), clampf(norm_pos.y, 0.02, 0.98))
+	save_settings()
+	touch_layout_changed.emit()
+
+
+func set_touch_element_transform(key: String, norm_pos: Vector2, sc: float, rot_deg: float) -> void:
+	touch_layout[key] = Vector2(clampf(norm_pos.x, 0.02, 0.98), clampf(norm_pos.y, 0.02, 0.98))
+	touch_layout_transforms[key] = {
+		"scale": clampf(sc, 0.35, 2.5),
+		"rot": clampf(rot_deg, -180.0, 180.0),
+	}
 	save_settings()
 	touch_layout_changed.emit()
 
@@ -119,6 +177,18 @@ func set_touch_element_pos(key: String, norm_pos: Vector2) -> void:
 func get_touch_element_px(key: String, viewport_size: Vector2) -> Vector2:
 	var norm: Vector2 = touch_layout.get(key, Vector2(0.5, 0.5))
 	return Vector2(norm.x * viewport_size.x, norm.y * viewport_size.y)
+
+
+func get_touch_element_scale(key: String) -> float:
+	if touch_layout_transforms.has(key):
+		return clampf(float((touch_layout_transforms[key] as Dictionary).get("scale", 1.0)), 0.35, 2.5)
+	return 1.0
+
+
+func get_touch_element_rot(key: String) -> float:
+	if touch_layout_transforms.has(key):
+		return clampf(float((touch_layout_transforms[key] as Dictionary).get("rot", 0.0)), -180.0, 180.0)
+	return 0.0
 
 
 func _ensure_audio_buses() -> void:
@@ -163,12 +233,18 @@ func load_settings() -> void:
 	auto_aim_assist = bool(cfg.get_value("controls", "auto_aim_assist", true))
 
 	var saved_layout_ver: int = int(cfg.get_value("touch", "layout_version", 1))
-	var migrate_touch: bool = saved_layout_ver < 4
+	var migrate_touch: bool = saved_layout_ver < 5
 	if not migrate_touch:
 		for k in touch_layout.keys():
 			var saved_v: Variant = cfg.get_value("touch_layout", k, touch_layout[k])
 			if saved_v is Vector2:
 				touch_layout[k] = saved_v
+			var saved_sc: float = float(cfg.get_value("touch_layout_xform", "%s_scale" % k, get_touch_element_scale(k)))
+			var saved_rot: float = float(cfg.get_value("touch_layout_xform", "%s_rot" % k, get_touch_element_rot(k)))
+			touch_layout_transforms[k] = {
+				"scale": clampf(saved_sc, 0.35, 2.5),
+				"rot": clampf(saved_rot, -180.0, 180.0),
+			}
 
 	for item in REBINDABLE_ACTIONS:
 		var act: String = str(item["action"])
@@ -197,6 +273,8 @@ func load_settings() -> void:
 
 	unlimited_jetpack = bool(cfg.get_value("game_rules", "unlimited_jetpack", false))
 	gravity_scale = clampf(float(cfg.get_value("game_rules", "gravity_scale", 1.0)), 0.0, 1.0)
+	jet_speed_scale = clampf(float(cfg.get_value("game_rules", "jet_speed_scale", 0.5)), 0.1, 1.0)
+	random_guns_mode = bool(cfg.get_value("game_rules", "random_guns_mode", false))
 	only_pistols = bool(cfg.get_value("game_rules", "only_pistols", false))
 	allow_snipers = bool(cfg.get_value("game_rules", "allow_snipers", true))
 	allow_shotguns = bool(cfg.get_value("game_rules", "allow_shotguns", true))
@@ -216,6 +294,8 @@ func save_settings() -> void:
 	cfg.set_value("touch", "layout_version", touch_layout_version)
 	for k in touch_layout.keys():
 		cfg.set_value("touch_layout", k, touch_layout[k])
+		cfg.set_value("touch_layout_xform", "%s_scale" % k, get_touch_element_scale(k))
+		cfg.set_value("touch_layout_xform", "%s_rot" % k, get_touch_element_rot(k))
 
 	for item in REBINDABLE_ACTIONS:
 		var act: String = str(item["action"])
@@ -242,6 +322,8 @@ func save_settings() -> void:
 
 	cfg.set_value("game_rules", "unlimited_jetpack", unlimited_jetpack)
 	cfg.set_value("game_rules", "gravity_scale", clampf(gravity_scale, 0.0, 1.0))
+	cfg.set_value("game_rules", "jet_speed_scale", clampf(jet_speed_scale, 0.1, 1.0))
+	cfg.set_value("game_rules", "random_guns_mode", random_guns_mode)
 	cfg.set_value("game_rules", "only_pistols", only_pistols)
 	cfg.set_value("game_rules", "allow_snipers", allow_snipers)
 	cfg.set_value("game_rules", "allow_shotguns", allow_shotguns)
@@ -254,6 +336,8 @@ func get_rules_dict() -> Dictionary:
 	return {
 		"unlimited_jetpack": unlimited_jetpack,
 		"gravity_scale": clampf(gravity_scale, 0.0, 1.0),
+		"jet_speed_scale": clampf(jet_speed_scale, 0.1, 1.0),
+		"random_guns_mode": random_guns_mode,
 		"only_pistols": only_pistols,
 		"allow_snipers": allow_snipers,
 		"allow_shotguns": allow_shotguns,

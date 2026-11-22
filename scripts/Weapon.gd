@@ -16,7 +16,17 @@ extends Resource
 @export var bullet_speed: float = 1280.0
 @export var spread_deg: float = 2.8
 @export var pellet_count: int = 1
+@export var bullet_range: float = 0.0
 @export var damage_falloff_start: float = 9999.0
+
+const WEAPON_RANGES_PATH: String = "res://assets/data/weapon_ranges.json"
+const USER_WEAPON_RANGES_PATH: String = "user://weapon_ranges.json"
+const WEAPON_STATS_PATH: String = "res://assets/data/weapon_stats.json"
+const USER_WEAPON_STATS_PATH: String = "user://weapon_stats.json"
+static var _range_cache_loaded: bool = false
+static var _range_cache: Dictionary = {}
+static var _stats_cache_loaded: bool = false
+static var _stats_cache: Dictionary = {}
 @export var min_damage_ratio: float = 1.0
 @export var move_speed_multiplier: float = 1.0
 @export var scope_zoom: float = 1.05
@@ -196,12 +206,103 @@ static func get_effective_preset(preset_idx: int) -> Dictionary:
 	return d
 
 
-static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
+static func get_builtin_default_ranges() -> Dictionary:
+	return {
+		"0": 860.0, "1": 900.0, "2": 960.0, "3": 560.0, "4": 500.0,
+		"5": 340.0, "6": 360.0, "7": 1500.0, "8": 1350.0, "9": 620.0,
+		"10": 1100.0, "11": 280.0, "12": 1250.0, "13": 1050.0,
+		"14": 820.0, "15": 950.0, "16": 750.0, "17": 860.0,
+	}
+
+
+static func load_weapon_ranges_dict() -> Dictionary:
+	if _range_cache_loaded and not _range_cache.is_empty():
+		return _range_cache.duplicate()
+	var out: Dictionary = get_builtin_default_ranges()
+	for path in [WEAPON_RANGES_PATH, USER_WEAPON_RANGES_PATH]:
+		if FileAccess.file_exists(path):
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if parsed is Dictionary:
+				for k in (parsed as Dictionary).keys():
+					out[str(k)] = clampf(float((parsed as Dictionary)[k]), 80.0, 4000.0)
+	_range_cache = out.duplicate()
+	_range_cache_loaded = true
+	return out
+
+
+static func reload_weapon_ranges() -> void:
+	_range_cache_loaded = false
+	_range_cache.clear()
+	load_weapon_ranges_dict()
+
+
+static func load_weapon_stats_dict() -> Dictionary:
+	if _stats_cache_loaded:
+		return _stats_cache.duplicate(true)
+	var out: Dictionary = {}
+	for path in [WEAPON_STATS_PATH, USER_WEAPON_STATS_PATH]:
+		if FileAccess.file_exists(path):
+			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if parsed is Dictionary:
+				for k in (parsed as Dictionary).keys():
+					var v: Variant = (parsed as Dictionary)[k]
+					if v is Dictionary:
+						out[str(k)] = (v as Dictionary).duplicate(true)
+	_stats_cache = out.duplicate(true)
+	_stats_cache_loaded = true
+	return out
+
+
+static func reload_weapon_stats() -> void:
+	_stats_cache_loaded = false
+	_stats_cache.clear()
+	load_weapon_stats_dict()
+	reload_weapon_ranges()
+
+
+static func get_total_weapon_count() -> int:
+	return 18
+
+
+static func get_base_weapon(weapon_id: int) -> WeaponData:
+	var ranges: Dictionary = get_builtin_default_ranges()
 	if weapon_id >= 11 and weapon_id <= 17:
-		return _get_special_weapon(weapon_id)
+		var sw: WeaponData = _get_special_weapon(weapon_id)
+		sw.bullet_range = float(ranges.get(str(weapon_id), sw.bullet_range if sw.bullet_range > 0.0 else 800.0))
+		return sw
 	var idx: int = clampi(weapon_id, 0, RESOURCE_PATHS.size() - 1)
 	var base: WeaponData = load(RESOURCE_PATHS[idx]) as WeaponData
 	var w: WeaponData = (base.duplicate() as WeaponData) if base != null else _fallback_weapon(idx)
+	w.bullet_range = float(ranges.get(str(idx), w.bullet_range if w.bullet_range > 0.0 else 860.0))
+	return w
+
+
+static func _apply_stat_overrides(w: WeaponData, key: String, ranges: Dictionary, stats: Dictionary) -> void:
+	w.bullet_range = float(ranges.get(key, w.bullet_range if w.bullet_range > 0.0 else 860.0))
+	if stats.has(key) and stats[key] is Dictionary:
+		var sd: Dictionary = stats[key] as Dictionary
+		if sd.has("bullet_range"): w.bullet_range = clampf(float(sd["bullet_range"]), 80.0, 4000.0)
+		if sd.has("damage"): w.damage = maxi(1, int(sd["damage"]))
+		if sd.has("fire_interval"): w.fire_interval = clampf(float(sd["fire_interval"]), 0.03, 3.0)
+		if sd.has("spread_deg"): w.spread_deg = clampf(float(sd["spread_deg"]), 0.0, 30.0)
+		if sd.has("bullet_speed"): w.bullet_speed = clampf(float(sd["bullet_speed"]), 150.0, 3500.0)
+		if sd.has("mag_size"): w.mag_size = clampi(int(sd["mag_size"]), 1, 250)
+		if sd.has("reload_time"): w.reload_time = clampf(float(sd["reload_time"]), 0.2, 6.0)
+		if sd.has("recoil_impulse"): w.recoil_impulse = clampf(float(sd["recoil_impulse"]), 0.0, 400.0)
+		if sd.has("pellet_count"): w.pellet_count = clampi(int(sd["pellet_count"]), 1, 16)
+
+
+static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
+	var ranges: Dictionary = load_weapon_ranges_dict()
+	var stats: Dictionary = load_weapon_stats_dict()
+	if weapon_id >= 11 and weapon_id <= 17:
+		var sw: WeaponData = _get_special_weapon(weapon_id)
+		_apply_stat_overrides(sw, str(weapon_id), ranges, stats)
+		return sw
+	var idx: int = clampi(weapon_id, 0, RESOURCE_PATHS.size() - 1)
+	var base: WeaponData = load(RESOURCE_PATHS[idx]) as WeaponData
+	var w: WeaponData = (base.duplicate() as WeaponData) if base != null else _fallback_weapon(idx)
+	_apply_stat_overrides(w, str(idx), ranges, stats)
 
 	if w.has_accessory_rail:
 		if rail_mod == 1:
@@ -213,6 +314,7 @@ static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> W
 			# Tactical Scope attachment: extended zoom & precision
 			w.scope_zoom = 0.90
 			w.spread_deg *= 0.65
+			w.bullet_range += 120.0
 			w.display_name = "M4A1 (Scoped)"
 
 	if skin_id == 2:

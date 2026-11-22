@@ -14,6 +14,7 @@ const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine
 const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
+const AIM_FIRE_THRESHOLD: float = 0.78
 const PRESET_SELECT_DURATION: float = 5.0
 const INDICATOR_MAX_RANGE: float = 1150.0
 const INDICATOR_EDGE_MARGIN: float = 34.0
@@ -52,7 +53,6 @@ var _bomb_hud_label: Label
 var _weapon_name_label: Label
 var _ammo_label: Label
 var _target_refresh_accum: float = 0.0
-var _dual_badge: Label
 var _net_status_label: Label
 var _map_mode_label: Label
 var _scoreboard_label: Label
@@ -74,9 +74,9 @@ var _rem_bot_btn: Button
 var _test_bot_btn: Button
 var _agent_swap_row: HBoxContainer
 
+var _top_bar_node: Control
 var _btn_reload: Button
 var _btn_switch: Button
-var _btn_dual: Button
 var _btn_bomb: Button
 var _btn_presets: Button
 var _btn_zoom: Button
@@ -106,12 +106,10 @@ var _preset_time_left: float = 0.0
 var _preset_selection_done: bool = false
 var _chosen_preset_idx: int = -1
 
-var _agent_action_panel: VBoxContainer
 var _btn_ability_1: Button
 var _btn_ability_2: Button
 var _btn_ability_3: Button
 var _btn_ult: Button
-var _btn_throw: Button
 var _stun_banner: PanelContainer
 var _stun_label: Label
 
@@ -120,6 +118,90 @@ var _drawer_panel: Control
 var _layout_handles: Dictionary = {}
 var _dragging_key: String = ""
 var _drag_center_offset: Vector2 = Vector2.ZERO
+
+
+const TEX_UI_BUTTON_ICONS: Texture2D = preload("res://assets/sprites/ui/ui_button_icons.png")
+const UI_ICON_CELL: float = 128.0
+
+
+class HudBtnIcon extends Control:
+	var kind: String = ""
+	var accent: Color = Color.WHITE
+	var bomb_type: String = "frag"
+	var count: int = 3
+	var zoom_level: int = 1
+	var max_zoom: int = 2
+	var prop_kind: String = "stone"
+
+	func _icon_cell_pos() -> Vector2i:
+		match kind:
+			"reload":
+				return Vector2i(0, 0)
+			"swap":
+				return Vector2i(1, 0)
+			"bomb":
+				match bomb_type:
+					"time":
+						return Vector2i(3, 2)
+					"sticky":
+						return Vector2i(0, 3)
+					"mine":
+						return Vector2i(1, 3)
+					"cluster":
+						return Vector2i(2, 3)
+					_:
+						return Vector2i(2, 0)
+			"throw":
+				return Vector2i(3, 0)
+			"use":
+				return Vector2i(0, 1)
+			"pick":
+				return Vector2i(1, 1)
+			"zoom":
+				return Vector2i(2, 1)
+			"prop":
+				var pk := prop_kind.to_lower()
+				if pk.contains("crate") or pk.contains("box"):
+					return Vector2i(0, 2)
+				elif pk.contains("chair"):
+					return Vector2i(1, 2)
+				elif pk.contains("barrel"):
+					return Vector2i(2, 2)
+				else:
+					return Vector2i(3, 1)
+			"kit":
+				return Vector2i(3, 3)
+		return Vector2i(-1, -1)
+
+	func _draw() -> void:
+		var c: Vector2 = size * 0.5
+		var font: Font = ThemeDB.fallback_font
+		var cell := _icon_cell_pos()
+		if cell.x >= 0 and TEX_UI_BUTTON_ICONS != null:
+			var icon_sz: float = minf(size.x, size.y) * 0.68
+			var dst_offset := Vector2(0.0, -3.0) if (kind == "zoom" or kind == "bomb") else Vector2.ZERO
+			var dst := Rect2(c - Vector2(icon_sz, icon_sz) * 0.5 + dst_offset, Vector2(icon_sz, icon_sz))
+			var src := Rect2(Vector2(cell.x * UI_ICON_CELL, cell.y * UI_ICON_CELL), Vector2(UI_ICON_CELL, UI_ICON_CELL))
+			draw_texture_rect_region(TEX_UI_BUTTON_ICONS, dst, src, Color.WHITE)
+		if kind == "bomb" and font != null:
+			draw_string(font, c + Vector2(6.0, 20.0), "x%d" % maxi(0, count), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+		elif kind == "zoom" and font != null:
+			var z_txt := "%dx" % zoom_level
+			var tsz := font.get_string_size(z_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 13)
+			draw_string(font, c + Vector2(-tsz.x * 0.5, 22.0), z_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+
+
+func _attach_btn_icon(btn: Button, kind: String, accent_col: Color) -> HudBtnIcon:
+	btn.text = ""
+	var ic := HudBtnIcon.new()
+	ic.name = "BtnIcon"
+	ic.kind = kind
+	ic.accent = accent_col
+	ic.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(ic)
+	btn.set_meta("hud_icon", ic)
+	return ic
 
 
 func _ready() -> void:
@@ -175,7 +257,7 @@ func _process(delta: float) -> void:
 		if _diag_label.visible:
 			_diag_label.text = "FPS: %d | PLAYERS: %d" % [Engine.get_frames_per_second(), get_tree().get_nodes_in_group("players").size()]
 	if is_instance_valid(_btn_shoe) and _btn_shoe.visible and local_player != null:
-		_btn_shoe.text = "THROW"
+		_btn_shoe.text = ""
 		var has_held: bool = (not str(local_player.get("held_prop_kind")).is_empty()) or (int(local_player.get("grabbed_player_id")) != 0) or (not (local_player.get("held_throwables") as Array).is_empty())
 		var w_t: float = float(local_player.get("_shoe_windup_timer"))
 		var cd_t: float = float(local_player.get("shoe_cooldown_timer"))
@@ -229,10 +311,11 @@ func bind_local_player(player: Node) -> void:
 		local_player.agent_abilities_changed.connect(func():
 			_refresh_agent_hud(local_player.ability_cooldowns, local_player.ability_max_cooldowns, local_player.held_throwable_id, local_player.stun_timer)
 		)
-	if _chosen_preset_idx >= 0 and not NetworkManager.is_agent_clash_mode() and local_player.has_method("apply_gun_preset"):
-		local_player.apply_gun_preset(_chosen_preset_idx)
-	if not _chosen_bomb_type.is_empty() and not NetworkManager.is_agent_clash_mode() and local_player.has_method("set_bomb_type"):
-		local_player.set_bomb_type(_chosen_bomb_type)
+	if not NetworkManager.random_guns_mode:
+		if _chosen_preset_idx >= 0 and not NetworkManager.is_agent_clash_mode() and local_player.has_method("apply_gun_preset"):
+			local_player.apply_gun_preset(_chosen_preset_idx)
+		if not _chosen_bomb_type.is_empty() and not NetworkManager.is_agent_clash_mode() and local_player.has_method("set_bomb_type"):
+			local_player.set_bomb_type(_chosen_bomb_type)
 	_on_fuel_changed(float(local_player.get("jetpack_fuel")), 100.0)
 	_on_bombs_changed(int(local_player.get("bomb_count")), str(local_player.get("bomb_type")))
 	if local_player.has_method("get_max_zoom_level"):
@@ -248,22 +331,17 @@ func _sync_mode_hud_visibility() -> void:
 		_btn_reload.visible = not is_agent
 	if is_instance_valid(_btn_switch):
 		_btn_switch.visible = false
-	if is_instance_valid(_btn_dual):
-		_btn_dual.visible = not is_agent
 	if is_instance_valid(_btn_bomb):
 		_btn_bomb.visible = (not is_agent) and NetworkManager.allow_explosives
 	if is_instance_valid(_btn_presets):
-		_btn_presets.visible = false
+		_btn_presets.visible = NetworkManager.is_test_mode() and not is_agent and not NetworkManager.random_guns_mode
 	if is_instance_valid(_btn_zoom):
 		_btn_zoom.visible = not is_agent
-	if is_instance_valid(_btn_shoe):
-		_btn_shoe.visible = true
+	_refresh_throw_button()
 	_refresh_pick_button()
-	if is_agent and is_instance_valid(_preset_overlay):
+	if (is_agent or NetworkManager.random_guns_mode) and is_instance_valid(_preset_overlay):
 		_preset_overlay.visible = false
 		_set_preset_pause(false)
-	if is_instance_valid(_agent_action_panel):
-		_agent_action_panel.visible = is_agent
 	if is_instance_valid(_btn_ability_1):
 		_btn_ability_1.visible = is_agent
 	if is_instance_valid(_btn_ability_2):
@@ -272,8 +350,6 @@ func _sync_mode_hud_visibility() -> void:
 		_btn_ability_3.visible = is_agent
 	if is_instance_valid(_btn_ult):
 		_btn_ult.visible = is_agent
-	if is_instance_valid(_btn_throw):
-		_btn_throw.visible = false
 	if is_agent and local_player != null:
 		_refresh_top_info_pill()
 	elif is_instance_valid(_stun_banner):
@@ -288,32 +364,53 @@ func _clamp_control_pos(center_px: Vector2, ctrl_size: Vector2, vp_size: Vector2
 	)
 
 
+func _apply_control_layout(ctrl: Control, key: String, vp_size: Vector2) -> void:
+	if not is_instance_valid(ctrl):
+		return
+	var sc: float = SettingsManager.get_touch_element_scale(key)
+	var rot_deg: float = SettingsManager.get_touch_element_rot(key)
+	ctrl.pivot_offset = ctrl.size * 0.5
+	ctrl.scale = Vector2(sc, sc)
+	ctrl.rotation = deg_to_rad(rot_deg)
+	ctrl.position = _clamp_control_pos(SettingsManager.get_touch_element_px(key, vp_size), ctrl.size, vp_size)
+
+
 func _update_stick_and_button_positions() -> void:
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
+	var l_sc: float = SettingsManager.get_touch_element_scale("left_stick")
+	var r_sc: float = SettingsManager.get_touch_element_scale("right_stick")
+	var l_rad: float = STICK_RADIUS * l_sc
+	var r_rad: float = STICK_RADIUS * r_sc
 	_left_center = SettingsManager.get_touch_element_px("left_stick", vp_size)
-	_left_center.x = clampf(_left_center.x, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.x - STICK_RADIUS - 14.0))
-	_left_center.y = clampf(_left_center.y, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.y - STICK_RADIUS - 14.0))
+	_left_center.x = clampf(_left_center.x, l_rad + 14.0, maxf(l_rad + 14.0, vp_size.x - l_rad - 14.0))
+	_left_center.y = clampf(_left_center.y, l_rad + 14.0, maxf(l_rad + 14.0, vp_size.y - l_rad - 14.0))
 	_right_center = SettingsManager.get_touch_element_px("right_stick", vp_size)
-	_right_center.x = clampf(_right_center.x, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.x - STICK_RADIUS - 14.0))
-	_right_center.y = clampf(_right_center.y, STICK_RADIUS + 14.0, maxf(STICK_RADIUS + 14.0, vp_size.y - STICK_RADIUS - 14.0))
-	if is_instance_valid(_btn_reload):
-		_btn_reload.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_reload", vp_size), _btn_reload.size, vp_size)
-	if is_instance_valid(_btn_switch):
-		_btn_switch.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_switch", vp_size), _btn_switch.size, vp_size)
-	if is_instance_valid(_btn_dual):
-		_btn_dual.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_dual", vp_size), _btn_dual.size, vp_size)
-	if is_instance_valid(_btn_bomb):
-		_btn_bomb.position = _clamp_control_pos(SettingsManager.get_touch_element_px("btn_bomb", vp_size), _btn_bomb.size, vp_size)
-	if is_instance_valid(_btn_pickup):
-		_btn_pickup.position = _clamp_control_pos(Vector2(_right_center.x, _right_center.y - STICK_RADIUS - 52.0), _btn_pickup.size, vp_size)
-	if is_instance_valid(_btn_interact):
-		if NetworkManager.is_agent_clash_mode():
-			_btn_interact.position = _clamp_control_pos(Vector2(_right_center.x, _right_center.y - STICK_RADIUS - 52.0), _btn_interact.size, vp_size)
-		elif is_instance_valid(_btn_reload):
-			var rld_pos: Vector2 = _btn_reload.position
-			_btn_interact.position = _clamp_control_pos(Vector2(rld_pos.x - 90.0, rld_pos.y + _btn_reload.size.y * 0.5), _btn_interact.size, vp_size)
-	if is_instance_valid(_agent_action_panel):
-		_agent_action_panel.position = _clamp_control_pos(SettingsManager.get_touch_element_px("ability_bar", vp_size), _agent_action_panel.size, vp_size)
+	_right_center.x = clampf(_right_center.x, r_rad + 14.0, maxf(r_rad + 14.0, vp_size.x - r_rad - 14.0))
+	_right_center.y = clampf(_right_center.y, r_rad + 14.0, maxf(r_rad + 14.0, vp_size.y - r_rad - 14.0))
+
+	_apply_control_layout(_btn_reload, "btn_reload", vp_size)
+	_apply_control_layout(_btn_switch, "btn_switch", vp_size)
+	_apply_control_layout(_btn_bomb, "btn_bomb", vp_size)
+	_apply_control_layout(_btn_shoe, "btn_shoe", vp_size)
+	_apply_control_layout(_btn_zoom, "btn_zoom", vp_size)
+	_apply_control_layout(_btn_presets, "btn_presets", vp_size)
+	_apply_control_layout(_btn_pickup, "btn_pickup", vp_size)
+	_apply_control_layout(_btn_interact, "btn_interact", vp_size)
+	_apply_control_layout(_btn_throw_prop, "btn_throw_prop", vp_size)
+	_apply_control_layout(_btn_ability_1, "ability_0", vp_size)
+	_apply_control_layout(_btn_ability_2, "ability_1", vp_size)
+	_apply_control_layout(_btn_ability_3, "ability_2", vp_size)
+	_apply_control_layout(_btn_ult, "ability_3", vp_size)
+
+	if is_instance_valid(_top_bar_node):
+		var tb_sc: float = SettingsManager.get_touch_element_scale("top_bar_hud")
+		var tb_rot: float = SettingsManager.get_touch_element_rot("top_bar_hud")
+		var tb_pos: Vector2 = SettingsManager.get_touch_element_px("top_bar_hud", vp_size)
+		_top_bar_node.pivot_offset = _top_bar_node.size * 0.5
+		_top_bar_node.scale = Vector2(tb_sc, tb_sc)
+		_top_bar_node.rotation = deg_to_rad(tb_rot)
+		_top_bar_node.position = Vector2(tb_pos.x - _top_bar_node.size.x * 0.5, tb_pos.y - _top_bar_node.size.y * 0.5)
+
 	if is_instance_valid(_stick_canvas):
 		_stick_canvas.queue_redraw()
 	if is_instance_valid(_layout_overlay) and _layout_overlay.visible:
@@ -371,11 +468,13 @@ func _input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				if mb.position.distance_to(_left_center) <= STICK_RADIUS + 18.0:
+				var l_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("left_stick")
+				var r_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("right_stick")
+				if mb.position.distance_to(_left_center) <= l_rad + 18.0:
 					_left_mouse_active = true
 					_update_left_stick(mb.position)
 					get_viewport().set_input_as_handled()
-				elif mb.position.distance_to(_right_center) <= STICK_RADIUS + 18.0:
+				elif mb.position.distance_to(_right_center) <= r_rad + 18.0:
 					_right_mouse_active = true
 					_update_right_stick(mb.position)
 					get_viewport().set_input_as_handled()
@@ -406,6 +505,9 @@ func _is_over_control(screen_pos: Vector2) -> bool:
 	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
 		if _preset_overlay.get_global_rect().has_point(screen_pos):
 			return true
+	if is_instance_valid(_btn_interact) and _btn_interact.visible:
+		if _btn_interact.get_global_rect().has_point(screen_pos):
+			return true
 	var hovered: Control = get_viewport().gui_get_hovered_control()
 	if hovered != null and hovered is BaseButton:
 		return hovered.get_global_rect().has_point(screen_pos)
@@ -421,9 +523,10 @@ func _update_left_stick(pos: Vector2) -> void:
 
 
 func _update_right_stick(pos: Vector2) -> void:
+	var r_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("right_stick")
 	var delta_v: Vector2 = pos - _right_center
-	if delta_v.length() > STICK_RADIUS:
-		delta_v = delta_v.normalized() * STICK_RADIUS
+	if delta_v.length() > r_rad:
+		delta_v = delta_v.normalized() * r_rad
 	_right_knob_offset = delta_v
 	_stick_canvas.queue_redraw()
 
@@ -444,11 +547,12 @@ func _push_input_to_player() -> void:
 		local_player.pointer_over_ui = true
 		return
 	var left_norm: Vector2 = _left_knob_offset / STICK_RADIUS
-	var right_norm: Vector2 = _right_knob_offset / STICK_RADIUS
+	var r_rad: float = maxf(1.0, STICK_RADIUS * SettingsManager.get_touch_element_scale("right_stick"))
+	var right_norm: Vector2 = _right_knob_offset / r_rad
 	local_player.virtual_move = left_norm
 	local_player.virtual_jetpack = (left_norm.y < -0.45)
 	local_player.virtual_aim = right_norm * SettingsManager.aim_stick_sensitivity
-	local_player.virtual_fire = (right_norm.length() * SettingsManager.aim_stick_sensitivity > 0.52)
+	local_player.virtual_fire = (right_norm.length() > AIM_FIRE_THRESHOLD)
 
 	var hovered: Control = get_viewport().gui_get_hovered_control()
 	local_player.pointer_over_ui = (hovered != null and hovered != _stick_canvas) or _left_mouse_active or _right_mouse_active or (_left_touch_idx != -1) or (_right_touch_idx != -1)
@@ -458,32 +562,40 @@ func _on_stick_canvas_draw() -> void:
 	var bg_col := Color(0.08, 0.12, 0.18, 0.34)
 	var ring_col := Color(1.0, 1.0, 1.0, 0.78)
 	var inner_ring := Color(1.0, 1.0, 1.0, 0.35)
+	var l_sc: float = SettingsManager.get_touch_element_scale("left_stick")
+	var l_rot: float = deg_to_rad(SettingsManager.get_touch_element_rot("left_stick"))
+	var r_sc: float = SettingsManager.get_touch_element_scale("right_stick")
+	var r_rot: float = deg_to_rad(SettingsManager.get_touch_element_rot("right_stick"))
 
 	# Left Stick: Mini-Militia style 4-way directional pad
-	_stick_canvas.draw_circle(_left_center, STICK_RADIUS, bg_col)
-	_stick_canvas.draw_arc(_left_center, STICK_RADIUS, 0.0, TAU, 40, ring_col, 2.5)
-	_stick_canvas.draw_arc(_left_center, STICK_RADIUS * 0.62, 0.0, TAU, 32, inner_ring, 1.5)
+	_stick_canvas.draw_set_transform(_left_center, l_rot, Vector2(l_sc, l_sc))
+	_stick_canvas.draw_circle(Vector2.ZERO, STICK_RADIUS, bg_col)
+	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS, 0.0, TAU, 40, ring_col, 2.5)
+	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS * 0.62, 0.0, TAU, 32, inner_ring, 1.5)
 	var arrow_col := Color(0.78, 0.86, 0.98, 0.65)
 	var d_off: float = STICK_RADIUS * 0.42
 	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-		var p: Vector2 = _left_center + dir * d_off
+		var p: Vector2 = dir * d_off
 		var perp := Vector2(-dir.y, dir.x)
 		_stick_canvas.draw_colored_polygon(PackedVector2Array([
 			p + dir * 8.0, p - dir * 5.0 + perp * 7.0, p - dir * 5.0 - perp * 7.0
 		]), arrow_col)
-	_stick_canvas.draw_circle(_left_center + _left_knob_offset, KNOB_RADIUS, Color(0.48, 0.62, 0.84, 0.75))
-	_stick_canvas.draw_arc(_left_center + _left_knob_offset, KNOB_RADIUS, 0.0, TAU, 24, ring_col, 2.0)
+	_stick_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_stick_canvas.draw_circle(_left_center + _left_knob_offset, KNOB_RADIUS * l_sc, Color(0.48, 0.62, 0.84, 0.75))
+	_stick_canvas.draw_arc(_left_center + _left_knob_offset, KNOB_RADIUS * l_sc, 0.0, TAU, 24, ring_col, 2.0)
 
 	# Right Stick: Red crosshair target ring
-	_stick_canvas.draw_circle(_right_center, STICK_RADIUS, bg_col)
-	_stick_canvas.draw_arc(_right_center, STICK_RADIUS, 0.0, TAU, 40, ring_col, 2.5)
+	_stick_canvas.draw_set_transform(_right_center, r_rot, Vector2(r_sc, r_sc))
+	_stick_canvas.draw_circle(Vector2.ZERO, STICK_RADIUS, bg_col)
+	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS, 0.0, TAU, 40, ring_col, 2.5)
 	var target_col := Color(0.86, 0.28, 0.24, 0.82)
-	_stick_canvas.draw_circle(_right_center, STICK_RADIUS * 0.56, Color(0.86, 0.26, 0.22, 0.22))
-	_stick_canvas.draw_arc(_right_center, STICK_RADIUS * 0.56, 0.0, TAU, 32, target_col, 2.5)
-	_stick_canvas.draw_line(_right_center - Vector2(22.0, 0.0), _right_center + Vector2(22.0, 0.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
-	_stick_canvas.draw_line(_right_center - Vector2(0.0, 22.0), _right_center + Vector2(0.0, 22.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
-	_stick_canvas.draw_circle(_right_center + _right_knob_offset, KNOB_RADIUS, Color(0.92, 0.32, 0.26, 0.78))
-	_stick_canvas.draw_arc(_right_center + _right_knob_offset, KNOB_RADIUS, 0.0, TAU, 24, ring_col, 2.0)
+	_stick_canvas.draw_circle(Vector2.ZERO, STICK_RADIUS * AIM_FIRE_THRESHOLD, Color(0.86, 0.26, 0.22, 0.22))
+	_stick_canvas.draw_arc(Vector2.ZERO, STICK_RADIUS * AIM_FIRE_THRESHOLD, 0.0, TAU, 32, target_col, 2.5)
+	_stick_canvas.draw_line(Vector2(-22.0, 0.0), Vector2(22.0, 0.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
+	_stick_canvas.draw_line(Vector2(0.0, -22.0), Vector2(0.0, 22.0), Color(1.0, 1.0, 1.0, 0.85), 2.0)
+	_stick_canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_stick_canvas.draw_circle(_right_center + _right_knob_offset, KNOB_RADIUS * r_sc, Color(0.92, 0.32, 0.26, 0.78))
+	_stick_canvas.draw_arc(_right_center + _right_knob_offset, KNOB_RADIUS * r_sc, 0.0, TAU, 24, ring_col, 2.0)
 
 
 func _on_indicator_overlay_draw() -> void:
@@ -667,7 +779,7 @@ func _build_ui() -> void:
 	_indicator_overlay.draw.connect(_on_indicator_overlay_draw)
 	add_child(_indicator_overlay)
 
-	# Full-Width Responsive Top Bar (prevents any overlap between corner buttons, status pills, and chat)
+	# Full-Width Responsive Top Bar (positioned via SettingsManager.touch_layout["top_bar_hud"])
 	var top_bar := HBoxContainer.new()
 	top_bar.anchor_left = 0.0
 	top_bar.anchor_right = 1.0
@@ -679,25 +791,25 @@ func _build_ui() -> void:
 	top_bar.add_theme_constant_override("separation", 8)
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(top_bar)
+	_top_bar_node = top_bar
 
 	_btn_zoom = Button.new()
-	_btn_zoom.text = "1x\n/2x"
-	_btn_zoom.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_btn_zoom.text = ""
 	_btn_zoom.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_zoom, Color(0.10, 0.14, 0.20, 0.65), Color(1.0, 1.0, 1.0, 0.88), 76, 16)
+	_attach_btn_icon(_btn_zoom, "zoom", Color(0.45, 0.88, 1.0))
 	_btn_zoom.pressed.connect(func():
 		if local_player != null and local_player.has_method("cycle_zoom"):
 			local_player.cycle_zoom()
 	)
-	top_bar.add_child(_btn_zoom)
+	add_child(_btn_zoom)
 
 	_btn_presets = Button.new()
 	_btn_presets.text = "KIT"
-	_btn_presets.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_btn_presets.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_presets, Color(0.14, 0.16, 0.22, 0.65), Color(1.0, 1.0, 1.0, 0.85), 74, 16)
 	_btn_presets.pressed.connect(func(): _open_preset_selector(PRESET_SELECT_DURATION))
-	top_bar.add_child(_btn_presets)
+	add_child(_btn_presets)
 
 	var left_spacer := Control.new()
 	left_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -818,7 +930,7 @@ func _build_ui() -> void:
 	atlas.region = Rect2(0, 0, 256, 128)
 	_weapon_icon = TextureRect.new()
 	_weapon_icon.texture = atlas
-	_weapon_icon.custom_minimum_size = Vector2(52, 26)
+	_weapon_icon.custom_minimum_size = Vector2(76, 40)
 	_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_weapon_icon.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -871,20 +983,13 @@ func _build_ui() -> void:
 	_ammo_label.modulate = Color(1.0, 0.88, 0.4)
 	w_info.add_child(_ammo_label)
 
-	_dual_badge = Label.new()
-	_dual_badge.text = "DUAL"
-	_dual_badge.add_theme_font_size_override("font_size", 11)
-	_dual_badge.modulate = Color(0.25, 0.95, 1.0)
-	_dual_badge.visible = false
-	w_row.add_child(_dual_badge)
-
 	var sec_atlas := AtlasTexture.new()
 	sec_atlas.atlas = WEAPONS_TEX
 	sec_atlas.region = Rect2(0, 0, 256, 128)
 	_secondary_weapon_icon = TextureRect.new()
 	_secondary_weapon_icon.texture = sec_atlas
 	_secondary_weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_secondary_weapon_icon.custom_minimum_size = Vector2(54, 30)
+	_secondary_weapon_icon.custom_minimum_size = Vector2(72, 40)
 	_secondary_weapon_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_secondary_weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_secondary_weapon_icon.modulate = Color(0.85, 0.90, 0.96, 0.82)
@@ -898,7 +1003,7 @@ func _build_ui() -> void:
 	w_row.add_child(_secondary_weapon_icon)
 
 	_bomb_hud_icon = BombHudIcon.new()
-	_bomb_hud_icon.custom_minimum_size = Vector2(28, 28)
+	_bomb_hud_icon.custom_minimum_size = Vector2(40, 40)
 	_bomb_hud_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_bomb_hud_icon.mouse_filter = Control.MOUSE_FILTER_STOP
 	_bomb_hud_icon.gui_input.connect(func(ev: InputEvent):
@@ -984,9 +1089,9 @@ func _build_ui() -> void:
 
 	# Circular Translucent Touch Action Buttons (positioned via SettingsManager.touch_layout)
 	_btn_reload = Button.new()
-	_btn_reload.text = "RLD"
 	_btn_reload.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_reload, Color(0.10, 0.16, 0.26, 0.56), Color(1.0, 1.0, 1.0, 0.82), 70, 14)
+	_attach_btn_icon(_btn_reload, "reload", Color(0.35, 0.85, 1.0))
 	_btn_reload.pressed.connect(func():
 		if local_player != null:
 			local_player.start_reload()
@@ -994,29 +1099,19 @@ func _build_ui() -> void:
 	add_child(_btn_reload)
 
 	_btn_switch = Button.new()
-	_btn_switch.text = "SWAP"
 	_btn_switch.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_switch, Color(0.20, 0.16, 0.08, 0.56), Color(1.0, 1.0, 1.0, 0.82), 70, 14)
+	_attach_btn_icon(_btn_switch, "swap", Color(0.95, 0.78, 0.35))
 	_btn_switch.pressed.connect(func():
 		if local_player != null:
 			local_player.cycle_weapon()
 	)
 	add_child(_btn_switch)
 
-	_btn_dual = Button.new()
-	_btn_dual.text = "DUAL"
-	_btn_dual.focus_mode = Control.FOCUS_NONE
-	_style_circle_btn(_btn_dual, Color(0.08, 0.22, 0.26, 0.56), Color(1.0, 1.0, 1.0, 0.82), 68, 14)
-	_btn_dual.pressed.connect(func():
-		if local_player != null:
-			local_player.toggle_dual_wield()
-	)
-	add_child(_btn_dual)
-
 	_btn_bomb = Button.new()
-	_btn_bomb.text = "FRAG\nx3"
 	_btn_bomb.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_bomb, Color(0.22, 0.12, 0.08, 0.58), Color(1.0, 1.0, 1.0, 0.88), 78, 14)
+	_attach_btn_icon(_btn_bomb, "bomb", Color(1.0, 0.62, 0.28))
 	_btn_bomb.pressed.connect(func():
 		if local_player != null and local_player.has_method("throw_bomb"):
 			local_player.throw_bomb()
@@ -1024,13 +1119,13 @@ func _build_ui() -> void:
 	add_child(_btn_bomb)
 
 	_btn_shoe = Button.new()
-	_btn_shoe.text = "THROW"
 	_btn_shoe.offset_left = 14
 	_btn_shoe.offset_top = 96
 	_btn_shoe.offset_right = 94
 	_btn_shoe.offset_bottom = 176
 	_btn_shoe.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_shoe, Color(0.20, 0.14, 0.10, 0.65), Color(1.0, 1.0, 1.0, 0.85), 80, 16)
+	_attach_btn_icon(_btn_shoe, "throw", Color(0.35, 0.95, 0.68))
 	_btn_shoe.pressed.connect(func():
 		if local_player != null and local_player.has_method("throw_held_item"):
 			local_player.throw_held_item()
@@ -1038,10 +1133,10 @@ func _build_ui() -> void:
 	add_child(_btn_shoe)
 
 	_btn_pickup = Button.new()
-	_btn_pickup.text = "PICK"
 	_btn_pickup.focus_mode = Control.FOCUS_NONE
 	_btn_pickup.visible = false
 	_style_circle_btn(_btn_pickup, Color(0.10, 0.36, 0.22, 0.88), Color(0.45, 1.0, 0.65, 0.95), 78, 15)
+	_attach_btn_icon(_btn_pickup, "pick", Color(0.45, 1.0, 0.65))
 	_btn_pickup.pressed.connect(func():
 		if not NetworkManager.is_agent_clash_mode() and _nearby_crate_idx >= 0:
 			pickup_weapon_requested.emit(_nearby_crate_idx)
@@ -1055,10 +1150,10 @@ func _build_ui() -> void:
 	add_child(_btn_pickup)
 
 	_btn_interact = Button.new()
-	_btn_interact.text = "USE\nFAN"
 	_btn_interact.focus_mode = Control.FOCUS_NONE
 	_btn_interact.visible = false
 	_style_circle_btn(_btn_interact, Color(0.14, 0.28, 0.44, 0.90), Color(0.42, 0.85, 1.0, 0.95), 78, 13)
+	_attach_btn_icon(_btn_interact, "use", Color(0.42, 0.85, 1.0))
 	_btn_interact.pressed.connect(func():
 		if _nearby_inter_idx >= 0:
 			interact_requested.emit(_nearby_inter_idx)
@@ -1066,7 +1161,6 @@ func _build_ui() -> void:
 	add_child(_btn_interact)
 
 	_btn_throw_prop = Button.new()
-	_btn_throw_prop.text = "THROW\nPROP"
 	_btn_throw_prop.offset_left = 14
 	_btn_throw_prop.offset_top = 190
 	_btn_throw_prop.offset_right = 102
@@ -1074,52 +1168,22 @@ func _build_ui() -> void:
 	_btn_throw_prop.focus_mode = Control.FOCUS_NONE
 	_btn_throw_prop.visible = false
 	_style_circle_btn(_btn_throw_prop, Color(0.45, 0.24, 0.10, 0.90), Color(1.0, 0.78, 0.36, 0.95), 88, 15)
+	_attach_btn_icon(_btn_throw_prop, "prop", Color(1.0, 0.78, 0.36))
 	_btn_throw_prop.pressed.connect(func():
 		if local_player != null and local_player.has_method("throw_held_prop"):
 			local_player.throw_held_prop()
 	)
 	add_child(_btn_throw_prop)
 
-	# Agent Clash Mode Draggable Ability & Throwable Controls (2x2 grid)
-	_agent_action_panel = VBoxContainer.new()
-	_agent_action_panel.custom_minimum_size = Vector2(560, 134)
-	_agent_action_panel.size = Vector2(560, 134)
-	_agent_action_panel.add_theme_constant_override("separation", 6)
-	_agent_action_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_agent_action_panel)
-
-	var top_agent_row := HBoxContainer.new()
-	top_agent_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	top_agent_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_agent_action_panel.add_child(top_agent_row)
-
-	_btn_throw = Button.new()
-	_btn_throw.text = "THROW SHOE"
-	_btn_throw.custom_minimum_size = Vector2(260, 40)
-	_btn_throw.focus_mode = Control.FOCUS_NONE
-	_style_action_button(_btn_throw, Color(0.16, 0.22, 0.14, 0.92), Color(0.95, 0.80, 0.28, 0.95), 15)
-	_btn_throw.pressed.connect(func():
-		if local_player != null:
-			local_player.throw_held_item()
-	)
-	top_agent_row.add_child(_btn_throw)
-
-	var ab_row := GridContainer.new()
-	ab_row.columns = 4
-	ab_row.add_theme_constant_override("h_separation", 10)
-	ab_row.add_theme_constant_override("v_separation", 6)
-	ab_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ab_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_agent_action_panel.add_child(ab_row)
-
+	# Individually draggable circular Agent Ability Buttons
 	_btn_ability_1 = _create_agent_btn("ABIL 1", Color(0.24, 0.20, 0.06, 0.94), Color(1.0, 0.84, 0.24), 0)
 	_btn_ability_2 = _create_agent_btn("ABIL 2", Color(0.10, 0.18, 0.30, 0.94), Color(0.45, 0.95, 0.65), 1)
 	_btn_ability_3 = _create_agent_btn("ABIL 3", Color(0.18, 0.14, 0.30, 0.94), Color(0.76, 0.50, 1.0), 2)
 	_btn_ult = _create_agent_btn("ULTIMATE", Color(0.32, 0.08, 0.10, 0.96), Color(1.0, 0.28, 0.28), 3)
-	ab_row.add_child(_btn_ability_1)
-	ab_row.add_child(_btn_ability_2)
-	ab_row.add_child(_btn_ability_3)
-	ab_row.add_child(_btn_ult)
+	add_child(_btn_ability_1)
+	add_child(_btn_ability_2)
+	add_child(_btn_ability_3)
+	add_child(_btn_ult)
 
 	_stun_banner = PanelContainer.new()
 	_stun_banner.anchor_left = 0.5
@@ -1259,6 +1323,7 @@ func _build_ui() -> void:
 	# Full-Screen Pause Menu Overlay (opened via MENU button)
 	var pause_overlay := ColorRect.new()
 	_drawer_panel = pause_overlay
+	pause_overlay.z_index = 40
 	pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	pause_overlay.color = Color(0.02, 0.03, 0.06, 0.82)
 	pause_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1266,6 +1331,8 @@ func _build_ui() -> void:
 	add_child(pause_overlay)
 	drawer_btn.pressed.connect(func():
 		pause_overlay.visible = not pause_overlay.visible
+		if pause_overlay.visible and is_instance_valid(_respawn_panel):
+			_respawn_panel.visible = false
 		_sync_offline_pause_state()
 	)
 
@@ -1504,13 +1571,12 @@ func _on_ammo_changed(current: int, mag_size: int, is_reloading: bool) -> void:
 			_ammo_label.modulate = Color(1.0, 0.88, 0.4)
 
 
-func _on_weapon_changed(weapon_data: WeaponData, dual_wield: bool) -> void:
+func _on_weapon_changed(weapon_data: WeaponData) -> void:
 	_active_weapon = weapon_data
 	if NetworkManager.is_agent_clash_mode() and local_player != null:
 		_refresh_top_info_pill()
 		return
 	_weapon_name_label.text = weapon_data.display_name
-	_dual_badge.visible = dual_wield and weapon_data.supports_dual_wield
 	var skin_row: int = local_player.weapon_skin_id if local_player != null else 0
 	_set_weapon_icon_texture(_weapon_icon, weapon_data, skin_row)
 	_refresh_top_info_pill()
@@ -1572,8 +1638,6 @@ func _refresh_top_info_pill() -> void:
 			_agent_hat_overlay.visible = true
 		if is_instance_valid(_weapon_name_label):
 			_weapon_name_label.text = str(ag["agent_name"]).to_upper()
-		if is_instance_valid(_dual_badge):
-			_dual_badge.visible = false
 		if is_instance_valid(_ammo_label):
 			var best_enemy: Node2D = null
 			var best_dist: float = 1e9
@@ -1628,13 +1692,14 @@ func _refresh_top_info_pill() -> void:
 
 
 func _on_player_died(seconds_left: float) -> void:
-	_respawn_panel.visible = true
+	var menu_open: bool = (is_instance_valid(_drawer_panel) and _drawer_panel.visible) or (is_instance_valid(_layout_overlay) and _layout_overlay.visible)
+	_respawn_panel.visible = not menu_open
 	_respawn_label.text = "ELIMINATED - RESPAWNING IN %.1fs" % seconds_left
 
 
 func _on_player_respawned() -> void:
 	_respawn_panel.visible = false
-	if not NetworkManager.is_agent_clash_mode():
+	if not NetworkManager.is_agent_clash_mode() and not NetworkManager.random_guns_mode:
 		if _chosen_preset_idx >= 0 and local_player != null and local_player.has_method("apply_gun_preset"):
 			local_player.apply_gun_preset(_chosen_preset_idx)
 		if not _chosen_bomb_type.is_empty() and local_player != null and local_player.has_method("set_bomb_type"):
@@ -1642,15 +1707,38 @@ func _on_player_respawned() -> void:
 		_open_preset_selector(PRESET_SELECT_DURATION)
 
 
+func _refresh_throw_button() -> void:
+	if not is_instance_valid(_btn_shoe):
+		return
+	if local_player == null or not is_instance_valid(local_player):
+		_btn_shoe.visible = false
+		return
+	var held_prop: String = str(local_player.get("held_prop_kind")) if "held_prop_kind" in local_player else ""
+	var held_list: Variant = local_player.get("held_throwables") if "held_throwables" in local_player else []
+	var has_throwable: bool = (held_list is Array and not (held_list as Array).is_empty())
+	var grabbed_id: int = int(local_player.get("grabbed_player_id")) if "grabbed_player_id" in local_player else 0
+	_btn_shoe.visible = (not held_prop.is_empty()) or has_throwable or (grabbed_id != 0)
+	var ic: HudBtnIcon = _btn_shoe.get_meta("hud_icon") as HudBtnIcon if _btn_shoe.has_meta("hud_icon") else null
+	if ic != null:
+		if not held_prop.is_empty():
+			ic.kind = "prop"
+			ic.prop_kind = held_prop
+		else:
+			ic.kind = "throw"
+		ic.queue_redraw()
+
+
 func _refresh_pick_button() -> void:
 	if not is_instance_valid(_btn_pickup):
 		return
 	var is_agent: bool = NetworkManager.is_agent_clash_mode()
-	var has_gun: bool = (not is_agent) and (_nearby_crate_idx >= 0)
+	if is_agent:
+		_btn_pickup.visible = false
+		return
+	var has_gun: bool = (_nearby_crate_idx >= 0)
 	var has_prop: bool = (_nearby_pick_inter_idx >= 0)
-	var has_enemy: bool = is_agent and local_player != null and local_player.has_method("find_grabbable_player") and local_player.find_grabbable_player() != null
-	_btn_pickup.text = "PICK"
-	_btn_pickup.visible = has_gun or has_prop or has_enemy
+	_btn_pickup.text = ""
+	_btn_pickup.visible = has_gun or has_prop
 	if _btn_pickup.visible:
 		_update_stick_and_button_positions()
 
@@ -1664,13 +1752,16 @@ func _on_nearby_interactable_changed(inter_idx: int, label_text: String) -> void
 	_nearby_inter_idx = inter_idx
 	_nearby_pick_inter_idx = inter_idx if (inter_idx >= 0 and label_text == "PICK") else -1
 	if is_instance_valid(_btn_interact):
-		_btn_interact.visible = false
+		_btn_interact.visible = (inter_idx >= 0 and label_text != "PICK")
+		if _btn_interact.visible:
+			_update_stick_and_button_positions()
 	_refresh_pick_button()
 
 
 func _on_held_prop_changed(_prop_kind: String) -> void:
 	if is_instance_valid(_btn_throw_prop):
 		_btn_throw_prop.visible = false
+	_refresh_throw_button()
 
 
 func _taunt_id_for_chat(txt: String) -> int:
@@ -1904,6 +1995,7 @@ func _create_agent_btn(title: String, bg: Color, border: Color, slot_idx: int) -
 
 func _on_agent_state_changed(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float) -> void:
 	_refresh_agent_hud(cooldowns, max_cooldowns, held_throwable, stun_left)
+	_refresh_throw_button()
 
 
 func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: int, stun_left: float) -> void:
@@ -1956,8 +2048,6 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 			status_lbl.text = st_txt
 
 	_refresh_pick_button()
-	if is_instance_valid(_btn_throw):
-		_btn_throw.visible = false
 
 	if is_instance_valid(_stun_banner) and is_instance_valid(_stun_label):
 		_stun_banner.visible = stun_left > 0.0
@@ -1968,8 +2058,12 @@ func _refresh_agent_hud(cooldowns: Array, max_cooldowns: Array, held_throwable: 
 func _on_bombs_changed(count: int, bomb_type: String) -> void:
 	if not is_instance_valid(_btn_bomb):
 		return
-	var label_type: String = "FRAG" if bomb_type.is_empty() else bomb_type.to_upper()
-	_btn_bomb.text = "%s\nx%d" % [label_type, maxi(0, count)]
+	var ic: HudBtnIcon = _btn_bomb.get_meta("hud_icon") as HudBtnIcon if _btn_bomb.has_meta("hud_icon") else null
+	if ic != null:
+		ic.bomb_type = "frag" if bomb_type.is_empty() else bomb_type
+		ic.count = maxi(0, count)
+		ic.queue_redraw()
+	_btn_bomb.text = ""
 	_btn_bomb.visible = (not NetworkManager.is_agent_clash_mode()) and NetworkManager.allow_explosives
 	if is_instance_valid(_bomb_hud_icon):
 		_bomb_hud_icon.bomb_type = bomb_type
@@ -1982,7 +2076,12 @@ func _on_bombs_changed(count: int, bomb_type: String) -> void:
 func _on_zoom_changed(zoom_level: int, max_zoom: int) -> void:
 	if not is_instance_valid(_btn_zoom):
 		return
-	_btn_zoom.text = "%dx\n/%dx" % [zoom_level, max_zoom]
+	var ic: HudBtnIcon = _btn_zoom.get_meta("hud_icon") as HudBtnIcon if _btn_zoom.has_meta("hud_icon") else null
+	if ic != null:
+		ic.zoom_level = zoom_level
+		ic.max_zoom = max_zoom
+		ic.queue_redraw()
+	_btn_zoom.text = ""
 	_btn_zoom.visible = not NetworkManager.is_agent_clash_mode()
 	_btn_zoom.modulate = Color(0.45, 0.92, 1.0) if zoom_level > 1 else Color.WHITE
 
@@ -2001,10 +2100,10 @@ func _build_preset_overlay() -> void:
 	_preset_overlay.anchor_right = 0.5
 	_preset_overlay.anchor_top = 0.5
 	_preset_overlay.anchor_bottom = 0.5
-	_preset_overlay.offset_left = -310
-	_preset_overlay.offset_right = 310
-	_preset_overlay.offset_top = -215
-	_preset_overlay.offset_bottom = 215
+	_preset_overlay.offset_left = -360
+	_preset_overlay.offset_right = 360
+	_preset_overlay.offset_top = -245
+	_preset_overlay.offset_bottom = 245
 	_preset_overlay.visible = false
 	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 16, 14))
 	_preset_overlay.visibility_changed.connect(func():
@@ -2097,7 +2196,7 @@ func _build_preset_overlay() -> void:
 		var title_lbl := Label.new()
 		title_lbl.name = "TitleLbl"
 		title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title_lbl.custom_minimum_size = Vector2(150, 0)
+		title_lbl.custom_minimum_size = Vector2(145, 0)
 		title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title_lbl.add_theme_font_size_override("font_size", 13)
 		row_h.add_child(title_lbl)
@@ -2105,7 +2204,8 @@ func _build_preset_overlay() -> void:
 		var pri_icon := TextureRect.new()
 		pri_icon.name = "PriIcon"
 		pri_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pri_icon.custom_minimum_size = Vector2(58, 30)
+		pri_icon.custom_minimum_size = Vector2(92, 48)
+		pri_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		pri_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row_h.add_child(pri_icon)
 
@@ -2113,6 +2213,7 @@ func _build_preset_overlay() -> void:
 		pri_lbl.name = "PriLbl"
 		pri_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		pri_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pri_lbl.clip_text = true
 		pri_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		pri_lbl.add_theme_font_size_override("font_size", 13)
 		row_h.add_child(pri_lbl)
@@ -2120,7 +2221,8 @@ func _build_preset_overlay() -> void:
 		var sec_icon := TextureRect.new()
 		sec_icon.name = "SecIcon"
 		sec_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sec_icon.custom_minimum_size = Vector2(50, 26)
+		sec_icon.custom_minimum_size = Vector2(80, 44)
+		sec_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		sec_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row_h.add_child(sec_icon)
 
@@ -2128,6 +2230,7 @@ func _build_preset_overlay() -> void:
 		sec_lbl.name = "SecLbl"
 		sec_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		sec_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sec_lbl.clip_text = true
 		sec_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		sec_lbl.add_theme_font_size_override("font_size", 13)
 		row_h.add_child(sec_lbl)
@@ -2135,7 +2238,8 @@ func _build_preset_overlay() -> void:
 		var bomb_icon := TextureRect.new()
 		bomb_icon.name = "BombIcon"
 		bomb_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bomb_icon.custom_minimum_size = Vector2(28, 28)
+		bomb_icon.custom_minimum_size = Vector2(42, 42)
+		bomb_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		bomb_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row_h.add_child(bomb_icon)
 
@@ -2173,7 +2277,12 @@ func _refresh_preset_cards() -> void:
 			(row_h.get_node("SecIcon") as TextureRect).texture = at_s
 			var b_icon := row_h.get_node("BombIcon") as TextureRect
 			b_icon.visible = bombs_n > 0
-			b_icon.texture = _make_bomb_icon(b_type)
+			match b_type:
+				"cluster": b_icon.texture = BombHudIcon.TEX_BOMB_CLUSTER
+				"sticky": b_icon.texture = BombHudIcon.TEX_BOMB_STICKY
+				"time": b_icon.texture = BombHudIcon.TEX_BOMB_TIME
+				"mine": b_icon.texture = BombHudIcon.TEX_BOMB_MINE
+				_: b_icon.texture = BombHudIcon.TEX_BOMB_FRAG
 
 
 func _make_bomb_icon(b_type: String) -> Texture2D:
@@ -2215,6 +2324,9 @@ func _make_bomb_icon(b_type: String) -> Texture2D:
 
 func _sync_offline_pause_state() -> void:
 	var preset_open: bool = is_instance_valid(_preset_overlay) and _preset_overlay.visible
+	var menu_vis: bool = (is_instance_valid(_drawer_panel) and _drawer_panel.visible) or (is_instance_valid(_layout_overlay) and _layout_overlay.visible)
+	if menu_vis and is_instance_valid(_respawn_panel):
+		_respawn_panel.visible = false
 	var offline_only: bool = not NetworkManager.is_network_active()
 	var drawer_open: bool = offline_only and is_instance_valid(_drawer_panel) and _drawer_panel.visible
 	var layout_open: bool = offline_only and is_instance_valid(_layout_overlay) and _layout_overlay.visible
@@ -2244,7 +2356,7 @@ func _set_preset_pause(paused: bool) -> void:
 func _open_preset_selector(duration_s: float = PRESET_SELECT_DURATION) -> void:
 	if not is_instance_valid(_preset_overlay):
 		return
-	if NetworkManager.is_agent_clash_mode():
+	if NetworkManager.is_agent_clash_mode() or NetworkManager.random_guns_mode:
 		_preset_overlay.visible = false
 		_set_preset_pause(false)
 		return
@@ -2547,8 +2659,10 @@ func _build_hud_layout_overlay() -> void:
 		{"key": "right_stick", "label": "DRAG\nAIM & FIRE", "size": Vector2(188, 188), "col": Color(1.0, 0.48, 0.22)},
 		{"key": "btn_reload", "label": "RLD", "size": Vector2(70, 70), "col": Color(0.68, 0.80, 0.98)},
 		{"key": "btn_bomb", "label": "BOMB", "size": Vector2(78, 78), "col": Color(1.0, 0.56, 0.16)},
-		{"key": "btn_dual", "label": "DUAL", "size": Vector2(68, 68), "col": Color(0.28, 0.92, 1.0)},
-		{"key": "ability_bar", "label": "DRAG ABILITY BAR (1 / 2 / 3 / ULT)", "size": Vector2(560, 134), "col": Color(0.78, 0.48, 1.0)}
+		{"key": "ability_0", "label": "AB1", "size": Vector2(74, 74), "col": Color(1.0, 0.84, 0.24)},
+		{"key": "ability_1", "label": "AB2", "size": Vector2(74, 74), "col": Color(0.45, 0.95, 0.65)},
+		{"key": "ability_2", "label": "AB3", "size": Vector2(74, 74), "col": Color(0.76, 0.50, 1.0)},
+		{"key": "ability_3", "label": "ULT", "size": Vector2(74, 74), "col": Color(1.0, 0.28, 0.28)}
 	]
 
 	_layout_handles.clear()

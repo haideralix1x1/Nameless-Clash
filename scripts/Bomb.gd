@@ -9,8 +9,8 @@ const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_st
 
 var bomb_type: String = "frag"
 var velocity: Vector2 = Vector2.ZERO
-var damage: int = 82
-var explosion_radius: float = 155.0
+var damage: int = 125
+var explosion_radius: float = 195.0
 var shooter_peer_id: int = 1
 var shooter_team: int = 0
 var shooter_name: String = "Trooper"

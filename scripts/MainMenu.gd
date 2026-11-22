@@ -19,11 +19,14 @@ var _agent_preview_btns: Array[Button] = []
 var _agent_cards: Array[Button] = []
 var _agent_select_for_practice: bool = false
 var _agent_play_btn: Button
+var _practice_agent_bot_row: HBoxContainer
+var _practice_agent_bot_opt: OptionButton
 var _test_mode_overlay: Control
 var _test_mode_type_buttons: Array[Button] = []
 var _test_bot_beh_buttons: Array[Button] = []
 var _test_mode_choice: int = 2
 var _test_bot_choice: int = 1
+var _test_bot_agent_opt: OptionButton
 var _test_grav_slider: HSlider
 var _test_grav_val_lbl: Label
 var _map_opt: OptionButton
@@ -38,12 +41,17 @@ var _ms_title_lbl: Label
 var _ms_bot_val_lbl: Label
 var _ms_grav_slider: HSlider
 var _ms_grav_val_lbl: Label
+var _ms_jet_slider: HSlider
+var _ms_jet_val_lbl: Label
 var _ms_timer_slider: HSlider
 var _ms_timer_val_lbl: Label
 var _ms_gas_chk: CheckBox
+var _ms_random_guns_chk: CheckBox
 var _ms_map_btn: Button
 var _ms_guns_row: Control
 var _ms_guns_menu: MenuButton
+var _test_jet_slider: HSlider
+var _test_jet_val_lbl: Label
 var _local_mode_overlay: Control
 var _local_host_overlay: Control
 var _local_join_overlay: Control
@@ -56,9 +64,12 @@ var _lh_bot_lbl: Label
 var _lh_map_btn: Button
 var _lh_grav_slider: HSlider
 var _lh_grav_lbl: Label
+var _lh_jet_slider: HSlider
+var _lh_jet_lbl: Label
 var _lh_timer_slider: HSlider
 var _lh_timer_lbl: Label
 var _lh_gas_chk: CheckBox
+var _lh_random_guns_chk: CheckBox
 var _lj_list_box: VBoxContainer
 var _lj_status_lbl: Label
 var _is_joining_lan: bool = false
@@ -160,22 +171,19 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 22)
-	margin.add_theme_constant_override("margin_right", 22)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_bottom", 14)
-	add_child(margin)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
 
 	_hub_container = VBoxContainer.new()
+	_hub_container.custom_minimum_size = Vector2(960, 540)
 	_hub_container.add_theme_constant_override("separation", 10)
-	margin.add_child(_hub_container)
+	center.add_child(_hub_container)
 
 	# Main Split: Left (Your Soldier Showcase) + Right (Big Touch Battle Modes)
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 18)
+	split.add_theme_constant_override("separation", 16)
 	_hub_container.add_child(split)
 
 	var win_panel_sb := StyleBoxFlat.new()
@@ -183,9 +191,9 @@ func _build_ui() -> void:
 	win_panel_sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
 	win_panel_sb.set_border_width_all(3)
 	win_panel_sb.set_corner_radius_all(18)
-	win_panel_sb.set_content_margin_all(16)
+	win_panel_sb.set_content_margin_all(12)
 	win_panel_sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
-	win_panel_sb.shadow_size = 10
+	win_panel_sb.shadow_size = 8
 	win_panel_sb.shadow_offset = Vector2.ZERO
 
 	# Left Card: Your Soldier Showcase
@@ -221,6 +229,13 @@ func _build_ui() -> void:
 	pv.add_child(stage)
 
 	var anchor_wrap := Control.new()
+	anchor_wrap.draw.connect(func():
+		var sz: Vector2 = anchor_wrap.size
+		var floor_y: float = minf(sz.y - 16.0, sz.y * 0.5 + 122.0)
+		anchor_wrap.draw_rect(Rect2(0.0, floor_y, sz.x, maxf(0.0, sz.y - floor_y)), Color(0.04, 0.06, 0.11, 0.82), true)
+		anchor_wrap.draw_line(Vector2(10.0, floor_y), Vector2(sz.x - 10.0, floor_y), Color(1.0, 0.82, 0.28, 0.88), 2.5)
+		anchor_wrap.draw_line(Vector2(10.0, floor_y + 3.0), Vector2(sz.x - 10.0, floor_y + 3.0), Color(0.24, 0.36, 0.56, 0.45), 1.5)
+	)
 	stage.add_child(anchor_wrap)
 
 	var anchor := Control.new()
@@ -311,6 +326,7 @@ func _build_ui() -> void:
 	btn_solo.pressed.connect(func():
 		NetworkManager.disconnect_network()
 		NetworkManager.test_mode_enabled = false
+		NetworkManager.practice_shooting_range = false
 		if NetworkManager.is_agent_clash_mode():
 			NetworkManager.match_mode = 0
 		_open_match_settings(false)
@@ -364,6 +380,7 @@ func _build_ui() -> void:
 
 func _build_credits_overlay() -> void:
 	_credits_overlay = ColorRect.new()
+	_credits_overlay.z_index = 50
 	_credits_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_credits_overlay.color = Color(0.02, 0.03, 0.06, 0.84)
 	_credits_overlay.visible = false
@@ -408,10 +425,8 @@ func _build_credits_overlay() -> void:
 
 func _play_enter_animation() -> void:
 	_hub_container.modulate.a = 0.0
-	_hub_container.position.y = 24.0
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(_hub_container, "modulate:a", 1.0, 0.28)
-	tw.tween_property(_hub_container, "position:y", 0.0, 0.28)
 
 
 func _transition_to(target_fn: Callable) -> void:
@@ -420,7 +435,6 @@ func _transition_to(target_fn: Callable) -> void:
 	_transitioning = true
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tw.tween_property(_hub_container, "modulate:a", 0.0, 0.16)
-	tw.tween_property(_hub_container, "position:y", -18.0, 0.16)
 	tw.finished.connect(target_fn)
 
 
@@ -468,6 +482,7 @@ func _build_agent_select_overlay() -> void:
 	_agent_select_overlay = ColorRect.new()
 	_agent_select_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_agent_select_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
+	_agent_select_overlay.z_index = 50
 	_agent_select_overlay.visible = false
 	add_child(_agent_select_overlay)
 
@@ -484,107 +499,34 @@ func _build_agent_select_overlay() -> void:
 	margin.add_child(panel)
 
 	var root_v := VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 8)
+	root_v.add_theme_constant_override("separation", 10)
 	panel.add_child(root_v)
 
+	# Top Header: Close (Left) | "Agent Clash" (Center) | Continue (Right)
 	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 10)
+	top_row.add_theme_constant_override("separation", 12)
 	root_v.add_child(top_row)
 
-	var hdr := Label.new()
-	hdr.text = "AGENT CLASH - SELECT YOUR HERO & ABILITY KIT"
-	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hdr.add_theme_font_size_override("font_size", 20)
-	hdr.modulate = Color(0.86, 0.65, 1.0)
-	top_row.add_child(hdr)
-
-	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 40.0, 15, Color(0.24, 0.10, 0.12))
-	close_btn.custom_minimum_size = Vector2(104, 40)
+	var close_btn := _make_arcade_button("CLOSE", Color(0.95, 0.42, 0.36), 42.0, 15, Color(0.24, 0.10, 0.12))
+	close_btn.custom_minimum_size = Vector2(140, 42)
 	close_btn.pressed.connect(_close_agent_select)
 	top_row.add_child(close_btn)
 
-	var split := HBoxContainer.new()
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 12)
-	root_v.add_child(split)
-
-	# Left Kit Preview Column
-	var left_card := PanelContainer.new()
-	left_card.custom_minimum_size = Vector2(310, 0)
-	left_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_card.size_flags_stretch_ratio = 0.85
-	left_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.96), Color(0.32, 0.62, 0.98, 0.8), 12))
-	split.add_child(left_card)
-
-	var lv := VBoxContainer.new()
-	lv.add_theme_constant_override("separation", 6)
-	left_card.add_child(lv)
-
 	_agent_kit_title = Label.new()
+	_agent_kit_title.text = "Agent Clash"
 	_agent_kit_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_agent_kit_title.add_theme_font_size_override("font_size", 21)
-	_agent_kit_title.modulate = Color(1.0, 0.86, 0.34)
-	lv.add_child(_agent_kit_title)
+	_agent_kit_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_agent_kit_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_agent_kit_title.add_theme_font_size_override("font_size", 22)
+	_agent_kit_title.modulate = Color(1.0, 0.88, 0.36)
+	top_row.add_child(_agent_kit_title)
 
-	var stage := PanelContainer.new()
-	stage.custom_minimum_size = Vector2(0, 174)
-	stage.clip_contents = true
-	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
-	lv.add_child(stage)
-
-	var sv_cont := SubViewportContainer.new()
-	sv_cont.stretch = true
-	sv_cont.custom_minimum_size = Vector2(0, 184)
-	sv_cont.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stage.add_child(sv_cont)
-
-	var sv := SubViewport.new()
-	sv.world_2d = World2D.new()
-	sv.size = Vector2i(480, 190)
-	sv.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
-	sv_cont.add_child(sv)
-
-	_agent_preview_arena = Node2D.new()
-	_agent_preview_arena.set_script(load("res://scripts/AgentPreviewArena.gd"))
-	sv.add_child(_agent_preview_arena)
-
-	_agent_kit_body = Label.new()
-	_agent_kit_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_agent_kit_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_agent_kit_body.custom_minimum_size = Vector2(0, 44)
-	_agent_kit_body.add_theme_font_size_override("font_size", 14)
-	_agent_kit_body.modulate = Color(0.88, 0.96, 1.0)
-	lv.add_child(_agent_kit_body)
-
-	var ab_grid := GridContainer.new()
-	ab_grid.columns = 2
-	ab_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ab_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	ab_grid.add_theme_constant_override("h_separation", 8)
-	ab_grid.add_theme_constant_override("v_separation", 8)
-	lv.add_child(ab_grid)
-
-	_agent_preview_btns.clear()
-	for slot_i in range(4):
-		var is_ult: bool = (slot_i == 3)
-		var b_col: Color = Color(1.0, 0.78, 0.24) if is_ult else Color(0.32, 0.78, 1.0)
-		var b_bg: Color = Color(0.24, 0.16, 0.06, 0.95) if is_ult else Color(0.08, 0.16, 0.26, 0.95)
-		var ab_btn := _make_arcade_button("Ability", b_col, 48.0, 14, b_bg)
-		ab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ab_btn.clip_text = true
-		ab_btn.pressed.connect(_trigger_preview_ability.bind(slot_i))
-		ab_grid.add_child(ab_btn)
-		_agent_preview_btns.append(ab_btn)
-
-	var act_row := HBoxContainer.new()
-	act_row.add_theme_constant_override("separation", 8)
-	lv.add_child(act_row)
-
-	_agent_play_btn = _make_arcade_button("CONTINUE", Color(0.30, 0.92, 0.48), 46.0, 15, Color(0.09, 0.30, 0.16))
-	_agent_play_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_agent_play_btn = _make_arcade_button("CONTINUE", Color(0.30, 0.92, 0.48), 42.0, 15, Color(0.09, 0.30, 0.16))
+	_agent_play_btn.custom_minimum_size = Vector2(190, 42)
 	_agent_play_btn.pressed.connect(func():
 		_preview_saved_match_mode = -1
 		NetworkManager.disconnect_network()
+		NetworkManager.practice_shooting_range = false
 		NetworkManager.match_mode = 2
 		_close_agent_select()
 		if _agent_select_for_practice:
@@ -595,39 +537,154 @@ func _build_agent_select_overlay() -> void:
 			NetworkManager.test_mode_enabled = false
 			_open_match_settings(true)
 	)
-	act_row.add_child(_agent_play_btn)
+	top_row.add_child(_agent_play_btn)
 
-	# Right 24-Agent Grid
+	# Main Split Content: Left = Full Preview Screen + Abilities | Right = All Agents (2 per row)
+	var main_split := HBoxContainer.new()
+	main_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_split.add_theme_constant_override("separation", 12)
+	root_v.add_child(main_split)
+
+	# Left Column: Full Preview Stage + Ability Buttons below it
+	var left_card := PanelContainer.new()
+	left_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_card.size_flags_stretch_ratio = 1.15
+	left_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.96), Color(0.32, 0.62, 0.98, 0.8), 12))
+	main_split.add_child(left_card)
+
+	var lv := VBoxContainer.new()
+	lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lv.add_theme_constant_override("separation", 10)
+	left_card.add_child(lv)
+
+	_agent_kit_body = null
+
+	var stage := PanelContainer.new()
+	stage.custom_minimum_size = Vector2(0, 270)
+	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.clip_contents = true
+	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10))
+	lv.add_child(stage)
+
+	var sv_cont := SubViewportContainer.new()
+	sv_cont.stretch = true
+	sv_cont.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sv_cont.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stage.add_child(sv_cont)
+
+	var sv := SubViewport.new()
+	sv.world_2d = World2D.new()
+	sv.size = Vector2i(660, 290)
+	sv.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	sv_cont.add_child(sv)
+
+	_agent_preview_arena = Node2D.new()
+	_agent_preview_arena.set_script(load("res://scripts/AgentPreviewArena.gd"))
+	sv.add_child(_agent_preview_arena)
+
+	var ab_grid := GridContainer.new()
+	ab_grid.columns = 2
+	ab_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ab_grid.add_theme_constant_override("h_separation", 10)
+	ab_grid.add_theme_constant_override("v_separation", 10)
+	lv.add_child(ab_grid)
+
+	_agent_preview_btns.clear()
+	for slot_i in range(4):
+		var is_ult: bool = (slot_i == 3)
+		var b_col: Color = Color(1.0, 0.78, 0.24) if is_ult else Color(0.32, 0.78, 1.0)
+		var b_bg: Color = Color(0.24, 0.16, 0.06, 0.95) if is_ult else Color(0.08, 0.16, 0.26, 0.95)
+		var ab_btn := _make_arcade_button("Ability", b_col, 64.0, 14, b_bg)
+		ab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ab_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		ab_btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		ab_btn.expand_icon = true
+		ab_btn.clip_text = true
+		ab_btn.pressed.connect(_trigger_preview_ability.bind(slot_i))
+		ab_grid.add_child(ab_btn)
+		_agent_preview_btns.append(ab_btn)
+
+	_practice_agent_bot_row = HBoxContainer.new()
+	_practice_agent_bot_row.add_theme_constant_override("separation", 8)
+	_practice_agent_bot_row.visible = false
+	lv.add_child(_practice_agent_bot_row)
+
+	var p_bot_lbl := Label.new()
+	p_bot_lbl.text = "BOT AGENTS:"
+	p_bot_lbl.add_theme_font_size_override("font_size", 13)
+	p_bot_lbl.modulate = Color(0.75, 0.88, 1.0)
+	_practice_agent_bot_row.add_child(p_bot_lbl)
+
+	_practice_agent_bot_opt = OptionButton.new()
+	_practice_agent_bot_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_practice_agent_bot_opt.custom_minimum_size = Vector2(0, 32)
+	_practice_agent_bot_opt.clip_text = true
+	_populate_bot_agent_option_button(_practice_agent_bot_opt)
+	_practice_agent_bot_opt.item_selected.connect(func(item_idx: int):
+		NetworkManager.practice_bot_agent_id = _practice_agent_bot_opt.get_item_id(item_idx)
+		_sync_bot_agent_option_buttons()
+	)
+	_practice_agent_bot_row.add_child(_practice_agent_bot_opt)
+
+	# Right Column: All Agents Scrollable Grid (2 per row)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_stretch_ratio = 1.15
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_stretch_ratio = 1.0
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	split.add_child(scroll)
+	main_split.add_child(scroll)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(grid)
 
 	_agent_cards.clear()
-	for i in range(AgentData.AGENTS.size()):
+	for i in _get_sorted_agent_indices():
 		var ag: Dictionary = AgentData.AGENTS[i]
 		var cb := Button.new()
-		cb.custom_minimum_size = Vector2(0, 64)
+		cb.custom_minimum_size = Vector2(0, 108)
 		cb.clip_text = true
 		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cb.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		cb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		cb.icon = _make_agent_icon(i)
 		cb.add_theme_font_size_override("font_size", 15)
-		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		cb.text = "  %s\n  (%s)" % [str(ag["agent_name"]), str(ag["title"])]
+		cb.set_meta("agent_idx", i)
 		cb.pressed.connect(_select_agent.bind(i))
 		grid.add_child(cb)
 		_agent_cards.append(cb)
 
 	_refresh_agent_select_ui()
+
+
+const REWORKED_PART_PRIORITY: Array[int] = [
+	14, 21, 24, 26, 7, 15, 27, 1, 13, 16, 17, 18, 20, 25, 28, 29, 30, 0
+]
+
+
+func _get_sorted_agent_indices() -> Array[int]:
+	var total: int = mini(AgentData.AGENTS.size(), ProfileManager.ARCHETYPES.size())
+	var reworked: Array[int] = []
+	var others: Array[int] = []
+	for p_id in REWORKED_PART_PRIORITY:
+		for i in range(total):
+			if ProfileManager.get_archetype_part_id(i) == p_id and not reworked.has(i):
+				reworked.append(i)
+	for i in range(total):
+		if not reworked.has(i):
+			others.append(i)
+	var res: Array[int] = []
+	res.append_array(reworked)
+	res.append_array(others)
+	return res
 
 
 func _update_loadout_label() -> void:
@@ -641,10 +698,13 @@ func _update_loadout_label() -> void:
 
 
 func _cycle_main_agent(step: int) -> void:
-	var count: int = ProfileManager.ARCHETYPES.size()
-	if count <= 0:
+	var order: Array[int] = _get_sorted_agent_indices()
+	if order.is_empty():
 		return
-	var next_idx: int = posmod(ProfileManager.archetype_id + step, count)
+	var cur_pos: int = order.find(ProfileManager.archetype_id)
+	if cur_pos < 0:
+		cur_pos = 0
+	var next_idx: int = order[posmod(cur_pos + step, order.size())]
 	_select_agent(next_idx)
 
 
@@ -663,7 +723,7 @@ func _refresh_agent_select_ui() -> void:
 	var abils: Array = ag["abilities"]
 	var ult: Dictionary = ag["ultimate"]
 	if is_instance_valid(_agent_kit_title):
-		_agent_kit_title.text = "%s — %s" % [str(ag["agent_name"]).to_upper(), str(ag["role"])]
+		_agent_kit_title.text = "Agent Clash  —  %s (%s)" % [str(ag["agent_name"]).to_upper(), str(ag["role"])]
 	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("set_agent"):
 		_agent_preview_arena.set_agent(idx)
 	if is_instance_valid(_agent_kit_body):
@@ -672,18 +732,22 @@ func _refresh_agent_select_ui() -> void:
 		var btn: Button = _agent_preview_btns[si]
 		if not is_instance_valid(btn):
 			continue
+		var ab_slot: Dictionary = ult if si == 3 else (abils[si] as Dictionary)
+		var ab_kind: String = str(ab_slot.get("kind", ""))
+		btn.icon = AgentData.get_ability_icon_texture(ab_kind)
 		if si == 3:
-			btn.text = "ULT: %s" % str(ult["name"])
+			btn.text = " ULT: %s" % str(ult["name"])
 		else:
-			btn.text = "%d: %s" % [si + 1, str(abils[si]["name"])]
-	for i in range(_agent_cards.size()):
-		var is_sel: bool = (i == idx)
+			btn.text = " %d: %s" % [si + 1, str(abils[si]["name"])]
+	for card in _agent_cards:
+		var c_idx: int = int(card.get_meta("agent_idx")) if card.has_meta("agent_idx") else -1
+		var is_sel: bool = (c_idx == idx)
 		var ac: Color = ag["accent"] as Color
 		var bg_c: Color = Color(0.22, 0.14, 0.34) if is_sel else Color(0.10, 0.14, 0.22)
 		var bd_c: Color = ac if is_sel else Color(0.28, 0.42, 0.62)
-		_agent_cards[i].add_theme_stylebox_override("normal", _make_style(bg_c, bd_c, 8))
-		_agent_cards[i].add_theme_stylebox_override("hover", _make_style(bg_c.lightened(0.14), bd_c.lightened(0.25), 8))
-		_agent_cards[i].add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 8))
+		card.add_theme_stylebox_override("normal", _make_style(bg_c, bd_c, 10))
+		card.add_theme_stylebox_override("hover", _make_style(bg_c.lightened(0.14), bd_c.lightened(0.25), 10))
+		card.add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 10))
 
 
 func _trigger_preview_ability(slot_i: int) -> void:
@@ -724,17 +788,34 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	if used.size.x <= 0 or used.size.y <= 0:
 		return null
 	var trimmed: Image = base_img.get_region(used)
-	var scale_f: float = 42.0 / float(maxi(used.size.x, used.size.y))
+	var scale_f: float = 68.0 / float(maxi(used.size.x, used.size.y))
 	var tw: int = maxi(1, int(round(float(used.size.x) * scale_f)))
 	var th: int = maxi(1, int(round(float(used.size.y) * scale_f)))
 	trimmed.resize(tw, th, Image.INTERPOLATE_BILINEAR)
-	var sq := Image.create(48, 48, false, Image.FORMAT_RGBA8)
+	var sq := Image.create(76, 76, false, Image.FORMAT_RGBA8)
 	sq.fill(Color(0, 0, 0, 0))
-	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((48 - tw) / 2, (48 - th) / 2))
+	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((76 - tw) / 2, (76 - th) / 2))
 	return ImageTexture.create_from_image(sq)
 
 
 var _preview_saved_match_mode: int = -1
+
+
+func _populate_bot_agent_option_button(opt: OptionButton) -> void:
+	opt.clear()
+	opt.add_item("Unique Agents (No Duplicates — Including You)", -1)
+	for i in _get_sorted_agent_indices():
+		var arch: Dictionary = ProfileManager.ARCHETYPES[i]
+		opt.add_item("All Bots: %s" % str(arch.get("name", arch.get("callsign", "Agent"))), i)
+
+
+func _sync_bot_agent_option_buttons() -> void:
+	var target_id: int = NetworkManager.practice_bot_agent_id
+	for opt in [_test_bot_agent_opt, _practice_agent_bot_opt]:
+		if is_instance_valid(opt):
+			var idx: int = opt.get_item_index(target_id)
+			if idx >= 0:
+				opt.select(idx)
 
 
 func _open_agent_select(for_practice: bool = false) -> void:
@@ -743,7 +824,12 @@ func _open_agent_select(for_practice: bool = false) -> void:
 	_agent_select_for_practice = for_practice
 	if is_instance_valid(_agent_play_btn):
 		_agent_play_btn.text = "START PRACTICE (AGENT)" if for_practice else "CONTINUE"
+	if is_instance_valid(_practice_agent_bot_row):
+		_practice_agent_bot_row.visible = for_practice
+	_sync_bot_agent_option_buttons()
 	_refresh_agent_select_ui()
+	if is_instance_valid(_preview):
+		_preview.visible = false
 	_agent_select_overlay.visible = true
 	_agent_select_overlay.modulate.a = 0.0
 	create_tween().tween_property(_agent_select_overlay, "modulate:a", 1.0, 0.16)
@@ -753,12 +839,15 @@ func _close_agent_select() -> void:
 	if _preview_saved_match_mode >= 0:
 		NetworkManager.match_mode = _preview_saved_match_mode
 		_preview_saved_match_mode = -1
+	if is_instance_valid(_preview):
+		_preview.visible = true
 	if is_instance_valid(_agent_select_overlay):
 		_agent_select_overlay.visible = false
 
 
 func _build_test_mode_overlay() -> void:
 	_test_mode_overlay = ColorRect.new()
+	_test_mode_overlay.z_index = 20
 	_test_mode_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_test_mode_overlay.color = Color(0.02, 0.03, 0.06, 0.86)
 	_test_mode_overlay.visible = false
@@ -817,7 +906,8 @@ func _build_test_mode_overlay() -> void:
 	_test_mode_type_buttons.clear()
 	var mode_specs: Array[Dictionary] = [
 		{"mode": 0, "label": "GUN MODE"},
-		{"mode": 2, "label": "AGENT MODE"}
+		{"mode": 2, "label": "AGENT MODE"},
+		{"mode": 4, "label": "SHOOTING RANGE"}
 	]
 	for ms in mode_specs:
 		var mb := Button.new()
@@ -903,6 +993,27 @@ func _build_test_mode_overlay() -> void:
 	)
 	t_bot_row.add_child(t_plus)
 
+	var t_ag_row := HBoxContainer.new()
+	t_ag_row.add_theme_constant_override("separation", 8)
+	bot_vb.add_child(t_ag_row)
+
+	var t_ag_lbl := Label.new()
+	t_ag_lbl.text = "BOT AGENTS:"
+	t_ag_lbl.add_theme_font_size_override("font_size", 14)
+	t_ag_lbl.modulate = Color(0.75, 0.85, 0.95)
+	t_ag_row.add_child(t_ag_lbl)
+
+	_test_bot_agent_opt = OptionButton.new()
+	_test_bot_agent_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_test_bot_agent_opt.custom_minimum_size = Vector2(0, 38)
+	_test_bot_agent_opt.clip_text = true
+	_populate_bot_agent_option_button(_test_bot_agent_opt)
+	_test_bot_agent_opt.item_selected.connect(func(item_idx: int):
+		NetworkManager.practice_bot_agent_id = _test_bot_agent_opt.get_item_id(item_idx)
+		_sync_bot_agent_option_buttons()
+	)
+	t_ag_row.add_child(_test_bot_agent_opt)
+
 	# Bottom section: Gravity Settings & Unlimited Abilities checkbox
 	var grav_row := HBoxContainer.new()
 	grav_row.add_theme_constant_override("separation", 10)
@@ -938,6 +1049,41 @@ func _build_test_mode_overlay() -> void:
 	_test_grav_val_lbl.text = "%.2fx" % NetworkManager.gravity_scale
 	grav_row.add_child(_test_grav_val_lbl)
 
+	var jet_row := HBoxContainer.new()
+	jet_row.add_theme_constant_override("separation", 10)
+	cv.add_child(jet_row)
+
+	var jet_lbl := Label.new()
+	jet_lbl.text = "JET SPEED:"
+	jet_lbl.custom_minimum_size = Vector2(110, 0)
+	jet_lbl.add_theme_font_size_override("font_size", 14)
+	jet_lbl.modulate = Color(0.75, 0.88, 1.0)
+	jet_row.add_child(jet_lbl)
+
+	_test_jet_slider = HSlider.new()
+	_test_jet_slider.min_value = 0.1
+	_test_jet_slider.max_value = 1.0
+	_test_jet_slider.step = 0.05
+	_test_jet_slider.value = NetworkManager.jet_speed_scale
+	_test_jet_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_test_jet_slider.custom_minimum_size = Vector2(0, 28)
+	_test_jet_slider.value_changed.connect(func(v: float):
+		NetworkManager.jet_speed_scale = clampf(v, 0.1, 1.0)
+		SettingsManager.jet_speed_scale = NetworkManager.jet_speed_scale
+		SettingsManager.save_settings()
+		if is_instance_valid(_test_jet_val_lbl):
+			_test_jet_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	)
+	jet_row.add_child(_test_jet_slider)
+
+	_test_jet_val_lbl = Label.new()
+	_test_jet_val_lbl.custom_minimum_size = Vector2(58, 0)
+	_test_jet_val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_test_jet_val_lbl.add_theme_font_size_override("font_size", 15)
+	_test_jet_val_lbl.modulate = Color(1.0, 0.88, 0.35)
+	_test_jet_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	jet_row.add_child(_test_jet_val_lbl)
+
 	var unlim_ab_cb := CheckBox.new()
 	unlim_ab_cb.text = "  Unlimited Abilities & Ultimate (No Kills Required)"
 	unlim_ab_cb.button_pressed = NetworkManager.unlimited_abilities_practice
@@ -956,7 +1102,8 @@ func _build_test_mode_overlay() -> void:
 			return
 		NetworkManager.disconnect_network()
 		NetworkManager.test_mode_enabled = true
-		NetworkManager.match_mode = _test_mode_choice
+		NetworkManager.practice_shooting_range = (_test_mode_choice == 4)
+		NetworkManager.match_mode = 0 if _test_mode_choice == 4 else _test_mode_choice
 		NetworkManager.test_bot_behavior = _test_bot_choice
 		_close_test_mode_overlay()
 		_open_map_select(func(): _transition_to(NetworkManager.go_to_arena))
@@ -966,7 +1113,7 @@ func _build_test_mode_overlay() -> void:
 
 
 func _refresh_test_mode_ui() -> void:
-	var mode_vals: Array[int] = [0, 2]
+	var mode_vals: Array[int] = [0, 2, 4]
 	for i in range(_test_mode_type_buttons.size()):
 		var btn: Button = _test_mode_type_buttons[i]
 		var active: bool = (_test_mode_choice == mode_vals[i])
@@ -988,7 +1135,7 @@ func _refresh_test_mode_ui() -> void:
 
 
 func _open_test_mode_overlay() -> void:
-	_test_mode_choice = 2 if NetworkManager.is_agent_clash_mode() else 0
+	_test_mode_choice = 4 if NetworkManager.is_shooting_range_mode() else (2 if NetworkManager.is_agent_clash_mode() else 0)
 	_test_bot_choice = clampi(NetworkManager.test_bot_behavior, 0, 2)
 	if is_instance_valid(_test_grav_slider):
 		_test_grav_slider.value = NetworkManager.gravity_scale
@@ -1007,6 +1154,7 @@ func _close_test_mode_overlay() -> void:
 
 func _build_map_select_overlay() -> void:
 	_map_select_overlay = ColorRect.new()
+	_map_select_overlay.z_index = 20
 	_map_select_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_map_select_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
 	_map_select_overlay.visible = false
@@ -1131,6 +1279,7 @@ func _open_map_select(on_confirm: Callable) -> void:
 
 func _build_match_settings_overlay() -> void:
 	_match_settings_overlay = ColorRect.new()
+	_match_settings_overlay.z_index = 50
 	_match_settings_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_match_settings_overlay.color = Color(0.02, 0.03, 0.06, 0.88)
 	_match_settings_overlay.visible = false
@@ -1274,6 +1423,39 @@ func _build_match_settings_overlay() -> void:
 	_ms_timer_val_lbl.text = "%d MIN" % NetworkManager.match_duration_minutes
 	t_row.add_child(_ms_timer_val_lbl)
 
+	# Jet Speed Slider (0.1 to 1.0)
+	var j_row := HBoxContainer.new()
+	j_row.add_theme_constant_override("separation", 10)
+	mv.add_child(j_row)
+	var j_lbl := Label.new()
+	j_lbl.text = "JET SPEED:"
+	j_lbl.custom_minimum_size = Vector2(160, 0)
+	j_lbl.add_theme_font_size_override("font_size", 16)
+	j_lbl.modulate = Color(0.75, 0.88, 1.0)
+	j_row.add_child(j_lbl)
+	_ms_jet_slider = HSlider.new()
+	_ms_jet_slider.min_value = 0.1
+	_ms_jet_slider.max_value = 1.0
+	_ms_jet_slider.step = 0.05
+	_ms_jet_slider.value = NetworkManager.jet_speed_scale
+	_ms_jet_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ms_jet_slider.custom_minimum_size = Vector2(0, 32)
+	_ms_jet_slider.value_changed.connect(func(v: float):
+		NetworkManager.jet_speed_scale = clampf(v, 0.1, 1.0)
+		SettingsManager.jet_speed_scale = NetworkManager.jet_speed_scale
+		SettingsManager.save_settings()
+		if is_instance_valid(_ms_jet_val_lbl):
+			_ms_jet_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	)
+	j_row.add_child(_ms_jet_slider)
+	_ms_jet_val_lbl = Label.new()
+	_ms_jet_val_lbl.custom_minimum_size = Vector2(64, 0)
+	_ms_jet_val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ms_jet_val_lbl.add_theme_font_size_override("font_size", 17)
+	_ms_jet_val_lbl.modulate = Color(1.0, 0.88, 0.35)
+	_ms_jet_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	j_row.add_child(_ms_jet_val_lbl)
+
 	# Unlimited Gas
 	_ms_gas_chk = CheckBox.new()
 	_ms_gas_chk.text = "  Unlimited Jetpack Gas"
@@ -1281,8 +1463,23 @@ func _build_match_settings_overlay() -> void:
 	_ms_gas_chk.add_theme_font_size_override("font_size", 17)
 	_ms_gas_chk.toggled.connect(func(on: bool):
 		NetworkManager.unlimited_jetpack = on
+		SettingsManager.unlimited_jetpack = on
+		SettingsManager.save_settings()
 	)
 	mv.add_child(_ms_gas_chk)
+
+	# Random Guns on Respawn (Gun Game only)
+	_ms_random_guns_chk = CheckBox.new()
+	_ms_random_guns_chk.text = "  Random Guns on Respawn (No Kit Selection)"
+	_ms_random_guns_chk.button_pressed = NetworkManager.random_guns_mode
+	_ms_random_guns_chk.add_theme_font_size_override("font_size", 17)
+	_ms_random_guns_chk.modulate = Color(0.95, 0.88, 0.45)
+	_ms_random_guns_chk.toggled.connect(func(on: bool):
+		NetworkManager.random_guns_mode = on
+		SettingsManager.random_guns_mode = on
+		SettingsManager.save_settings()
+	)
+	mv.add_child(_ms_random_guns_chk)
 
 	# Restricted Guns Dropdown (Gun Game only)
 	_ms_guns_row = HBoxContainer.new()
@@ -1371,12 +1568,19 @@ func _open_match_settings(for_agent_clash: bool) -> void:
 		_ms_title_lbl.modulate = Color(0.78, 0.48, 1.0) if for_agent_clash else Color(0.35, 0.94, 0.56)
 	if is_instance_valid(_ms_guns_row):
 		_ms_guns_row.visible = not for_agent_clash
+	if is_instance_valid(_ms_random_guns_chk):
+		_ms_random_guns_chk.visible = not for_agent_clash
+		_ms_random_guns_chk.button_pressed = NetworkManager.random_guns_mode
 	if is_instance_valid(_ms_bot_val_lbl):
 		_ms_bot_val_lbl.text = str(NetworkManager.bot_count)
 	if is_instance_valid(_ms_grav_slider):
 		_ms_grav_slider.value = NetworkManager.gravity_scale
 	if is_instance_valid(_ms_grav_val_lbl):
 		_ms_grav_val_lbl.text = "%.2fx" % NetworkManager.gravity_scale
+	if is_instance_valid(_ms_jet_slider):
+		_ms_jet_slider.value = NetworkManager.jet_speed_scale
+	if is_instance_valid(_ms_jet_val_lbl):
+		_ms_jet_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
 	if is_instance_valid(_ms_timer_slider):
 		_ms_timer_slider.value = NetworkManager.match_duration_minutes
 	if is_instance_valid(_ms_timer_val_lbl):
@@ -1393,6 +1597,7 @@ func _open_match_settings(for_agent_clash: bool) -> void:
 func _build_local_mode_overlays() -> void:
 	# 1. Local Mode choice (HOST / JOIN)
 	_local_mode_overlay = ColorRect.new()
+	_local_mode_overlay.z_index = 50
 	_local_mode_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_local_mode_overlay.color = Color(0.02, 0.03, 0.06, 0.88)
 	_local_mode_overlay.visible = false
@@ -1444,6 +1649,7 @@ func _build_local_mode_overlays() -> void:
 
 	# 2. Local Host Setup Overlay
 	_local_host_overlay = ColorRect.new()
+	_local_host_overlay.z_index = 50
 	_local_host_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_local_host_overlay.color = Color(0.02, 0.03, 0.06, 0.88)
 	_local_host_overlay.visible = false
@@ -1613,6 +1819,49 @@ func _build_local_mode_overlays() -> void:
 	_lh_timer_lbl.text = "%d MIN" % NetworkManager.match_duration_minutes
 	lt_row.add_child(_lh_timer_lbl)
 
+	var lj_row := HBoxContainer.new()
+	lj_row.add_theme_constant_override("separation", 10)
+	hv.add_child(lj_row)
+	var lj_lbl := Label.new()
+	lj_lbl.text = "JET SPEED:"
+	lj_lbl.custom_minimum_size = Vector2(160, 0)
+	lj_lbl.add_theme_font_size_override("font_size", 16)
+	lj_row.add_child(lj_lbl)
+	_lh_jet_slider = HSlider.new()
+	_lh_jet_slider.min_value = 0.1
+	_lh_jet_slider.max_value = 1.0
+	_lh_jet_slider.step = 0.05
+	_lh_jet_slider.value = NetworkManager.jet_speed_scale
+	_lh_jet_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lh_jet_slider.custom_minimum_size = Vector2(0, 32)
+	_lh_jet_slider.value_changed.connect(func(v: float):
+		NetworkManager.jet_speed_scale = clampf(v, 0.1, 1.0)
+		SettingsManager.jet_speed_scale = NetworkManager.jet_speed_scale
+		SettingsManager.save_settings()
+		if is_instance_valid(_lh_jet_lbl):
+			_lh_jet_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	)
+	lj_row.add_child(_lh_jet_slider)
+	_lh_jet_lbl = Label.new()
+	_lh_jet_lbl.custom_minimum_size = Vector2(64, 0)
+	_lh_jet_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_lh_jet_lbl.add_theme_font_size_override("font_size", 17)
+	_lh_jet_lbl.modulate = Color(1.0, 0.88, 0.35)
+	_lh_jet_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	lj_row.add_child(_lh_jet_lbl)
+
+	_lh_random_guns_chk = CheckBox.new()
+	_lh_random_guns_chk.text = "  Random Guns on Respawn (No Kit Selection)"
+	_lh_random_guns_chk.button_pressed = NetworkManager.random_guns_mode
+	_lh_random_guns_chk.add_theme_font_size_override("font_size", 16)
+	_lh_random_guns_chk.modulate = Color(0.95, 0.88, 0.45)
+	_lh_random_guns_chk.toggled.connect(func(on: bool):
+		NetworkManager.random_guns_mode = on
+		SettingsManager.random_guns_mode = on
+		SettingsManager.save_settings()
+	)
+	hv.add_child(_lh_random_guns_chk)
+
 	var lm_row := HBoxContainer.new()
 	lm_row.add_theme_constant_override("separation", 10)
 	hv.add_child(lm_row)
@@ -1652,6 +1901,7 @@ func _build_local_mode_overlays() -> void:
 
 	# 3. Local Join Server List Overlay
 	_local_join_overlay = ColorRect.new()
+	_local_join_overlay.z_index = 50
 	_local_join_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_local_join_overlay.color = Color(0.02, 0.03, 0.06, 0.88)
 	_local_join_overlay.visible = false
@@ -1745,6 +1995,13 @@ func _refresh_local_host_labels() -> void:
 		_lh_timer_slider.value = NetworkManager.match_duration_minutes
 	if is_instance_valid(_lh_timer_lbl):
 		_lh_timer_lbl.text = "%d MIN" % NetworkManager.match_duration_minutes
+	if is_instance_valid(_lh_jet_slider):
+		_lh_jet_slider.value = NetworkManager.jet_speed_scale
+	if is_instance_valid(_lh_jet_lbl):
+		_lh_jet_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	if is_instance_valid(_lh_random_guns_chk):
+		_lh_random_guns_chk.visible = not NetworkManager.is_agent_clash_mode()
+		_lh_random_guns_chk.button_pressed = NetworkManager.random_guns_mode
 	if is_instance_valid(_lh_map_btn):
 		_lh_map_btn.text = "MAP: %s" % NetworkManager.MAP_NAMES[clampi(NetworkManager.selected_map_id, 0, NetworkManager.MAP_NAMES.size() - 1)]
 

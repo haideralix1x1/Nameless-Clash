@@ -41,21 +41,18 @@ properties/7/replication_mode = 2
 properties/8/path = NodePath(".:current_weapon_id")
 properties/8/spawn = true
 properties/8/replication_mode = 2
-properties/9/path = NodePath(".:is_dual_wielding")
+properties/9/path = NodePath(".:is_dead")
 properties/9/spawn = true
 properties/9/replication_mode = 2
-properties/10/path = NodePath(".:is_dead")
+properties/10/path = NodePath(".:anim_frame")
 properties/10/spawn = true
 properties/10/replication_mode = 2
-properties/11/path = NodePath(".:anim_frame")
+properties/11/path = NodePath(".:weapon_skin_id")
 properties/11/spawn = true
 properties/11/replication_mode = 2
-properties/12/path = NodePath(".:weapon_skin_id")
+properties/12/path = NodePath(".:m4a1_rail_mod")
 properties/12/spawn = true
 properties/12/replication_mode = 2
-properties/13/path = NodePath(".:m4a1_rail_mod")
-properties/13/spawn = true
-properties/13/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["players"]]
 z_index = 5

@@ -30,12 +30,15 @@ var _bot_diff_opt: OptionButton
 var _local_bot_count: int = 3
 
 var _chk_unlimited_jetpack: CheckBox
+var _chk_random_guns: CheckBox
 var _chk_only_pistols: CheckBox
 var _chk_allow_snipers: CheckBox
 var _chk_allow_shotguns: CheckBox
 var _chk_allow_explosives: CheckBox
 var _gravity_slider: HSlider
 var _gravity_val_lbl: Label
+var _jet_speed_slider: HSlider
+var _jet_speed_val_lbl: Label
 var _syncing_rules_ui: bool = false
 var _left_panel: PanelContainer
 var _lan_sep: HSeparator
@@ -361,6 +364,32 @@ func _build_ui() -> void:
 	_gravity_val_lbl.add_theme_font_size_override("font_size", 14)
 	grav_row.add_child(_gravity_val_lbl)
 
+	var jet_row := HBoxContainer.new()
+	jet_row.add_theme_constant_override("separation", 8)
+	lv.add_child(jet_row)
+	var jet_lbl := Label.new()
+	jet_lbl.text = "Jet Speed (0.1-1):"
+	jet_lbl.custom_minimum_size = Vector2(115, 0)
+	jet_lbl.add_theme_font_size_override("font_size", 14)
+	jet_row.add_child(jet_lbl)
+	_jet_speed_slider = HSlider.new()
+	_jet_speed_slider.min_value = 0.1
+	_jet_speed_slider.max_value = 1.0
+	_jet_speed_slider.step = 0.05
+	_jet_speed_slider.value = NetworkManager.jet_speed_scale
+	_jet_speed_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_jet_speed_slider.value_changed.connect(func(v: float):
+		if is_instance_valid(_jet_speed_val_lbl):
+			_jet_speed_val_lbl.text = "%.2fx" % v
+		_on_rules_ui_changed()
+	)
+	jet_row.add_child(_jet_speed_slider)
+	_jet_speed_val_lbl = Label.new()
+	_jet_speed_val_lbl.text = "%.2fx" % NetworkManager.jet_speed_scale
+	_jet_speed_val_lbl.custom_minimum_size = Vector2(52, 0)
+	_jet_speed_val_lbl.add_theme_font_size_override("font_size", 14)
+	jet_row.add_child(_jet_speed_val_lbl)
+
 	var rules_grid := GridContainer.new()
 	rules_grid.columns = 2
 	rules_grid.add_theme_constant_override("h_separation", 8)
@@ -369,6 +398,8 @@ func _build_ui() -> void:
 
 	_chk_unlimited_jetpack = _make_rule_checkbox("Unlimited Jetpack", NetworkManager.unlimited_jetpack)
 	rules_grid.add_child(_chk_unlimited_jetpack)
+	_chk_random_guns = _make_rule_checkbox("Random Guns", NetworkManager.random_guns_mode)
+	rules_grid.add_child(_chk_random_guns)
 	_chk_only_pistols = _make_rule_checkbox("Pistols Only", NetworkManager.only_pistols)
 	rules_grid.add_child(_chk_only_pistols)
 	_chk_allow_snipers = _make_rule_checkbox("Allow Snipers", NetworkManager.allow_snipers)
@@ -622,11 +653,15 @@ func _on_rules_ui_changed() -> void:
 	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
 		return
 	SettingsManager.unlimited_jetpack = _chk_unlimited_jetpack.button_pressed
+	if is_instance_valid(_chk_random_guns):
+		SettingsManager.random_guns_mode = _chk_random_guns.button_pressed
 	SettingsManager.only_pistols = _chk_only_pistols.button_pressed
 	SettingsManager.allow_snipers = _chk_allow_snipers.button_pressed
 	SettingsManager.allow_shotguns = _chk_allow_shotguns.button_pressed
 	SettingsManager.allow_explosives = _chk_allow_explosives.button_pressed
 	SettingsManager.gravity_scale = clampf(float(_gravity_slider.value), 0.0, 1.0)
+	if is_instance_valid(_jet_speed_slider):
+		SettingsManager.jet_speed_scale = clampf(float(_jet_speed_slider.value), 0.1, 1.0)
 	SettingsManager.apply_and_save()
 
 
@@ -635,6 +670,8 @@ func _refresh_rules_ui() -> void:
 		return
 	_syncing_rules_ui = true
 	_chk_unlimited_jetpack.button_pressed = NetworkManager.unlimited_jetpack
+	if is_instance_valid(_chk_random_guns):
+		_chk_random_guns.button_pressed = NetworkManager.random_guns_mode
 	_chk_only_pistols.button_pressed = NetworkManager.only_pistols
 	_chk_allow_snipers.button_pressed = NetworkManager.allow_snipers
 	_chk_allow_shotguns.button_pressed = NetworkManager.allow_shotguns
@@ -642,6 +679,10 @@ func _refresh_rules_ui() -> void:
 	_gravity_slider.value = clampf(NetworkManager.gravity_scale, 0.0, 1.0)
 	if is_instance_valid(_gravity_val_lbl):
 		_gravity_val_lbl.text = "%.2fx" % _gravity_slider.value
+	if is_instance_valid(_jet_speed_slider):
+		_jet_speed_slider.value = clampf(NetworkManager.jet_speed_scale, 0.1, 1.0)
+	if is_instance_valid(_jet_speed_val_lbl) and is_instance_valid(_jet_speed_slider):
+		_jet_speed_val_lbl.text = "%.2fx" % _jet_speed_slider.value
 	_syncing_rules_ui = false
 
 
@@ -692,11 +733,15 @@ func _refresh_controls_state() -> void:
 		_bot_diff_opt.disabled = not can_edit_match
 	if is_instance_valid(_chk_unlimited_jetpack):
 		_chk_unlimited_jetpack.disabled = not can_edit_match
+		if is_instance_valid(_chk_random_guns):
+			_chk_random_guns.disabled = not can_edit_match
 		_chk_only_pistols.disabled = not can_edit_match
 		_chk_allow_snipers.disabled = not can_edit_match
 		_chk_allow_shotguns.disabled = not can_edit_match
 		_chk_allow_explosives.disabled = not can_edit_match
 		_gravity_slider.editable = can_edit_match
+		if is_instance_valid(_jet_speed_slider):
+			_jet_speed_slider.editable = can_edit_match
 	_room_ip_banner.text = "Room IP: " + NetworkManager.get_primary_local_ip()
 	_refresh_team_button()
 

@@ -20,10 +20,17 @@ var _touch_marker_pos: Vector2 = Vector2.ZERO
 var _touch_marker_timer: float = 0.0
 
 
+const HERO_HOME_X: float = 82.0
+const BOT_HOME_X: float = 398.0
+const PREVIEW_CHAR_SCALE: Vector2 = Vector2(1.32, 1.32)
+const PREVIEW_CAM_ZOOM: Vector2 = Vector2(1.56, 1.56)
+
+
 func _ready() -> void:
 	_build_bounds()
 	_cam = Camera2D.new()
-	_cam.position = Vector2(arena_width * 0.5, arena_height * 0.5)
+	_cam.position = Vector2(arena_width * 0.5, arena_height - 72.0)
+	_cam.zoom = PREVIEW_CAM_ZOOM
 	_cam.enabled = true
 	add_child(_cam)
 	_spawn_fighters()
@@ -58,20 +65,22 @@ func _spawn_fighters() -> void:
 	hero = PLAYER_SCENE.instantiate()
 	hero.is_bot = true
 	hero.is_preview_dummy = true
-	var hero_spawns: Array[Vector2] = [Vector2(120.0, 142.0)]
+	var hero_spawns: Array[Vector2] = [Vector2(HERO_HOME_X, 142.0)]
 	hero.setup_player(901, "Preview", 0, true, hero_spawns, 0, ProfileManager.ARCHETYPES[0])
 	hero.archetype_id = _current_arch
 	hero.spawn_invuln_timer = 0.0
+	hero.scale = PREVIEW_CHAR_SCALE
 	add_child(hero)
 
 	dummy_bot = PLAYER_SCENE.instantiate()
 	dummy_bot.is_bot = true
 	dummy_bot.is_preview_dummy = true
 	var bot_arch: int = 1 if _current_arch != 1 else 0
-	var bot_spawns: Array[Vector2] = [Vector2(355.0, 142.0)]
+	var bot_spawns: Array[Vector2] = [Vector2(BOT_HOME_X, 142.0)]
 	dummy_bot.setup_player(902, "Target Bot", 1, true, bot_spawns, 1, ProfileManager.ARCHETYPES[bot_arch])
 	dummy_bot.archetype_id = bot_arch
 	dummy_bot.spawn_invuln_timer = 0.0
+	dummy_bot.scale = PREVIEW_CHAR_SCALE
 	add_child(dummy_bot)
 
 	NetworkManager.match_mode = prev_mode
@@ -100,11 +109,12 @@ func set_agent(arch_id: int) -> void:
 		hero._shadow_dash_timer = 0.0
 		hero._bat_ult_timer = 0.0
 		hero.preview_move_x = 0.0
-		hero.global_position = Vector2(120.0, 142.0)
+		hero.global_position = Vector2(HERO_HOME_X, 142.0)
 		hero.velocity = Vector2.ZERO
 		hero.aim_angle = 0.0
 		hero.facing_right = true
 		hero.spawn_invuln_timer = 0.0
+		hero.scale = PREVIEW_CHAR_SCALE
 		hero.health = hero.max_health
 		hero._update_overhead_ui()
 		hero.queue_redraw()
@@ -112,11 +122,12 @@ func set_agent(arch_id: int) -> void:
 		dummy_bot._respawn_self()
 		dummy_bot.preview_move_x = 0.0
 		dummy_bot.preview_jump = false
-		dummy_bot.global_position = Vector2(355.0, 142.0)
+		dummy_bot.global_position = Vector2(BOT_HOME_X, 142.0)
 		dummy_bot.velocity = Vector2.ZERO
 		dummy_bot.aim_angle = PI
 		dummy_bot.facing_right = false
 		dummy_bot.spawn_invuln_timer = 0.0
+		dummy_bot.scale = PREVIEW_CHAR_SCALE
 		dummy_bot.health = dummy_bot.max_health
 		dummy_bot._update_overhead_ui()
 		dummy_bot.queue_redraw()
@@ -130,9 +141,9 @@ func cast_slot(slot_i: int) -> void:
 	NetworkManager.match_mode = 2
 	if hero.is_dead:
 		hero._respawn_self()
-		hero.global_position = Vector2(120.0, 142.0)
-	if hero.global_position.distance_to(Vector2(120.0, 142.0)) > 160.0:
-		hero.global_position = Vector2(120.0, 142.0)
+		hero.global_position = Vector2(HERO_HOME_X, 142.0)
+	if hero.global_position.distance_to(Vector2(HERO_HOME_X, 142.0)) > 200.0:
+		hero.global_position = Vector2(HERO_HOME_X, 142.0)
 		hero.velocity = Vector2.ZERO
 	hero.stun_timer = 0.0
 	hero.freeze_timer = 0.0
@@ -152,7 +163,7 @@ func cast_slot(slot_i: int) -> void:
 	if needs_close and is_instance_valid(dummy_bot) and not dummy_bot.is_dead:
 		_hero_dash_casting = true
 		_hero_return_delay = 0.85
-		var target_x: float = maxf(120.0, dummy_bot.global_position.x - 56.0)
+		var target_x: float = maxf(HERO_HOME_X, dummy_bot.global_position.x - 56.0)
 		var tw := create_tween()
 		tw.tween_property(hero, "global_position:x", target_x, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.finished.connect(func():
@@ -264,11 +275,12 @@ func _process(delta: float) -> void:
 			var prev_mode: int = NetworkManager.match_mode
 			NetworkManager.match_mode = 2
 			dummy_bot._respawn_self()
-			dummy_bot.global_position = Vector2(355.0, 142.0)
+			dummy_bot.global_position = Vector2(BOT_HOME_X, 142.0)
 			dummy_bot.velocity = Vector2.ZERO
 			dummy_bot.aim_angle = PI
 			dummy_bot.facing_right = false
 			dummy_bot.spawn_invuln_timer = 0.0
+			dummy_bot.scale = PREVIEW_CHAR_SCALE
 			NetworkManager.match_mode = prev_mode
 	else:
 		_bot_respawn_timer = -1.0
@@ -276,11 +288,12 @@ func _process(delta: float) -> void:
 		var prev_mode2: int = NetworkManager.match_mode
 		NetworkManager.match_mode = 2
 		hero._respawn_self()
-		hero.global_position = Vector2(120.0, 142.0)
+		hero.global_position = Vector2(HERO_HOME_X, 142.0)
 		hero.velocity = Vector2.ZERO
 		hero.aim_angle = 0.0
 		hero.facing_right = true
 		hero.spawn_invuln_timer = 0.0
+		hero.scale = PREVIEW_CHAR_SCALE
 		NetworkManager.match_mode = prev_mode2
 	if is_instance_valid(hero) and not hero.is_dead:
 		if _hero_return_delay > 0.0:
@@ -293,15 +306,15 @@ func _process(delta: float) -> void:
 			else:
 				hero.preview_move_x = 1.0
 		elif hero.speed_boost_timer > 0.0 and hero.control_lock_timer <= 0.0:
-			if hero.global_position.x >= 290.0:
+			if hero.global_position.x >= 320.0:
 				_hero_pace_dir = -1.0
-			elif hero.global_position.x <= 110.0:
+			elif hero.global_position.x <= HERO_HOME_X:
 				_hero_pace_dir = 1.0
 			hero.preview_move_x = _hero_pace_dir
 			hero.aim_angle = 0.0 if _hero_pace_dir >= 0.0 else PI
 			hero.facing_right = _hero_pace_dir >= 0.0
 		elif not _hero_dash_casting and _hero_return_delay <= 0.0 and hero.control_lock_timer <= 0.0 and hero._fly_kick_timer <= 0.0 and hero._bat_ult_timer <= 0.0 and hero._flurry_state == 0:
-			if hero.global_position.x > 128.0:
+			if hero.global_position.x > HERO_HOME_X + 8.0:
 				hero.preview_move_x = -0.85
 			else:
 				hero.preview_move_x = 0.0
@@ -311,7 +324,7 @@ func _process(delta: float) -> void:
 			hero.preview_move_x = 0.0
 	for f in [hero, dummy_bot]:
 		if is_instance_valid(f) and not f.is_dead:
-			var cx: float = clampf(f.global_position.x, 48.0, 412.0)
+			var cx: float = clampf(f.global_position.x, 42.0, 438.0)
 			var cy: float = clampf(f.global_position.y, 36.0, 152.0)
 			if cx != f.global_position.x:
 				f.global_position.x = cx
@@ -345,23 +358,23 @@ func _process(delta: float) -> void:
 			else:
 				dummy_bot.preview_move_x = 0.0
 		elif hazard_zone != null:
-			var hz_x: float = clampf(hazard_zone.global_position.x + 25.0, 195.0, 315.0)
+			var hz_x: float = clampf(hazard_zone.global_position.x + 25.0, 195.0, 345.0)
 			if dummy_bot.global_position.x > hz_x + 12.0:
 				dummy_bot.preview_move_x = -0.85
 			elif dummy_bot.global_position.x < hz_x - 12.0:
 				dummy_bot.preview_move_x = 0.85
 			else:
 				dummy_bot.preview_move_x = 0.0
-		elif dummy_bot.global_position.x < 345.0:
+		elif dummy_bot.global_position.x < BOT_HOME_X - 10.0:
 			dummy_bot.preview_move_x = 1.0
 		else:
 			dummy_bot.preview_move_x = 0.0
 		if not has_barrier and not has_blood_bubble and hazard_zone == null and dummy_bot.carried_by_peer_id == 0 and dummy_bot.stun_timer <= 0.0 and dummy_bot.freeze_timer <= 0.0 and dummy_bot.thrown_flight_timer <= 0.0:
-			if dummy_bot.global_position.distance_to(hero.global_position) < 85.0:
+			if dummy_bot.global_position.distance_to(hero.global_position) < 95.0:
 				_bot_too_close_timer += delta
 				if _bot_too_close_timer >= 0.35:
 					_bot_too_close_timer = 0.0
-					dummy_bot.global_position = Vector2(355.0, 142.0)
+					dummy_bot.global_position = Vector2(BOT_HOME_X, 142.0)
 					dummy_bot.velocity = Vector2.ZERO
 					dummy_bot.aim_angle = PI
 					dummy_bot.facing_right = false
@@ -407,22 +420,20 @@ func _process(delta: float) -> void:
 			or (is_instance_valid(hero) and not hero.is_dead and hero.earth_shake_timer > 0.0)
 		)
 		_cam.offset = Vector2(randf_range(-3.0, 3.0), randf_range(-2.5, 2.5)) if shaking else Vector2.ZERO
-		var want_zoom: Vector2 = Vector2(0.55, 0.55) if (is_instance_valid(hero) and not hero.is_dead and hero.zoom_out_timer > 0.0) else Vector2.ONE
+		var want_zoom: Vector2 = Vector2(0.85, 0.85) if (is_instance_valid(hero) and not hero.is_dead and hero.zoom_out_timer > 0.0) else PREVIEW_CAM_ZOOM
 		_cam.zoom = _cam.zoom.lerp(want_zoom, clampf(delta * 8.0, 0.0, 1.0))
 
 
 func _draw() -> void:
-	draw_rect(Rect2(-240, -140, arena_width + 480, arena_height + 280), Color(0.03, 0.04, 0.07))
-	draw_rect(Rect2(0, 0, arena_width, arena_height), Color(0.05, 0.07, 0.11))
+	draw_rect(Rect2(-240, -140, arena_width + 480, arena_height + 280), Color(0.05, 0.07, 0.11))
 	for x in range(-200, int(arena_width) + 201, 40):
 		draw_line(Vector2(x, -140), Vector2(x, arena_height + 140), Color(1, 1, 1, 0.04), 1.0)
 	for y in range(-120, int(arena_height) + 121, 40):
 		draw_line(Vector2(-240, y), Vector2(arena_width + 240, y), Color(1, 1, 1, 0.04), 1.0)
-	draw_rect(Rect2(0, arena_height - 20.0, arena_width, 20.0), Color(0.22, 0.25, 0.32))
-	draw_line(Vector2(0, arena_height - 20.0), Vector2(arena_width, arena_height - 20.0), Color(0.95, 0.72, 0.18), 3.0)
-	draw_rect(Rect2(0, 0, 20.0, arena_height), Color(0.18, 0.20, 0.26))
-	draw_rect(Rect2(arena_width - 20.0, 0, 20.0, arena_height), Color(0.18, 0.20, 0.26))
-	draw_rect(Rect2(0, 0, arena_width, arena_height), Color(0.28, 0.45, 0.68, 0.5), false, 2.0)
+	draw_rect(Rect2(-240, arena_height - 20.0, arena_width + 480, 160.0), Color(0.22, 0.25, 0.32))
+	draw_line(Vector2(-240, arena_height - 20.0), Vector2(arena_width + 240, arena_height - 20.0), Color(0.95, 0.72, 0.18), 3.0)
+	draw_rect(Rect2(0, 0, 14.0, arena_height - 20.0), Color(0.18, 0.20, 0.26, 0.55))
+	draw_rect(Rect2(arena_width - 14.0, 0, 14.0, arena_height - 20.0), Color(0.18, 0.20, 0.26, 0.55))
 	if _touch_marker_timer > 0.0:
 		var ta: float = clampf(_touch_marker_timer * 1.4, 0.0, 1.0)
 		var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.025)

@@ -64,8 +64,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"name": "Draken (Vampire)",
 		"desc": "Crimson nocturnal lord commanding homing bats, blood spears, damage reduction, and bat-form ambushes.",
 		"part_id": 26,
-		"shirt": Color(0.75, 0.14, 0.22), "pants": Color(0.22, 0.14, 0.22),
-		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color(0.65, 0.12, 0.22),
+		"shirt": Color.WHITE, "pants": Color.WHITE,
+		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 4
 	},
 	{

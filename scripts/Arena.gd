@@ -38,6 +38,10 @@ var _mine_mgr: Node2D = null
 var _bot_counter: int = 0
 var _tile_textures: Array[Texture2D] = []
 var _scenery_movers: Array[Dictionary] = []
+var _shooting_targets: Array[Node2D] = []
+var _shooting_hits: int = 0
+var _shooting_score: int = 0
+var _shooting_hud_lbl: Label = null
 
 @onready var _world_geometry: Node2D = $WorldGeometry
 @onready var _pickups_container: Node2D = $Pickups
@@ -79,7 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
 		tap_pos = (event as InputEventScreenTouch).position
 		is_tap = true
-	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and (event as InputEventMouseButton).device != InputEvent.DEVICE_ID_EMULATION:
 		tap_pos = (event as InputEventMouseButton).position
 		is_tap = true
 	if not is_tap or get_tree().paused:
@@ -200,6 +204,8 @@ func _process(delta: float) -> void:
 			var visual_node: Node2D = c["sprite"] as Node2D
 			if is_instance_valid(visual_node):
 				visual_node.position.y = 0.0
+	if NetworkManager.is_shooting_range_mode():
+		_tick_shooting_range(delta)
 
 
 func _get_map_theme(map_id: int) -> int:
@@ -1418,13 +1424,13 @@ func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
 		w_spr.hframes = 1
 		w_spr.vframes = 1
 		w_spr.frame = 0
-		w_spr.scale = (Vector2(0.55, 0.55) if w_id == 11 else (Vector2(1.20, 1.20) if w_id == 17 else Vector2(0.95, 0.95))) * 0.30
+		w_spr.scale = Vector2(0.191, 0.191) if w_id == 11 else (Vector2(0.313, 0.313) if w_id == 17 else Vector2(0.278, 0.278))
 	else:
 		w_spr.texture = TEX_WEAPONS
 		w_spr.hframes = 11
 		w_spr.vframes = 3
 		w_spr.frame = WeaponData.get_weapon(w_id, 0, 0).sprite_frame
-		w_spr.scale = Vector2(0.95, 0.95) * 0.30
+		w_spr.scale = Vector2(0.278, 0.278)
 
 
 func _pick_safest_spawn() -> Vector2:
@@ -1557,6 +1563,10 @@ func _spawn_all_participants() -> void:
 				cam.limit_bottom = int(arena_height) + 170
 			_hud.bind_local_player(player)
 
+	if NetworkManager.is_shooting_range_mode():
+		_init_shooting_range()
+		return
+
 	var target_bots: int = clampi(NetworkManager.test_bot_count, 1, NetworkManager.MAX_BOTS) if NetworkManager.is_test_mode() else clampi(NetworkManager.bot_count, 0, NetworkManager.MAX_BOTS)
 	if NetworkManager.is_test_mode():
 		NetworkManager.test_bot_count = target_bots
@@ -1594,6 +1604,28 @@ func _on_network_players_updated() -> void:
 		_players_container.add_child(player)
 
 
+func _pick_bot_archetype(bot_index: int) -> int:
+	var count: int = ProfileManager.ARCHETYPES.size()
+	var default_idx: int = (bot_index * 3 + 1) % count
+	if not (NetworkManager.is_test_mode() and NetworkManager.is_agent_clash_mode()):
+		return default_idx
+	var forced: int = NetworkManager.practice_bot_agent_id
+	if forced >= 0:
+		return clampi(forced, 0, count - 1)
+	# Unique agents: no duplicates among the player and all existing bots
+	var used: Dictionary = {}
+	if is_instance_valid(_players_container):
+		for ch in _players_container.get_children():
+			if is_instance_valid(ch) and not ch.is_queued_for_deletion() and "archetype_id" in ch:
+				used[int(ch.get("archetype_id"))] = true
+	used[ProfileManager.archetype_id] = true
+	for k in range(count):
+		var cand: int = (default_idx + k) % count
+		if not used.has(cand):
+			return cand
+	return default_idx
+
+
 func _spawn_bot(bot_index: int) -> void:
 	_bot_counter = maxi(_bot_counter, bot_index)
 	var bot_id: int = -bot_index
@@ -1602,7 +1634,7 @@ func _spawn_bot(bot_index: int) -> void:
 	var color_idx: int = bot_team if NetworkManager.is_team_mode() else (NetworkManager.local_color_index + bot_index) % NetworkManager.TEAM_COLORS.size()
 	var spawn_pos: Vector2 = _pick_safest_spawn()
 
-	var arch_idx: int = (bot_index * 3 + 1) % ProfileManager.ARCHETYPES.size()
+	var arch_idx: int = _pick_bot_archetype(bot_index)
 	var arch: Dictionary = ProfileManager.ARCHETYPES[arch_idx]
 	var raw_bot_w: int = int(arch["weapon"]) if (bot_index % 2 == 0) else (bot_index % WeaponData.get_weapon_count())
 	var bot_weapon: int = WeaponData.sanitize_weapon_id(raw_bot_w)
@@ -2835,3 +2867,167 @@ class TreasurePointOrb extends Node2D:
 			draw_circle(Vector2.ZERO, 8.5, col)
 			draw_arc(Vector2.ZERO, 8.5, 0.0, TAU, 20, Color.WHITE, 1.8)
 			draw_circle(Vector2(-2.0, -2.0), 2.5, Color(1.0, 1.0, 1.0, 0.9))
+
+
+const SHOOTING_RANGE_TARGET_COUNT: int = 6
+
+
+func _init_shooting_range() -> void:
+	_shooting_targets.clear()
+	_shooting_hits = 0
+	_shooting_score = 0
+	if _hud != null and not is_instance_valid(_shooting_hud_lbl):
+		_shooting_hud_lbl = Label.new()
+		_shooting_hud_lbl.anchor_left = 0.5
+		_shooting_hud_lbl.anchor_right = 0.5
+		_shooting_hud_lbl.offset_left = -160
+		_shooting_hud_lbl.offset_right = 160
+		_shooting_hud_lbl.offset_top = 86
+		_shooting_hud_lbl.offset_bottom = 114
+		_shooting_hud_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_shooting_hud_lbl.add_theme_font_size_override("font_size", 16)
+		_shooting_hud_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.35))
+		_shooting_hud_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		_shooting_hud_lbl.add_theme_constant_override("outline_size", 3)
+		_shooting_hud_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hud.add_child(_shooting_hud_lbl)
+	_update_shooting_hud()
+	for _i in range(SHOOTING_RANGE_TARGET_COUNT):
+		_spawn_shooting_target()
+
+
+func _update_shooting_hud() -> void:
+	if is_instance_valid(_shooting_hud_lbl):
+		_shooting_hud_lbl.text = "SHOOTING RANGE  |  TARGETS: %d  |  SCORE: %d" % [_shooting_hits, _shooting_score]
+
+
+func _tick_shooting_range(_delta: float) -> void:
+	var alive: Array[Node2D] = []
+	for t in _shooting_targets:
+		if is_instance_valid(t):
+			alive.append(t)
+	_shooting_targets = alive
+	while _shooting_targets.size() < SHOOTING_RANGE_TARGET_COUNT:
+		_spawn_shooting_target()
+
+
+func _spawn_shooting_target() -> void:
+	var pos := _find_open_target_pos()
+	var tgt := ShootingRangeTarget.new()
+	var is_gold: bool = (randf() < 0.25)
+	tgt.is_gold = is_gold
+	tgt.max_hp = 35.0 if is_gold else 60.0
+	tgt.points = 200 if is_gold else 100
+	tgt.radius = 20.0 if is_gold else 25.0
+	tgt.global_position = pos
+	tgt.destroyed.connect(_on_shooting_target_destroyed)
+	_world_geometry.add_child(tgt)
+	_shooting_targets.append(tgt)
+
+
+func _find_open_target_pos() -> Vector2:
+	var space := get_world_2d().direct_space_state
+	var pad_x: float = 130.0
+	var pad_y: float = 110.0
+	for _attempt in range(28):
+		var cand := Vector2(
+			randf_range(pad_x, maxf(pad_x + 40.0, arena_width - pad_x)),
+			randf_range(pad_y, maxf(pad_y + 40.0, arena_height - pad_y))
+		)
+		var q := PhysicsPointQueryParameters2D.new()
+		q.position = cand
+		q.collision_mask = 1
+		q.collide_with_bodies = true
+		q.collide_with_areas = false
+		if not space.intersect_point(q, 1).is_empty():
+			continue
+		var too_close := false
+		for t in _shooting_targets:
+			if is_instance_valid(t) and t.global_position.distance_to(cand) < 110.0:
+				too_close = true
+				break
+		if not too_close:
+			return cand
+	return Vector2(arena_width * 0.5, arena_height * 0.5)
+
+
+func _on_shooting_target_destroyed(pts: int, _hit_pos: Vector2) -> void:
+	_shooting_hits += 1
+	_shooting_score += pts
+	_update_shooting_hud()
+
+
+class ShootingRangeTarget extends StaticBody2D:
+	signal destroyed(points: int, pos: Vector2)
+
+	var max_hp: float = 60.0
+	var hp: float = 60.0
+	var points: int = 100
+	var radius: float = 25.0
+	var is_gold: bool = false
+	var _flash_t: float = 0.0
+	var _bob_t: float = 0.0
+	var _base_y: float = 0.0
+
+	func _ready() -> void:
+		hp = max_hp
+		_base_y = position.y
+		_bob_t = randf() * TAU
+		collision_layer = 2
+		collision_mask = 0
+		add_to_group("shooting_targets")
+		var cs := CollisionShape2D.new()
+		var circ := CircleShape2D.new()
+		circ.radius = radius
+		cs.shape = circ
+		add_child(cs)
+
+	func _process(delta: float) -> void:
+		_bob_t += delta * 2.6
+		position.y = _base_y + sin(_bob_t) * 7.0
+		if _flash_t > 0.0:
+			_flash_t = maxf(0.0, _flash_t - delta)
+			queue_redraw()
+
+	func on_target_hit(dmg: float, hit_pos: Vector2, _shooter_id: int) -> void:
+		hp -= dmg
+		_flash_t = 0.12
+		_spawn_hit_popup(int(roundf(dmg)), hp <= 0.0)
+		queue_redraw()
+		if hp <= 0.0:
+			destroyed.emit(points, hit_pos)
+			queue_free()
+
+	func _spawn_hit_popup(dmg_val: int, is_kill: bool) -> void:
+		var p := get_parent()
+		if p == null:
+			return
+		var lbl := Label.new()
+		lbl.text = "+%d!" % points if is_kill else "-%d" % dmg_val
+		lbl.global_position = global_position + Vector2(-18, -radius - 20)
+		lbl.add_theme_font_size_override("font_size", 16 if is_kill else 13)
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.90, 0.28) if is_kill else Color.WHITE)
+		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		lbl.add_theme_constant_override("outline_size", 3)
+		p.add_child(lbl)
+		var tw := lbl.create_tween()
+		tw.tween_property(lbl, "position:y", lbl.position.y - 28.0, 0.45)
+		tw.parallel().tween_property(lbl, "modulate:a", 0.0, 0.45)
+		tw.tween_callback(lbl.queue_free)
+
+	func _draw() -> void:
+		var outer_col := Color(0.95, 0.72, 0.18) if is_gold else Color(0.88, 0.22, 0.22)
+		var mid_col := Color.WHITE
+		if _flash_t > 0.0:
+			outer_col = Color.WHITE
+			mid_col = Color(1.0, 0.92, 0.45)
+		draw_circle(Vector2.ZERO, radius + 3.0, Color(0.0, 0.0, 0.0, 0.45))
+		draw_circle(Vector2.ZERO, radius, outer_col)
+		draw_circle(Vector2.ZERO, radius * 0.68, mid_col)
+		draw_circle(Vector2.ZERO, radius * 0.36, outer_col)
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 28, Color(0.12, 0.12, 0.14), 2.2)
+		if hp < max_hp:
+			var bw: float = radius * 1.8
+			var ratio: float = clampf(hp / maxf(1.0, max_hp), 0.0, 1.0)
+			draw_rect(Rect2(-bw * 0.5, -radius - 10.0, bw, 5.0), Color(0.1, 0.1, 0.1, 0.85), true)
+			draw_rect(Rect2(-bw * 0.5, -radius - 10.0, bw * ratio, 5.0), Color(0.32, 0.96, 0.48), true)

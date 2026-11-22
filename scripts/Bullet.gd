@@ -5,6 +5,7 @@ const TEX_BULLET: Texture2D = preload("res://assets/sprites/bullet.png")
 const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
 const TEX_RAVEN: Texture2D = preload("res://assets/sprites/characters/summons/raven_proj.png")
 const TEX_HEAVY_FORGE: Texture2D = preload("res://assets/sprites/vfx/ogre_falling_forge.png")
+const TEX_MUMMY_HEAD: Texture2D = preload("res://assets/sprites/modular/mummy_head.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -46,6 +47,7 @@ var radius_scale: float = 1.0:
 		radius_scale = v
 		scale = Vector2(radius_scale, radius_scale)
 var detonate_distance: float = 0.0
+var max_range: float = 0.0
 var _pierced_rids: Array[RID] = []
 var _boomerang_returned: bool = false
 var _homing_target_pos: Vector2 = Vector2.INF
@@ -63,7 +65,13 @@ var _finished: bool = false
 
 func _ready() -> void:
 	rotation = velocity.angle()
-	if visual_style != "bullet":
+	if visual_style == "mummy_head":
+		_sprite.visible = true
+		_sprite.texture = TEX_MUMMY_HEAD
+		_sprite.region_enabled = true
+		_sprite.region_rect = Rect2(56, 10, 144, 148)
+		_sprite.scale = Vector2(0.26, 0.26)
+	elif visual_style != "bullet":
 		_sprite.visible = false
 	else:
 		_sprite.texture = TEX_LASER if is_laser else TEX_BULLET
@@ -173,6 +181,13 @@ func _physics_process(delta: float) -> void:
 	if detonate_distance > 0.0 and _distance_traveled >= detonate_distance:
 		_handle_collision(null, next_pos, Vector2.UP)
 		return
+	if max_range > 0.0 and _distance_traveled >= max_range:
+		if is_explosive:
+			_handle_collision(null, next_pos, Vector2.UP)
+		else:
+			_finished = true
+			queue_free()
+		return
 	if wall_bounces_left > 0 or radius_scale >= 1.3 or visual_style.begins_with("prop_"):
 		var hit_r: float = 34.0 if visual_style.begins_with("prop_") else ((9.5 * radius_scale) if visual_style == "big_blade" else ((13.0 * radius_scale + 4.0) if visual_style == "thrown_stone" else (18.0 * radius_scale + 8.0)))
 		for p in get_tree().get_nodes_in_group("players"):
@@ -193,6 +208,8 @@ func _physics_process(delta: float) -> void:
 	_update_trail_visual()
 	if visual_style != "bullet":
 		_visual_spin += spin_speed * delta
+		if visual_style == "mummy_head" and is_instance_valid(_sprite):
+			_sprite.rotation = _visual_spin
 		queue_redraw()
 	elif on_hit_effect_kind == "hook_drag":
 		queue_redraw()
@@ -314,10 +331,16 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 	if collider != null and collider.is_in_group("barrier_walls"):
 		if can_deal_damage and collider.has_method("apply_wall_damage"):
 			collider.apply_wall_damage(damage)
-		if pierce_walls:
-			_finished = false
-			global_position = hit_pos + velocity.normalized() * 14.0
-			return
+		if is_explosive:
+			_trigger_explosion(hit_pos)
+		else:
+			_spawn_impact_flash(hit_pos, bullet_color)
+		queue_free()
+		return
+
+	if collider != null and collider.is_in_group("shooting_targets"):
+		if can_deal_damage and collider.has_method("on_target_hit"):
+			collider.on_target_hit(damage, hit_pos, shooter_peer_id)
 		if is_explosive:
 			_trigger_explosion(hit_pos)
 		else:
@@ -398,12 +421,6 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 						if (p as Node2D).global_position.distance_to(hit_pos) <= 115.0 and p.has_method("apply_reverse_controls"):
 							p.apply_reverse_controls(reverse_controls_dur)
 	else:
-		if pierce_walls:
-			_finished = false
-			if collider is CollisionObject2D:
-				_pierced_rids.append((collider as CollisionObject2D).get_rid())
-			global_position = hit_pos + velocity.normalized() * 14.0
-			return
 		if wall_bounces_left > 0 and not (stop_on_vertical_wall and absf(hit_norm.x) > 0.6):
 			wall_bounces_left -= 1
 			_finished = false
@@ -848,13 +865,7 @@ func _draw() -> void:
 			draw_line(Vector2(-2.0, -6.0), Vector2(3.0, -12.0), Color(1.0, 0.68, 0.15), 3.2)
 			draw_circle(Vector2(-6.0, 0.0), 4.5, Color(1.0, 0.90, 0.35, 0.85))
 		"mummy_head":
-			draw_circle(Vector2.ZERO, 12.5, Color(0.14, 0.12, 0.10))
-			draw_circle(Vector2.ZERO, 10.5, Color(0.84, 0.78, 0.62))
-			draw_line(Vector2(-9.0, -4.0), Vector2(9.0, -4.0), Color(0.95, 0.78, 0.22), 3.0)
-			draw_line(Vector2(-8.0, 5.0), Vector2(8.0, 5.0), Color(0.68, 0.62, 0.48), 2.0)
-			draw_rect(Rect2(-7.0, -1.5, 14.0, 4.5), Color(0.10, 0.09, 0.12))
-			draw_circle(Vector2(-3.2, 0.8), 1.8, Color(1.0, 0.85, 0.22))
-			draw_circle(Vector2(3.2, 0.8), 1.8, Color(1.0, 0.85, 0.22))
+			draw_arc(Vector2.ZERO, 16.0, 0.0, TAU, 24, Color(1.0, 0.82, 0.24, 0.45), 2.0)
 		"grenade", "frag_bomb":
 			draw_circle(Vector2.ZERO, 10.5, Color(0.18, 0.24, 0.20))
 			draw_arc(Vector2.ZERO, 10.5, 0.0, TAU, 20, bullet_color, 2.8)

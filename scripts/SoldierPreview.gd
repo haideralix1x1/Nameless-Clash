@@ -25,15 +25,6 @@ func _ready() -> void:
 	_weapon_pivot.position = Vector2(2, 9)
 	add_child(_weapon_pivot)
 
-	_gun_s = Sprite2D.new()
-	_gun_s.texture = TEX_WEAPONS
-	_gun_s.hframes = 11
-	_gun_s.vframes = 3
-	_gun_s.position = Vector2(12, 4)
-	_gun_s.scale = Vector2(0.215, 0.215)
-	_gun_s.z_index = -1
-	_weapon_pivot.add_child(_gun_s)
-
 	_gun_p = Sprite2D.new()
 	_gun_p.texture = TEX_WEAPONS
 	_gun_p.hframes = 11
@@ -70,9 +61,6 @@ func _apply_preview_weapon(w_id: int) -> void:
 	_weapon_pivot.visible = true
 	var w_frame: int = ProfileManager.weapon_skin_id * 11 + w_id
 	_gun_p.frame = w_frame
-	_gun_s.frame = w_frame
-	var w: WeaponData = WeaponData.get_weapon(w_id, ProfileManager.weapon_skin_id, ProfileManager.m4a1_rail_mod)
-	_gun_s.visible = w.supports_dual_wield and w_id == 9
 
 
 func _process(delta: float) -> void:
@@ -98,7 +86,7 @@ func _process(delta: float) -> void:
 		_modular.apply_weapon_arm_pose("none", 0.0, true, 0.0, -1.0)
 		return
 	var active_w: int = _preview_weapon_id if (shuffle_guns and _preview_weapon_id >= 0) else ProfileManager.primary_weapon_id
-	var stance: String = ModularCharacter.get_weapon_stance(active_w, _gun_s != null and _gun_s.visible)
+	var stance: String = ModularCharacter.get_weapon_stance(active_w)
 	var ov: Dictionary = ModularCharacter.get_pose_override(ProfileManager.head_id, stance, _modular._current_anim)
 	var w_ov: Dictionary = ov.get("weapon", {})
 	var base_wy: float = 11.0 if anim_mode == 3 else (7.0 if anim_mode == 2 else 9.0)
@@ -108,9 +96,4 @@ func _process(delta: float) -> void:
 	_weapon_pivot.position = sock["pos"] as Vector2
 	_weapon_pivot.z_index = int(sock["z"])
 	_weapon_pivot.rotation = float(sock["rot"]) + idle_sway
-	if _gun_s != null and _gun_s.visible:
-		var far_pos: Vector2 = sock["far_pos"] as Vector2
-		var far_rot: float = float(sock["far_rot"])
-		_gun_s.position = (far_pos - _weapon_pivot.position).rotated(-_weapon_pivot.rotation)
-		_gun_s.rotation = far_rot - _weapon_pivot.rotation
 
