@@ -1032,7 +1032,11 @@ func _process_alive(delta: float) -> void:
 	if _taunt_timer > 0.0:
 		_taunt_timer = maxf(0.0, _taunt_timer - delta)
 
-	facing_right = cos(aim_angle) >= 0.0
+	var aim_cos: float = cos(aim_angle)
+	if aim_cos > 0.18:
+		facing_right = true
+	elif aim_cos < -0.18:
+		facing_right = false
 
 	if bubble_trap_timer > 0.0:
 		is_crouching = false
@@ -1229,6 +1233,9 @@ func _fire_weapon() -> void:
 	velocity -= aim_dir * _weapon.recoil_impulse * (1.25 if shots_to_fire == 2 else 1.0)
 	add_screen_shake(clampf(_weapon.recoil_impulse * 0.004, 0.15, 0.85))
 
+	_fire_anim_timer = 0.14
+	_update_visual_state(0.0)
+	_apply_weapon_visuals()
 	_sync_muzzle_positions(fire_angle)
 	var muzzle_positions := PackedVector2Array([_get_safe_muzzle_pos(_muzzle_primary.global_position)])
 	if shots_to_fire == 2:
@@ -1320,6 +1327,8 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 			if w.bullet_range > 0.0:
 				b.max_range = w.bullet_range
 				b.max_lifetime = maxf(b.max_lifetime, (w.bullet_range / maxf(100.0, b.velocity.length())) + 0.25)
+			if w.id == 7 or w.id == 8:
+				b.pierce_players = true
 			if w.id == 15:
 				b.boomerang_owner = self
 				b.on_hit_effect_kind = "hook_gun"
@@ -2295,6 +2304,9 @@ func _update_visual_state(delta: float) -> void:
 			_anim_timer += delta
 			anim_frame = 0 if int(_anim_timer * 2.2) % 2 == 0 else 1
 
+	var target_z: int = (get_index() % 20) * 16
+	if z_index != target_z:
+		z_index = target_z
 	var safe_frame: int = clampi(anim_frame, 0, 7)
 	var flip_x: bool = not facing_right
 
@@ -2390,6 +2402,8 @@ func _update_visual_state(delta: float) -> void:
 			swing_offset = lerpf(-0.95, 0.95, swing_prog) * swing_dir
 	elif _agent_weapon_node != null:
 		_agent_weapon_node.position.x = 0.0
+	if _weapon_pivot != null:
+		_weapon_pivot.visible = (electric_laser_timer <= 0.0)
 	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
 		_modular_rig.hands_z_over_weapon = 2
 		if is_dead:
@@ -2397,6 +2411,8 @@ func _update_visual_state(delta: float) -> void:
 		elif _bomb_throw_timer > 0.0:
 			var throw_prog: float = clampf(1.0 - (_bomb_throw_timer / 0.26), 0.0, 1.0)
 			_modular_rig.apply_weapon_arm_pose("throw_bomb", aim_angle, facing_right, 0.0, throw_prog)
+		elif electric_laser_timer > 0.0:
+			_modular_rig.apply_weapon_arm_pose("ult_laser", aim_angle, facing_right, 0.0, -1.0)
 		elif NetworkManager.is_agent_clash_mode():
 			_modular_rig.apply_weapon_arm_pose("rifle", aim_angle + swing_offset, facing_right, _fire_anim_timer, -1.0)
 		else:
@@ -2420,7 +2436,7 @@ func _update_visual_state(delta: float) -> void:
 		if NetworkManager.is_agent_clash_mode():
 			extra_pose_rot = w_dir * deg_to_rad(float(w_ov.get("rot", 0.0)))
 		_weapon_pivot.rotation = aim_angle + swing_offset + extra_pose_rot
-	var flip_gun: bool = cos(aim_angle) < 0.0
+	var flip_gun: bool = not facing_right
 	_primary_weapon.flip_v = flip_gun
 	_secondary_weapon.flip_v = flip_gun
 	_sync_muzzle_positions(aim_angle)
@@ -5117,11 +5133,22 @@ func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color, custom_splash: bo
 func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
 	var pivot_pos: Vector2 = _weapon_pivot.global_position if is_instance_valid(_weapon_pivot) else global_position
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var ray := PhysicsRayQueryParameters2D.create(pivot_pos, muzzle_pos, 1)
+	var ray := PhysicsRayQueryParameters2D.create(pivot_pos, muzzle_pos, 3)
+	var excl: Array[RID] = [get_rid()]
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self or not (p is CollisionObject2D):
+			continue
+		if (p.has_method("is_alive") and not p.is_alive()) or (NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id):
+			excl.append((p as CollisionObject2D).get_rid())
+	ray.exclude = excl
 	ray.collide_with_areas = false
 	ray.collide_with_bodies = true
+	ray.hit_from_inside = true
 	var hit: Dictionary = space_state.intersect_ray(ray)
 	if not hit.is_empty():
+		var col: Object = hit.get("collider")
+		if col != null and col.is_in_group("players"):
+			return pivot_pos
 		var n: Vector2 = hit["normal"]
 		return (hit["position"] as Vector2) + n * 2.0
 	return muzzle_pos
@@ -5167,10 +5194,14 @@ func _draw() -> void:
 			draw_arc(Vector2(0.0, -4.0), b_rad - 3.0, 0.3, 1.4, 12, Color(1.0, 0.58, 0.92, 0.65), 2.0)
 	if NetworkManager.is_agent_clash_mode() and not is_dead:
 		if _laser_visual_timer > 0.0:
-			var p1: Vector2 = Vector2.from_angle(_laser_visual_angle) * 24.0
-			var p2: Vector2 = Vector2.from_angle(_laser_visual_angle) * _laser_visual_len
+			var beam_origin: Vector2 = Vector2(0.0, 5.0) if electric_laser_timer > 0.0 else Vector2.ZERO
+			var p1: Vector2 = beam_origin + Vector2.from_angle(_laser_visual_angle) * 24.0
+			var p2: Vector2 = beam_origin + Vector2.from_angle(_laser_visual_angle) * _laser_visual_len
 			draw_line(p1, p2, Color(_laser_visual_color.r, _laser_visual_color.g, _laser_visual_color.b, 0.72), _laser_visual_width)
 			draw_line(p1, p2, Color.WHITE, maxf(3.0, _laser_visual_width * 0.25))
+			if electric_laser_timer > 0.0:
+				draw_circle(p1, _laser_visual_width * 0.65, Color(_laser_visual_color.r, _laser_visual_color.g, _laser_visual_color.b, 0.75))
+				draw_circle(p1, _laser_visual_width * 0.35, Color.WHITE)
 		if personal_shield_hp > 0 and personal_shield_timer > 0.0:
 			draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 28, Color(0.35, 0.85, 1.0, 0.85), 4.0)
 		if freeze_timer > 0.0:

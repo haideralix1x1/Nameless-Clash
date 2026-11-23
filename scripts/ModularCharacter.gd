@@ -53,6 +53,7 @@ var _flip_h: bool = false
 var _custom_full_sheet: bool = false
 var _is_raven_wing: bool = false
 var _is_wraith_cape: bool = false
+var _is_nyx_tail: bool = false
 var _is_ignis_head_fire: bool = false
 var _is_ignis_hands_fire: bool = false
 var _is_soulless_smoke: bool = false
@@ -129,7 +130,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if (_is_raven_wing or _is_wraith_cape) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
+	if (_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
 		var base_s: float = float(FRAME_SIZE.y) / float(maxi(_sprite_back.texture.get_height(), 1))
 		if _current_anim == "jetpack":
 			var dir_sign: float = -1.0 if _flip_h else 1.0
@@ -139,6 +140,13 @@ func _process(delta: float) -> void:
 				_sprite_back.rotation = dir_sign * (-0.18 + flap * 0.38)
 				_sprite_back.position = Vector2(0.0, flap * 4.5 - 2.0)
 				_sprite_back.scale = Vector2(base_s * (1.0 + flap * 0.08), base_s * (1.0 - flap * 0.14))
+			elif _is_nyx_tail:
+				_wing_flap_t += delta * 8.0
+				var wag: float = sin(_wing_flap_t)
+				var wag2: float = cos(_wing_flap_t * 1.3)
+				_sprite_back.rotation = dir_sign * (wag * 0.08)
+				_sprite_back.position = Vector2(dir_sign * 1.5, wag * 0.8)
+				_sprite_back.scale = Vector2(base_s * (1.0 + wag * 0.02), base_s * (1.0 - wag2 * 0.03))
 			else:
 				_wing_flap_t += delta * 14.0
 				var wave: float = sin(_wing_flap_t)
@@ -261,6 +269,7 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_sprite_strip(_sprite_back, back_path)
 	_is_raven_wing = (acc_id == 24) or back_path.ends_with("raven_accessories.png")
 	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 26) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("draken_accessories.png") or back_path.ends_with("soulless_accessories.png")
+	_is_nyx_tail = (acc_id == 18) or back_path.ends_with("nyx_accessories.png")
 	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("ignis_head.png")
 	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("ignis_hands.png")
 	_is_soulless_smoke = (head_id == 27) or gear_path.ends_with("soulless_head.png")
@@ -685,7 +694,7 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		_anim_legs.rotation = dir * deg_to_rad(float(legs_ov.get("rot", 0.0)))
 		_anim_legs.z_index = int(legs_ov.get("z", 0))
 	var back_ov: Dictionary = ov.get("back", {})
-	if _sprite_back != null and not ((_is_raven_wing or _is_wraith_cape) and _current_anim == "jetpack"):
+	if _sprite_back != null and not ((_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _current_anim == "jetpack"):
 		_sprite_back.position = Vector2(float(back_ov.get("x", 0.0)) * dir, float(back_ov.get("y", 0.0)))
 		_sprite_back.rotation = dir * deg_to_rad(float(back_ov.get("rot", 0.0)))
 		_sprite_back.z_index = int(back_ov.get("z", 0))
@@ -770,6 +779,9 @@ static func get_default_hand_pose(stance: String) -> Dictionary:
 		"dual":
 			hn_def = Vector2(-17.0, 6.0); hn_rot_def = -1.18; tilt_mul = 0.28
 			hf_def = Vector2(17.0, 5.0); hf_rot_def = -0.90; far_tilt_mul = 0.28
+		"ult_laser":
+			hn_def = Vector2(14.0, 6.0); hn_rot_def = -1.25; tilt_mul = 0.85
+			hf_def = Vector2(16.0, 4.0); hf_rot_def = 1.05; far_tilt_mul = 0.85
 	return {
 		"hn_pos": hn_def,
 		"hn_rot": hn_rot_def,

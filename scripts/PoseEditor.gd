@@ -1498,15 +1498,15 @@ func _draw_ui_button_icon(c: Control, id: String, r: float, _col: Color, font: F
 		"btn_throw_prop":   cell = Vector2i(3, 1)
 		"btn_presets":      cell = Vector2i(3, 3)
 	if cell.x >= 0 and TEX_UI_BUTTON_ICONS != null:
-		var icon_sz: float = r * 1.36
-		var dst_off := Vector2(0.0, -3.0) if (id == "btn_zoom" or id == "btn_bomb") else Vector2.ZERO
+		var icon_sz: float = r * (1.04 if id == "btn_zoom" else 1.36)
+		var dst_off := Vector2(0.0, -7.0) if id == "btn_zoom" else (Vector2(0.0, -3.0) if id == "btn_bomb" else Vector2.ZERO)
 		var dst := Rect2(-Vector2(icon_sz, icon_sz) * 0.5 + dst_off, Vector2(icon_sz, icon_sz))
 		var src := Rect2(Vector2(cell.x * 128.0, cell.y * 128.0), Vector2(128.0, 128.0))
 		c.draw_texture_rect_region(TEX_UI_BUTTON_ICONS, dst, src, Color.WHITE)
 		if id == "btn_bomb" and font != null:
 			c.draw_string(font, Vector2(6, 18), "x3", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 		elif id == "btn_zoom" and font != null:
-			c.draw_string(font, Vector2(-8, 19), "2x", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
+			c.draw_string(font, Vector2(-7, 23), "2x", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 		return
 	if font != null:
 		var st := str(UI_ELEMENT_META.get(id, {}).get("short", id))

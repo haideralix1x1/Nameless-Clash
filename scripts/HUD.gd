@@ -71,6 +71,7 @@ var _respawn_panel: PanelContainer
 var _respawn_label: Label
 var _add_bot_btn: Button
 var _rem_bot_btn: Button
+var _bot_count_label: Label
 var _test_bot_btn: Button
 var _agent_swap_row: HBoxContainer
 
@@ -178,8 +179,9 @@ class HudBtnIcon extends Control:
 		var font: Font = ThemeDB.fallback_font
 		var cell := _icon_cell_pos()
 		if cell.x >= 0 and TEX_UI_BUTTON_ICONS != null:
-			var icon_sz: float = minf(size.x, size.y) * 0.68
-			var dst_offset := Vector2(0.0, -3.0) if (kind == "zoom" or kind == "bomb") else Vector2.ZERO
+			var icon_ratio: float = 0.52 if kind == "zoom" else 0.68
+			var icon_sz: float = minf(size.x, size.y) * icon_ratio
+			var dst_offset := Vector2(0.0, -7.0) if kind == "zoom" else (Vector2(0.0, -3.0) if kind == "bomb" else Vector2.ZERO)
 			var dst := Rect2(c - Vector2(icon_sz, icon_sz) * 0.5 + dst_offset, Vector2(icon_sz, icon_sz))
 			var src := Rect2(Vector2(cell.x * UI_ICON_CELL, cell.y * UI_ICON_CELL), Vector2(UI_ICON_CELL, UI_ICON_CELL))
 			draw_texture_rect_region(TEX_UI_BUTTON_ICONS, dst, src, Color.WHITE)
@@ -187,8 +189,8 @@ class HudBtnIcon extends Control:
 			draw_string(font, c + Vector2(6.0, 20.0), "x%d" % maxi(0, count), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
 		elif kind == "zoom" and font != null:
 			var z_txt := "%dx" % zoom_level
-			var tsz := font.get_string_size(z_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 13)
-			draw_string(font, c + Vector2(-tsz.x * 0.5, 22.0), z_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+			var tsz := font.get_string_size(z_txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 12)
+			draw_string(font, c + Vector2(-tsz.x * 0.5, 24.0), z_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
 
 
 func _attach_btn_icon(btn: Button, kind: String, accent_col: Color) -> HudBtnIcon:
@@ -1359,8 +1361,10 @@ func _build_ui() -> void:
 	add_child(pause_overlay)
 	drawer_btn.pressed.connect(func():
 		pause_overlay.visible = not pause_overlay.visible
-		if pause_overlay.visible and is_instance_valid(_respawn_panel):
-			_respawn_panel.visible = false
+		if pause_overlay.visible:
+			if is_instance_valid(_respawn_panel):
+				_respawn_panel.visible = false
+			_refresh_scoreboard()
 		_sync_offline_pause_state()
 	)
 
@@ -1426,6 +1430,28 @@ func _build_ui() -> void:
 	_map_mode_label = null
 	_scoreboard_label = null
 
+	# 1. RESUME (Top big button)
+	var resume_btn := Button.new()
+	resume_btn.text = "RESUME"
+	resume_btn.custom_minimum_size = Vector2(0, 52)
+	resume_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(resume_btn, Color(0.10, 0.30, 0.16, 0.96), Color(0.32, 0.92, 0.48), 18)
+	resume_btn.pressed.connect(func():
+		pause_overlay.visible = false
+		_sync_offline_pause_state()
+	)
+	rv.add_child(resume_btn)
+
+	# 2. TOUCH LAYOUT (Second big button)
+	var layout_btn := Button.new()
+	layout_btn.text = "TOUCH LAYOUT"
+	layout_btn.custom_minimum_size = Vector2(0, 50)
+	layout_btn.focus_mode = Control.FOCUS_NONE
+	_style_action_button(layout_btn, Color(0.24, 0.18, 0.06, 0.94), Color(1.0, 0.78, 0.24), 16)
+	layout_btn.pressed.connect(_open_hud_layout_editor)
+	rv.add_child(layout_btn)
+
+	# 3. BOTS (- BOT | Current Count | + BOT)
 	var nav_row := HBoxContainer.new()
 	nav_row.add_theme_constant_override("separation", 10)
 	rv.add_child(nav_row)
@@ -1440,6 +1466,15 @@ func _build_ui() -> void:
 	_rem_bot_btn.pressed.connect(func(): remove_bot_requested.emit())
 	nav_row.add_child(_rem_bot_btn)
 
+	_bot_count_label = Label.new()
+	_bot_count_label.custom_minimum_size = Vector2(110, 44)
+	_bot_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_bot_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_bot_count_label.add_theme_font_size_override("font_size", 15)
+	_bot_count_label.modulate = Color(1.0, 0.88, 0.36)
+	_bot_count_label.visible = not NetworkManager.is_network_active() or NetworkManager.is_host_active()
+	nav_row.add_child(_bot_count_label)
+
 	_add_bot_btn = Button.new()
 	_add_bot_btn.text = "+ BOT"
 	_add_bot_btn.custom_minimum_size = Vector2(0, 44)
@@ -1451,6 +1486,7 @@ func _build_ui() -> void:
 	nav_row.add_child(_add_bot_btn)
 	_refresh_test_bot_btn()
 
+	# 4. MUSIC & SFX (2 buttons in single row)
 	var audio_row := HBoxContainer.new()
 	audio_row.add_theme_constant_override("separation", 10)
 	rv.add_child(audio_row)
@@ -1485,43 +1521,19 @@ func _build_ui() -> void:
 	)
 	audio_row.add_child(sfx_btn)
 
-	var util_row := HBoxContainer.new()
-	util_row.add_theme_constant_override("separation", 10)
-	rv.add_child(util_row)
-
-	var layout_btn := Button.new()
-	layout_btn.text = "TOUCH LAYOUT"
-	layout_btn.custom_minimum_size = Vector2(0, 44)
-	layout_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	layout_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(layout_btn, Color(0.24, 0.18, 0.06, 0.94), Color(1.0, 0.78, 0.24), 14)
-	layout_btn.pressed.connect(_open_hud_layout_editor)
-	util_row.add_child(layout_btn)
-
+	# 5. LEAVE MATCH (Very last)
 	var menu_btn := Button.new()
 	menu_btn.text = "LEAVE MATCH"
-	menu_btn.custom_minimum_size = Vector2(0, 44)
-	menu_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_btn.custom_minimum_size = Vector2(0, 46)
 	menu_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(menu_btn, Color(0.26, 0.10, 0.12, 0.94), Color(0.95, 0.42, 0.36), 14)
+	_style_action_button(menu_btn, Color(0.26, 0.10, 0.12, 0.94), Color(0.95, 0.42, 0.36), 15)
 	menu_btn.pressed.connect(func():
 		pause_overlay.visible = false
 		get_tree().paused = false
 		NetworkManager.disconnect_network()
 		NetworkManager.go_to_main_menu()
 	)
-	util_row.add_child(menu_btn)
-
-	var resume_btn := Button.new()
-	resume_btn.text = "RESUME"
-	resume_btn.custom_minimum_size = Vector2(0, 50)
-	resume_btn.focus_mode = Control.FOCUS_NONE
-	_style_action_button(resume_btn, Color(0.10, 0.30, 0.16, 0.96), Color(0.32, 0.92, 0.48), 18)
-	resume_btn.pressed.connect(func():
-		pause_overlay.visible = false
-		_sync_offline_pause_state()
-	)
-	rv.add_child(resume_btn)
+	rv.add_child(menu_btn)
 
 	# Respawn Center Banner
 	_respawn_panel = PanelContainer.new()
@@ -1939,30 +1951,29 @@ func _refresh_scoreboard() -> void:
 			var lp: Dictionary = NetworkManager.players[local_pid]
 			_kad_label.text = "K:%d  A:%d  D:%d" % [int(lp.get("kills", 0)), int(lp.get("assists", 0)), int(lp.get("deaths", 0))]
 
-	if not is_instance_valid(_net_status_label) or not is_instance_valid(_map_mode_label) or not is_instance_valid(_scoreboard_label):
-		return
-	if NetworkManager.is_host_active():
-		_net_status_label.text = "HOSTING LAN (%d players)" % NetworkManager.players.size()
-	elif NetworkManager.is_network_active():
-		_net_status_label.text = "LAN CLIENT (%d players)" % NetworkManager.players.size()
-	else:
-		_net_status_label.text = "LOCAL ARENA (%d Bots)" % NetworkManager.bot_count
+	if is_instance_valid(_net_status_label) and is_instance_valid(_map_mode_label) and is_instance_valid(_scoreboard_label):
+		if NetworkManager.is_host_active():
+			_net_status_label.text = "HOSTING LAN (%d players)" % NetworkManager.players.size()
+		elif NetworkManager.is_network_active():
+			_net_status_label.text = "LAN CLIENT (%d players)" % NetworkManager.players.size()
+		else:
+			_net_status_label.text = "LOCAL ARENA (%d Bots)" % NetworkManager.bot_count
 
-	_map_mode_label.text = "%s • %s" % [
-		NetworkManager.MAP_NAMES[NetworkManager.selected_map_id],
-		NetworkManager.MODE_NAMES[NetworkManager.match_mode]
-	]
+		_map_mode_label.text = "%s • %s" % [
+			NetworkManager.MAP_NAMES[NetworkManager.selected_map_id],
+			NetworkManager.MODE_NAMES[NetworkManager.match_mode]
+		]
 
-	var rows: PackedStringArray = PackedStringArray()
-	var ids: Array = NetworkManager.players.keys()
-	ids.sort()
-	for pid in ids:
-		var p: Dictionary = NetworkManager.players[pid]
-		var team_tag: String = ""
-		if NetworkManager.is_team_mode():
-			team_tag = "[BLUE] " if int(p.get("team", 0)) == 0 else "[RED] "
-		rows.append("%s%s  |  K:%d  A:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("assists", 0)), int(p.get("deaths", 0))])
-	_scoreboard_label.text = "\n".join(rows)
+		var rows: PackedStringArray = PackedStringArray()
+		var ids: Array = NetworkManager.players.keys()
+		ids.sort()
+		for pid in ids:
+			var p: Dictionary = NetworkManager.players[pid]
+			var team_tag: String = ""
+			if NetworkManager.is_team_mode():
+				team_tag = "[BLUE] " if int(p.get("team", 0)) == 0 else "[RED] "
+			rows.append("%s%s  |  K:%d  A:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("assists", 0)), int(p.get("deaths", 0))])
+		_scoreboard_label.text = "\n".join(rows)
 
 	var cur_bots: int = NetworkManager.test_bot_count if NetworkManager.is_test_mode() else NetworkManager.bot_count
 	var min_bots: int = 1 if NetworkManager.is_test_mode() else 0
@@ -1970,11 +1981,14 @@ func _refresh_scoreboard() -> void:
 	if is_instance_valid(_rem_bot_btn):
 		_rem_bot_btn.visible = can_edit_bots
 		_rem_bot_btn.disabled = cur_bots <= min_bots
+	if is_instance_valid(_bot_count_label):
+		_bot_count_label.visible = can_edit_bots
+		_bot_count_label.text = "BOTS: %d / %d" % [cur_bots, NetworkManager.MAX_BOTS]
 	if is_instance_valid(_add_bot_btn):
 		_add_bot_btn.visible = can_edit_bots
 		var at_cap: bool = cur_bots >= NetworkManager.MAX_BOTS
 		_add_bot_btn.disabled = at_cap
-		_add_bot_btn.text = ("MAX %d" % NetworkManager.MAX_BOTS) if at_cap else ("+ BOT (%d/%d)" % [cur_bots, NetworkManager.MAX_BOTS])
+		_add_bot_btn.text = "MAX" if at_cap else "+ BOT"
 	_refresh_test_bot_btn()
 
 

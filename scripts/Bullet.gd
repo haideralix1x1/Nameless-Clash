@@ -64,6 +64,7 @@ var _finished: bool = false
 
 
 func _ready() -> void:
+	z_index = 220
 	rotation = velocity.angle()
 	if visual_style == "mummy_head":
 		_sprite.visible = true
@@ -409,7 +410,7 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 			if collider is CollisionObject2D:
 				_pierced_rids.append((collider as CollisionObject2D).get_rid())
 			_finished = false
-			global_position = hit_pos + velocity.normalized() * 12.0
+			global_position = hit_pos + velocity.normalized() * 2.0
 			return
 		if visual_style == "smoke_orb" and reverse_controls_dur > 0.0:
 			_spawn_impact_flash(hit_pos, Color(0.55, 0.22, 0.85))
