@@ -2070,7 +2070,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	_release_grab_state()
 	_respawn_timer = RESPAWN_TIME
 	var assist_ids: Array = []
-	var assist_threshold: float = float(max_health) * 0.50
+	var assist_threshold: float = maxf(1.0, float(max_health) * 0.15)
 	for raw_att in _damage_by_attacker.keys():
 		var att_id: int = int(raw_att)
 		if att_id != attacker_id and att_id != peer_id and float(_damage_by_attacker[raw_att]) >= assist_threshold:

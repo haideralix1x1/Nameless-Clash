@@ -1933,6 +1933,12 @@ func _render_killfeed() -> void:
 
 
 func _refresh_scoreboard() -> void:
+	if is_instance_valid(_kad_label):
+		var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else NetworkManager.get_local_peer_id()
+		if NetworkManager.players.has(local_pid):
+			var lp: Dictionary = NetworkManager.players[local_pid]
+			_kad_label.text = "K:%d  A:%d  D:%d" % [int(lp.get("kills", 0)), int(lp.get("assists", 0)), int(lp.get("deaths", 0))]
+
 	if not is_instance_valid(_net_status_label) or not is_instance_valid(_map_mode_label) or not is_instance_valid(_scoreboard_label):
 		return
 	if NetworkManager.is_host_active():
@@ -1957,11 +1963,6 @@ func _refresh_scoreboard() -> void:
 			team_tag = "[BLUE] " if int(p.get("team", 0)) == 0 else "[RED] "
 		rows.append("%s%s  |  K:%d  A:%d  D:%d" % [team_tag, str(p.get("name", "Trooper")), int(p.get("kills", 0)), int(p.get("assists", 0)), int(p.get("deaths", 0))])
 	_scoreboard_label.text = "\n".join(rows)
-	if is_instance_valid(_kad_label):
-		var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else NetworkManager.get_local_peer_id()
-		if NetworkManager.players.has(local_pid):
-			var lp: Dictionary = NetworkManager.players[local_pid]
-			_kad_label.text = "K:%d  A:%d  D:%d" % [int(lp.get("kills", 0)), int(lp.get("assists", 0)), int(lp.get("deaths", 0))]
 
 	var cur_bots: int = NetworkManager.test_bot_count if NetworkManager.is_test_mode() else NetworkManager.bot_count
 	var min_bots: int = 1 if NetworkManager.is_test_mode() else 0
