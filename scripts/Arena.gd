@@ -1238,6 +1238,8 @@ func _spawn_treasure_drop(origin_pos: Vector2, target_pos: Vector2, drop_type: S
 		"val": drop_val,
 		"active": true,
 		"one_shot": true,
+		"from_treasure": true,
+		"target_pos": target_pos,
 		"timer": 0.0,
 		"phase": float(idx) * 1.3
 	}
@@ -1355,6 +1357,8 @@ func _on_crate_body_entered(body: Node2D, crate_idx: int) -> void:
 		if p_type == "weapon":
 			if body.get("is_local_human") == true and body.has_method("set_nearby_weapon"):
 				body.set_nearby_weapon(crate_idx, int(entry["val"]))
+			elif body.get("is_bot") == true and not NetworkManager.is_agent_clash_mode():
+				_try_bot_pickup_weapon_crate(crate_idx, body)
 			return
 
 		if p_type == "bomb":
@@ -1416,6 +1420,217 @@ func _consume_weapon_crate(crate_idx: int, body: Node2D) -> void:
 	var allowed_ws: Array[int] = WeaponData.get_pickup_weapon_ids()
 	var next_w: int = allowed_ws[randi() % allowed_ws.size()]
 	NetworkManager.consume_crate(crate_idx, next_w)
+
+
+func _try_bot_pickup_weapon_crate(crate_idx: int, bot: Node2D) -> bool:
+	if crate_idx < 0 or crate_idx >= _crate_nodes.size():
+		return false
+	var entry: Dictionary = _crate_nodes[crate_idx]
+	if not bool(entry["active"]) or str(entry["type"]) != "weapon":
+		return false
+	if NetworkManager.is_agent_clash_mode():
+		return false
+	var val: int = int(entry["val"])
+	var cur_w: int = int(bot.get("current_weapon_id")) if "current_weapon_id" in bot else -1
+	if val == cur_w:
+		return false
+	var cd: float = float(bot.get("_bot_weapon_pickup_cd")) if "_bot_weapon_pickup_cd" in bot else 0.0
+	var is_high_tier: bool = val in [7, 8, 10, 11, 12, 13, 14, 15, 16, 17]
+	if cd > 0.0 and not is_high_tier:
+		return false
+	_consume_weapon_crate(crate_idx, bot)
+	if "_bot_weapon_pickup_cd" in bot:
+		bot.set("_bot_weapon_pickup_cd", 6.5)
+	return true
+
+
+func try_bot_interact_nearby(bot: Node2D) -> void:
+	if not is_instance_valid(bot) or (bot.has_method("is_alive") and not bot.is_alive()):
+		return
+	if NetworkManager.is_network_active() and not NetworkManager.is_host_active():
+		return
+	var bpos: Vector2 = bot.global_position
+	var b_hp: float = float(bot.get("health")) if "health" in bot else 100.0
+	var b_max_hp: float = float(bot.get("max_health")) if "max_health" in bot else 100.0
+	for i in range(_interactables.size()):
+		var node: Node2D = _interactables[i]
+		if not is_instance_valid(node):
+			continue
+		if node is InteractableTreasureBox:
+			var tb := node as InteractableTreasureBox
+			if tb.cooldown_left <= 0.0 and bpos.distance_to(tb.global_position) <= 95.0:
+				if "_bot_loot_focus_timer" in bot:
+					bot.set("_bot_loot_focus_timer", 2.8)
+					bot.set("_bot_loot_origin", tb.global_position)
+				NetworkManager.toggle_interactable(i, randi() % 2 == 0)
+				return
+		elif node is InteractableHealStation:
+			var hs := node as InteractableHealStation
+			if hs.cooldown_left <= 0.0 and b_hp < b_max_hp * 0.65 and bpos.distance_to(hs.global_position) <= 95.0:
+				if bot.has_method("apply_pickup"):
+					bot.apply_pickup("health", 45)
+				NetworkManager.toggle_interactable(i, true)
+				return
+		elif node is InteractableBoostShrine:
+			var bs := node as InteractableBoostShrine
+			if bs.cooldown_left <= 0.0 and bpos.distance_to(bs.global_position) <= 95.0:
+				if bot.has_method("apply_pickup"):
+					bot.apply_pickup("health", 25)
+				NetworkManager.toggle_interactable(i, true)
+				return
+	for ci in range(_crate_nodes.size()):
+		var c: Dictionary = _crate_nodes[ci]
+		if not bool(c["active"]):
+			continue
+		var area: Area2D = c["area"] as Area2D
+		if not is_instance_valid(area) or not area.monitoring:
+			continue
+		var p_type: String = str(c["type"])
+		if p_type == "weapon":
+			if not NetworkManager.is_agent_clash_mode() and bpos.distance_to(area.global_position) <= 48.0:
+				if _try_bot_pickup_weapon_crate(ci, bot):
+					return
+		elif bool(c.get("from_treasure", false)) and bpos.distance_to(area.global_position) <= 44.0:
+			_on_crate_body_entered(bot, ci)
+			return
+
+
+func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool = false) -> Dictionary:
+	var result: Dictionary = {"found": false, "pos": Vector2.ZERO, "score": -1.0}
+	if not is_instance_valid(bot) or (bot.has_method("is_alive") and not bot.is_alive()):
+		return result
+	var bpos: Vector2 = bot.global_position
+	var b_hp: float = float(bot.get("health")) if "health" in bot else 100.0
+	var b_max_hp: float = float(bot.get("max_health")) if "max_health" in bot else 100.0
+	var hp_ratio: float = b_hp / maxf(b_max_hp, 1.0)
+	var agent_mode: bool = NetworkManager.is_agent_clash_mode()
+	var can_ult: bool = bot.has_method("can_collect_ult_point") and bot.can_collect_ult_point()
+	var can_throw: bool = bot.has_method("can_grab_throwable") and bot.can_grab_throwable()
+	var cur_w: int = int(bot.get("current_weapon_id")) if "current_weapon_id" in bot else -1
+	var w_cd: float = float(bot.get("_bot_weapon_pickup_cd")) if "_bot_weapon_pickup_cd" in bot else 0.0
+	var loot_focus: float = float(bot.get("_bot_loot_focus_timer")) if "_bot_loot_focus_timer" in bot else 0.0
+	var loot_origin: Vector2 = bot.get("_bot_loot_origin") as Vector2 if "_bot_loot_origin" in bot else bpos
+	var best_score: float = -1.0
+	var best_pos: Vector2 = Vector2.ZERO
+
+	# 0. Immediately sweep up loot from a treasure box this bot just opened
+	if loot_focus > 0.0:
+		var found_loot: bool = false
+		for c in _crate_nodes:
+			if not bool(c["active"]) or not bool(c.get("from_treasure", false)):
+				continue
+			var area: Area2D = c["area"] as Area2D
+			if not is_instance_valid(area):
+				continue
+			var p_type: String = str(c["type"])
+			var val: int = int(c["val"])
+			if p_type == "weapon" and (agent_mode or val == cur_w):
+				continue
+			if p_type == "bomb" and (agent_mode or not NetworkManager.allow_explosives):
+				continue
+			if p_type == "health" and hp_ratio >= 0.95:
+				continue
+			var land_pos: Vector2 = c.get("target_pos", area.global_position) as Vector2
+			if land_pos.distance_to(loot_origin) <= 180.0:
+				var d: float = bpos.distance_to(land_pos)
+				var sc: float = 250.0 - d * 0.25
+				if sc > best_score:
+					best_score = sc
+					best_pos = land_pos
+					found_loot = true
+		if found_loot:
+			result["found"] = true
+			result["pos"] = best_pos
+			result["score"] = best_score
+			return result
+		elif loot_focus < 2.2:
+			# All treasure drops already picked up
+			bot.set("_bot_loot_focus_timer", 0.0)
+
+	# 1. Ready Treasure Boxes & Heal/Boost Stations
+	for node in _interactables:
+		if not is_instance_valid(node):
+			continue
+		var d: float = bpos.distance_to(node.global_position)
+		if d > max_dist:
+			continue
+		var base_pri: float = 0.0
+		if node is InteractableTreasureBox and (node as InteractableTreasureBox).cooldown_left <= 0.0:
+			base_pri = 120.0 if not in_combat else (115.0 if d <= 200.0 else 0.0)
+		elif node is InteractableHealStation and (node as InteractableHealStation).cooldown_left <= 0.0:
+			if hp_ratio < 0.55 and not in_combat:
+				base_pri = 135.0
+			elif hp_ratio <= 0.30 and in_combat and d <= 260.0:
+				base_pri = 125.0
+		elif node is InteractableBoostShrine and (node as InteractableBoostShrine).cooldown_left <= 0.0 and not in_combat:
+			base_pri = 65.0
+		if base_pri > 0.0:
+			var sc: float = base_pri - d * 0.14
+			if sc > best_score:
+				best_score = sc
+				best_pos = node.global_position
+
+	# 2. Floating Ult Orbs (Agent Clash)
+	if can_ult:
+		for up in _ult_pickups:
+			if not is_instance_valid(up):
+				continue
+			var d: float = bpos.distance_to(up.global_position)
+			if d <= max_dist and (not in_combat or d <= 180.0):
+				var sc: float = 115.0 - d * 0.15
+				if sc > best_score:
+					best_score = sc
+					best_pos = up.global_position
+
+	# 3. Ground Crates & Treasure Drops (ability orbs, ult_full, floor weapons, health, bombs, throwables)
+	for c in _crate_nodes:
+		if not bool(c["active"]):
+			continue
+		var area: Area2D = c["area"] as Area2D
+		if not is_instance_valid(area):
+			continue
+		var d: float = bpos.distance_to(area.global_position)
+		if d > max_dist:
+			continue
+		var p_type: String = str(c["type"])
+		var val: int = int(c["val"])
+		var base_pri: float = 0.0
+		match p_type:
+			"ult_full":
+				if agent_mode:
+					base_pri = 150.0 if (not in_combat or d <= 220.0) else 0.0
+			"abil_orb":
+				if agent_mode:
+					base_pri = 130.0 if (not in_combat or d <= 180.0) else 0.0
+			"health":
+				if hp_ratio < 0.55 and not in_combat:
+					base_pri = 135.0
+				elif hp_ratio <= 0.30 and in_combat and d <= 260.0:
+					base_pri = 125.0
+				elif hp_ratio < 0.75 and d <= 90.0:
+					base_pri = 105.0
+			"weapon":
+				if not agent_mode and val != cur_w:
+					var is_high_tier: bool = val in [7, 8, 10, 11, 12, 13, 14, 15, 16, 17]
+					if (w_cd <= 0.0 or is_high_tier) and (not in_combat or (is_high_tier and d <= 190.0)):
+						base_pri = 112.0 if is_high_tier else 72.0
+			"bomb":
+				if not agent_mode and NetworkManager.allow_explosives and not in_combat:
+					base_pri = 58.0
+			"throwable":
+				if agent_mode and can_throw and not in_combat:
+					base_pri = 68.0
+		if base_pri > 0.0:
+			var sc: float = base_pri - d * 0.14
+			if sc > best_score:
+				best_score = sc
+				best_pos = area.global_position
+
+	if best_score > 0.0:
+		result["found"] = true
+		result["pos"] = best_pos
+		result["score"] = best_score
+	return result
 
 
 func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:

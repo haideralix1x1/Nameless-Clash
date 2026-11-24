@@ -76,13 +76,13 @@ const AGENTS: Array[Dictionary] = [
 		"role": "Frontline Vanguard",
 		"accent": Color(0.45, 0.82, 0.38),
 		"base_weapon": {
-			"name": "Trench Broadsword",
-			"style": "sword",
+			"name": "Desert Eagle",
+			"style": "deagle",
 			"damage": 24,
 			"cooldown": 0.34,
-			"range": 104.0,
-			"color": Color(0.78, 0.92, 0.65),
-			"ranged": false
+			"range": 380.0,
+			"color": Color(1.0, 0.86, 0.35),
+			"ranged": true
 		},
 		"abilities": [
 			{
@@ -278,8 +278,8 @@ const AGENTS: Array[Dictionary] = [
 		"role": "Tactical Breacher",
 		"accent": Color(0.45, 0.85, 1.0),
 		"base_weapon": {
-			"name": "Shock Tonfa Blade",
-			"style": "sword",
+			"name": "Frost Crystal Blade",
+			"style": "rook_frost_blade",
 			"damage": 23,
 			"cooldown": 0.33,
 			"range": 100.0,
@@ -430,7 +430,7 @@ const AGENTS: Array[Dictionary] = [
 		"accent": Color(0.76, 0.44, 1.0),
 		"base_weapon": {
 			"name": "Muramasa Katana",
-			"style": "sword",
+			"style": "yagami_katana",
 			"damage": 23,
 			"cooldown": 0.30,
 			"range": 108.0,
@@ -751,9 +751,9 @@ const AGENTS: Array[Dictionary] = [
 				"name": "Poison Gas",
 				"kind": "poison_gas",
 				"damage": 15,
-				"duration": 5.0,
+				"duration": 10.0,
 				"color": Color(0.42, 0.94, 0.32),
-				"desc": "Release a toxic gas cloud that poisons enemies inside."
+				"desc": "Release a toxic gas cloud (10s) that poisons enemies inside."
 			},
 			{
 				"name": "Triple Snakes",
@@ -798,7 +798,7 @@ const AGENTS: Array[Dictionary] = [
 				"duration": 5.0,
 				"speed_mult": 1.85,
 				"color": Color(0.98, 0.56, 0.92),
-				"desc": "Boost movement speed dramatically for 5 seconds."
+				"desc": "Boost movement speed, double base attack speed (2x), and double Shadow Dash & Ult laser damage for 5 seconds."
 			},
 			{
 				"name": "Eagle Zoomout",
@@ -811,20 +811,20 @@ const AGENTS: Array[Dictionary] = [
 			{
 				"name": "Shadow Dash",
 				"kind": "dash_speed",
-				"damage": 25,
+				"damage": 50,
 				"duration": 1.5,
 				"speed_mult": 1.75,
 				"color": Color(0.98, 0.48, 0.88),
-				"desc": "Fast dash towards your current aim direction."
+				"desc": "Fast dash towards your current aim direction, dealing 50% damage on hit."
 			}
 		],
 		"ultimate": {
 			"name": "Electric Laser Gun",
 			"kind": "ult_electric_laser",
-			"damage": 50,
+			"damage": 29,
 			"duration": 10.0,
 			"color": Color(0.45, 0.92, 1.0),
-			"desc": "Fire an electric laser gun for 10s (50% damage per second on touch)."
+			"desc": "Fire an electric laser gun for 10s (melts enemies in ~3.5s on touch)."
 		}
 	},
 	# 16: Akuza // Dragon Hero
@@ -864,9 +864,9 @@ const AGENTS: Array[Dictionary] = [
 				"name": "Dragon Flame",
 				"kind": "dragon_laser",
 				"damage": 80,
-				"duration": 3.0,
+				"duration": 4.0,
 				"color": Color(1.0, 0.36, 0.12),
-				"desc": "Activate for 3s: tap/click any enemy player or bot to set them on fire for 80% damage."
+				"desc": "Activate for 4s: tap/click anywhere on screen to spawn roaring dragon fire that gradually burns enemies and ignites nearby barrels."
 			}
 		],
 		"ultimate": {
@@ -874,7 +874,7 @@ const AGENTS: Array[Dictionary] = [
 			"kind": "ult_dragon_strike",
 			"damage": 100,
 			"color": Color(0.28, 1.0, 0.62),
-			"desc": "Summon a Dragon attack on nearby enemies for an instant kill."
+			"desc": "Launch a Dragon straight along your aim direction that immediately blasts on any enemy in its path for an instant kill."
 		}
 	},
 	# 17: Mirror Ogre // Fierce Orc
@@ -1033,8 +1033,8 @@ const AGENTS: Array[Dictionary] = [
 		"role": "Martial Master",
 		"accent": Color(1.0, 0.66, 0.24),
 		"base_weapon": {
-			"name": "Iron-Shod Bo Staff",
-			"style": "spear",
+			"name": "Tribal Spear",
+			"style": "afera_spear",
 			"damage": 24,
 			"cooldown": 0.32,
 			"range": 116.0,
@@ -1229,59 +1229,9 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Rush to a nearby enemy and beat them down with rapid punches till death."
 		}
 	},
-	# 24: Kaito // HD Test Swordsman
+	# 24: Bramble // Crimson Hare
 	{
 		"id": 24,
-		"agent_name": "Kaito",
-		"title": "HD Swordsman (Test)",
-		"role": "HD Test Swordsman",
-		"accent": Color(0.16, 0.58, 0.96),
-		"base_weapon": {
-			"name": "Heroic Broadsword",
-			"style": "dragon_blade",
-			"damage": 28,
-			"cooldown": 0.34,
-			"range": 115.0,
-			"color": Color(0.32, 0.76, 1.0),
-			"ranged": false
-		},
-		"abilities": [
-			{
-				"name": "Blade Dash",
-				"kind": "dash_speed",
-				"damage": 30,
-				"duration": 3.0,
-				"speed_mult": 1.65,
-				"color": Color(0.24, 0.68, 1.0),
-				"desc": "Dash forward with a sword slash."
-			},
-			{
-				"name": "Crescent Wave",
-				"kind": "sword_wave",
-				"damage": 40,
-				"color": Color(0.45, 0.85, 1.0),
-				"desc": "Launch a sweeping crescent blade wave forward."
-			},
-			{
-				"name": "Whirlwind Spin",
-				"kind": "spinning_blade",
-				"damage": 35,
-				"duration": 3.5,
-				"color": Color(0.95, 0.35, 0.30),
-				"desc": "Hurl a spinning blade around your target."
-			}
-		],
-		"ultimate": {
-			"name": "Final Cross Slash",
-			"kind": "ult_jump_execute",
-			"damage": 100,
-			"color": Color(0.20, 0.65, 1.0),
-			"desc": "Teleport behind a nearby enemy and execute them with a lethal slash."
-		}
-	},
-	# 25: Bramble // Crimson Hare
-	{
-		"id": 25,
 		"agent_name": "Bramble",
 		"title": "Crimson Hare",
 		"role": "Brawler Hare",

@@ -12,7 +12,7 @@ const ARCHETYPES: Array[Dictionary] = [
 		"part_id": 0,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 0
+		"weapon": 9
 	},
 	{
 		"callsign": "Mike Jones",
@@ -207,25 +207,16 @@ const ARCHETYPES: Array[Dictionary] = [
 		"callsign": "Jackson",
 		"name": "Jackson (Heavyweight Boxer)",
 		"desc": "Heavyweight Black boxer champion delivering huge boxy punches, running spears, sky-smashes, and knockout flurries.",
-		"part_id": 30,
+		"part_id": 29,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
 	},
 	{
-		"callsign": "Kaito",
-		"name": "Kaito (HD Test)",
-		"desc": "High-detail cel-shaded modular swordsman test character with spiky blue hair, red headband, and leather-strapped tunic.",
-		"part_id": 28,
-		"shirt": Color.WHITE, "pants": Color.WHITE,
-		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
-		"weapon": 4
-	},
-	{
 		"callsign": "Bramble",
 		"name": "Bramble (Crimson Hare)",
 		"desc": "Fierce crimson-furred brawler hare in a dark navy vest with swift dashes, uppercuts, and a crimson flurry.",
-		"part_id": 29,
+		"part_id": 28,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
 		"skin": Color.WHITE, "helmet": Color.WHITE, "gear": Color.WHITE,
 		"weapon": 6
@@ -246,7 +237,7 @@ const ARCHETYPE_ROLES: Array[String] = [
 	"Shadow Assassin", "Undead Brawler", "Skull Skeleton", "Spectral Phantom",
 	"Tomb Guardian", "Heavy Automaton", "Bio Specialist", "Feline Striker",
 	"Blade Hero", "Ogre Warlord", "Lava Colossus", "Quartz Elemental",
-	"Martial Master", "Dark Mystic", "Agile Elf Prodigy", "Heavyweight Boxer", "HD Test Swordsman"
+	"Martial Master", "Dark Mystic", "Agile Elf Prodigy", "Heavyweight Boxer", "Brawler Hare"
 ]
 
 const HEAD_NAMES: Array[String] = [

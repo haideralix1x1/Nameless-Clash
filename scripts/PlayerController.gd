@@ -119,6 +119,9 @@ var _bot_strafe_dir: float = 1.0
 var _bot_want_jetpack: bool = false
 var _bot_allow_fire: bool = true
 var _bot_aim_error: float = 0.0
+var _bot_weapon_pickup_cd: float = 0.0
+var _bot_loot_focus_timer: float = 0.0
+var _bot_loot_origin: Vector2 = Vector2.ZERO
 var _spawn_points: Array[Vector2] = []
 var _net_sync_accum: float = 0.0
 var _ability_recharge_timer: float = 0.0
@@ -156,6 +159,7 @@ var stun_timer: float = 0.0
 var invis_timer: float = 0.0
 var speed_boost_timer: float = 0.0
 var speed_boost_mult: float = 1.0
+var nyx_frenzy_timer: float = 0.0
 var control_lock_timer: float = 0.0
 var gravity_lock_timer: float = 0.0
 var freeze_timer: float = 0.0
@@ -329,8 +333,8 @@ func setup_player(
 	_original_secondary_id = secondary_weapon_id
 	_active_slot = 0
 	current_weapon_id = primary_weapon_id
-	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
-	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+	_primary_reserve_ammo = -1
+	_secondary_reserve_ammo = -1
 	max_bombs = 3 if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
 	bomb_inventory.clear()
@@ -530,6 +534,7 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 	boar_ride_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	nyx_frenzy_timer = 0.0
 	invis_timer = 0.0
 	invincible_timer = 0.0
 	damage_reduction_timer = 0.0
@@ -659,6 +664,7 @@ func _physics_process(delta: float) -> void:
 		touch_teleport_timer = maxf(0.0, touch_teleport_timer - delta)
 	if touch_fire_timer > 0.0:
 		touch_fire_timer = maxf(0.0, touch_fire_timer - delta)
+		queue_redraw()
 	if touch_banish_timer > 0.0:
 		touch_banish_timer = maxf(0.0, touch_banish_timer - delta)
 		queue_redraw()
@@ -742,6 +748,7 @@ func _physics_process(delta: float) -> void:
 		invincible_timer = maxf(0.0, invincible_timer - delta)
 		deathless_timer = maxf(0.0, deathless_timer - delta)
 		speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
+		nyx_frenzy_timer = maxf(0.0, nyx_frenzy_timer - delta)
 		bubble_trap_lock_timer = maxf(0.0, bubble_trap_lock_timer - delta)
 		if bubble_trap_timer > 0.0:
 			bubble_trap_timer = maxf(0.0, bubble_trap_timer - delta)
@@ -823,6 +830,8 @@ func _process_alive(delta: float) -> void:
 			speed_boost_timer = maxf(0.0, speed_boost_timer - delta)
 			if speed_boost_timer <= 0.0:
 				speed_boost_mult = 1.0
+		if nyx_frenzy_timer > 0.0:
+			nyx_frenzy_timer = maxf(0.0, nyx_frenzy_timer - delta)
 		_tick_agent_buffs_and_dots(delta)
 		if _contra_ult_shots_left > 0:
 			_contra_ult_shot_timer -= delta
@@ -987,10 +996,12 @@ func _process_alive(delta: float) -> void:
 			else:
 				aim_angle = 0.0 if facing_right else PI
 		else:
-			var mouse_delta: Vector2 = get_global_mouse_position() - _weapon_pivot.global_position
+			var aim_origin: Vector2 = global_position + Vector2(0.0, 6.0)
+			var mouse_delta: Vector2 = get_global_mouse_position() - aim_origin
 			if SettingsManager.invert_y_axis:
 				mouse_delta.y = -mouse_delta.y
-			aim_angle = mouse_delta.angle()
+			if mouse_delta.length_squared() >= 64.0:
+				aim_angle = mouse_delta.angle()
 
 		if SettingsManager.auto_aim_assist:
 			aim_angle = _apply_auto_aim_assist(aim_angle)
@@ -1003,7 +1014,7 @@ func _process_alive(delta: float) -> void:
 			aim_angle = wrapf(aim_angle + PI, -PI, PI)
 
 		want_fire = virtual_fire if is_mobile_touch else (virtual_fire or (Input.is_action_pressed("fire") and not pointer_over_ui))
-		if touch_teleport_timer > 0.0 or touch_banish_timer > 0.0:
+		if touch_teleport_timer > 0.0 or touch_fire_timer > 0.0 or touch_banish_timer > 0.0:
 			want_fire = false
 
 		if _is_agent_logic_active():
@@ -1254,12 +1265,12 @@ func _fire_weapon() -> void:
 	if current_ammo <= 0:
 		if _is_using_secondary_slot() and secondary_weapon_id != _original_secondary_id and _secondary_reserve_ammo == 0:
 			secondary_weapon_id = _original_secondary_id
-			_secondary_reserve_ammo = 3 if (_original_secondary_id == 10 or _original_secondary_id == 12) else -1
+			_secondary_reserve_ammo = -1
 			_secondary_saved_ammo = -1
 			set_weapon(secondary_weapon_id)
 		elif not _is_using_secondary_slot() and _equipped_primary_id != primary_weapon_id and _primary_reserve_ammo == 0:
 			_equipped_primary_id = primary_weapon_id
-			_primary_reserve_ammo = 3 if (primary_weapon_id == 10 or primary_weapon_id == 12) else -1
+			_primary_reserve_ammo = -1
 			_primary_saved_ammo = -1
 			set_weapon(_equipped_primary_id)
 		else:
@@ -1398,12 +1409,12 @@ func drop_picked_up_gun() -> void:
 		_spawn_dropped_gun_pickup(cur_slot_id, global_position, aim_angle, dropped_mag, dropped_res)
 	if using_sec:
 		secondary_weapon_id = _original_secondary_id
-		_secondary_reserve_ammo = 3 if (_original_secondary_id == 10 or _original_secondary_id == 12) else -1
+		_secondary_reserve_ammo = -1
 		_secondary_saved_ammo = -1
 		set_weapon(secondary_weapon_id)
 	else:
 		_equipped_primary_id = primary_weapon_id
-		_primary_reserve_ammo = 3 if (primary_weapon_id == 10 or primary_weapon_id == 12) else -1
+		_primary_reserve_ammo = -1
 		_primary_saved_ammo = -1
 		set_weapon(_equipped_primary_id)
 	_play_local_sfx("res://assets/audio/jump.wav", -3.0, 1.1)
@@ -1455,8 +1466,8 @@ func apply_gun_preset(preset_idx: int) -> void:
 	_equipped_primary_id = primary_weapon_id
 	_original_secondary_id = secondary_weapon_id
 	_active_slot = 0
-	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
-	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+	_primary_reserve_ammo = -1
+	_secondary_reserve_ammo = -1
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
 	bomb_type = str(preset.get("bomb_type", "frag"))
@@ -1491,8 +1502,8 @@ func assign_random_loadout() -> void:
 	_equipped_primary_id = primary_weapon_id
 	_original_secondary_id = secondary_weapon_id
 	_active_slot = 0
-	_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
-	_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+	_primary_reserve_ammo = -1
+	_secondary_reserve_ammo = -1
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
 	bomb_type = str(BOMB_TYPES[randi() % BOMB_TYPES.size()]) if not BOMB_TYPES.is_empty() else "frag"
@@ -1848,24 +1859,24 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 			if _is_using_secondary_slot():
 				if new_w_id == secondary_weapon_id:
 					_secondary_saved_ammo = picked_w.mag_size
-					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id) else pickup_res
 					current_ammo = picked_w.mag_size
 					is_reloading = false
 					_emit_ammo()
 				else:
 					secondary_weapon_id = new_w_id
-					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id) else pickup_res
 					_secondary_saved_ammo = picked_w.mag_size
 					set_weapon(secondary_weapon_id)
 			elif new_w_id == _equipped_primary_id:
 				_primary_saved_ammo = picked_w.mag_size
-				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id) else pickup_res
 				current_ammo = picked_w.mag_size
 				is_reloading = false
 				_emit_ammo()
 			else:
 				_equipped_primary_id = new_w_id
-				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id and new_w_id != 10 and new_w_id != 12) else pickup_res
+				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id) else pickup_res
 				_primary_saved_ammo = picked_w.mag_size
 				set_weapon(_equipped_primary_id)
 			if NetworkManager.allow_explosives and bomb_count < max_bombs:
@@ -2039,6 +2050,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	invis_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	nyx_frenzy_timer = 0.0
 	control_lock_timer = 0.0
 	freeze_timer = 0.0
 	ability_lock_timer = 0.0
@@ -2185,6 +2197,7 @@ func _respawn_self() -> void:
 	invis_timer = 0.0
 	speed_boost_timer = 0.0
 	speed_boost_mult = 1.0
+	nyx_frenzy_timer = 0.0
 	control_lock_timer = 0.0
 	freeze_timer = 0.0
 	ability_lock_timer = 0.0
@@ -2239,8 +2252,8 @@ func _respawn_self() -> void:
 		bomb_inventory.clear()
 		if bomb_count > 0:
 			bomb_inventory[bomb_type] = bomb_count
-		_primary_reserve_ammo = 3 if (_equipped_primary_id == 10 or _equipped_primary_id == 12) else -1
-		_secondary_reserve_ammo = 3 if (secondary_weapon_id == 10 or secondary_weapon_id == 12) else -1
+		_primary_reserve_ammo = -1
+		_secondary_reserve_ammo = -1
 		_primary_saved_ammo = -1
 		_secondary_saved_ammo = -1
 		current_ammo = _weapon.mag_size
@@ -2491,7 +2504,7 @@ func _update_overhead_ui() -> void:
 		_name_label.modulate = Color(0.32, 0.86, 1.0)
 	elif ag_active and touch_fire_timer > 0.0 and is_local_human:
 		_name_label.visible = true
-		_name_label.text = "TAP ENEMY TO BURN %.1fs" % touch_fire_timer
+		_name_label.text = "TAP ANYWHERE TO BURN %.1fs" % touch_fire_timer
 		_name_label.modulate = Color(1.0, 0.45, 0.16)
 	elif ag_active and touch_banish_timer > 0.0:
 		_name_label.visible = true
@@ -2645,6 +2658,28 @@ func _compute_bot_input(delta: float) -> Dictionary:
 	var engage_max: float = 115.0 if is_melee_agent else 360.0
 	var engage_min: float = 60.0 if is_melee_agent else 160.0
 
+	if _bot_weapon_pickup_cd > 0.0:
+		_bot_weapon_pickup_cd = maxf(0.0, _bot_weapon_pickup_cd - delta)
+	if _bot_loot_focus_timer > 0.0:
+		_bot_loot_focus_timer = maxf(0.0, _bot_loot_focus_timer - delta)
+	var arena_ref: Node = get_parent().get_parent() if get_parent() != null else null
+	var has_los_to_enemy: bool = false
+	if nearest_target != null and nearest_dist < sight_range:
+		var los_space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+		var los_ray := PhysicsRayQueryParameters2D.create(
+			_weapon_pivot.global_position,
+			nearest_target.global_position,
+			1
+		)
+		has_los_to_enemy = los_space.intersect_ray(los_ray).is_empty()
+	var in_active_fight: bool = (nearest_target != null and nearest_dist < 280.0 and has_los_to_enemy)
+	var pickup_obj: Dictionary = {"found": false}
+	if arena_ref != null and not is_preview_dummy:
+		if arena_ref.has_method("try_bot_interact_nearby"):
+			arena_ref.call("try_bot_interact_nearby", self)
+		if arena_ref.has_method("get_bot_pickup_target"):
+			pickup_obj = arena_ref.call("get_bot_pickup_target", self, 540.0, in_active_fight)
+
 	if nearest_target != null:
 		var to_target: Vector2 = nearest_target.global_position - _weapon_pivot.global_position
 		var dist: float = to_target.length()
@@ -2693,6 +2728,24 @@ func _compute_bot_input(delta: float) -> Dictionary:
 					want_fire = (not is_melee_agent) or dist < 135.0
 				else:
 					want_fire = true
+
+	# Steer toward freshly opened treasure loot, or smartly toward nearby orbs / weapons / health
+	if bool(pickup_obj.get("found", false)):
+		var obj_pos: Vector2 = pickup_obj["pos"] as Vector2
+		var to_obj: Vector2 = obj_pos - global_position
+		var obj_dist: float = to_obj.length()
+		var obj_score: float = float(pickup_obj.get("score", 0.0))
+		if obj_score >= 180.0 or not in_active_fight or obj_score >= 88.0:
+			if absf(to_obj.x) > 12.0:
+				move_x = signf(to_obj.x)
+			else:
+				move_x = 0.0
+			if to_obj.y < -52.0 and jetpack_fuel > 20.0:
+				want_jet = true
+				if is_on_floor():
+					want_jump = true
+			elif to_obj.y < -22.0 and is_on_floor() and obj_dist < 160.0:
+				want_jump = true
 
 	if is_on_wall() and is_on_floor():
 		want_jump = true
@@ -2762,25 +2815,32 @@ func _fire_agent_base_weapon() -> void:
 	var ag: Dictionary = AgentData.get_agent(archetype_id)
 	var bw: Dictionary = ag["base_weapon"]
 	var cd: float = float(bw["cooldown"])
-	if speed_boost_timer > 0.0:
+	if nyx_frenzy_timer > 0.0:
+		cd *= 0.50
+	elif speed_boost_timer > 0.0:
 		cd *= 0.72
 	if is_bot:
 		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 		cd *= (1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0))
 	_fire_cooldown = cd
-	_melee_swing_timer = 0.22
+	var is_ranged_bw: bool = bool(bw["ranged"])
+	var bw_style: String = str(bw.get("style", "sword"))
+	if not is_ranged_bw:
+		_melee_swing_timer = 0.22
 	_fire_anim_timer = 0.16
 
 	var dmg: int = int(bw["damage"]) * (2 if deathless_timer > 0.0 else 1)
 	var col: Color = bw["color"] as Color
 	var w_label: String = str(bw["name"])
-	if bool(bw["ranged"]):
+	if is_ranged_bw:
 		var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+		var proj_style: String = "bullet" if (bw_style == "deagle" or bw_style == "gun") else "arrow"
+		var pitch_sfx: float = 0.82 if bw_style == "deagle" else 1.45
 		if NetworkManager.is_network_active():
-			spawn_agent_base_ranged_rpc.rpc(safe_m, aim_angle, dmg, col, w_label)
+			spawn_agent_base_ranged_rpc.rpc(safe_m, aim_angle, dmg, col, w_label, proj_style, pitch_sfx)
 		else:
-			_spawn_styled_projectile(safe_m, aim_angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
-			_play_local_sfx("res://assets/audio/shoot_smg.wav", -6.0, 1.45)
+			_spawn_styled_projectile(safe_m, aim_angle, 1180.0 if proj_style == "bullet" else 1020.0, dmg, proj_style, col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
+			_play_local_sfx("res://assets/audio/shoot_smg.wav", -4.0 if bw_style == "deagle" else -6.0, pitch_sfx)
 	else:
 		var reach: float = float(bw["range"])
 		if _is_controlled_locally():
@@ -2795,9 +2855,9 @@ func _fire_agent_base_weapon() -> void:
 
 
 @rpc("any_peer", "call_local", "reliable")
-func spawn_agent_base_ranged_rpc(origin: Vector2, angle: float, dmg: int, col: Color, w_label: String) -> void:
-	_spawn_styled_projectile(origin, angle, 1020.0, dmg, "arrow", col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
-	_play_local_sfx("res://assets/audio/shoot_smg.wav", -6.0, 1.45)
+func spawn_agent_base_ranged_rpc(origin: Vector2, angle: float, dmg: int, col: Color, w_label: String, proj_style: String = "arrow", pitch_sfx: float = 1.45) -> void:
+	_spawn_styled_projectile(origin, angle, 1180.0 if proj_style == "bullet" else 1020.0, dmg, proj_style, col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
+	_play_local_sfx("res://assets/audio/shoot_smg.wav", -4.0 if proj_style == "bullet" else -6.0, pitch_sfx)
 
 
 @rpc("any_peer", "call_local", "reliable")
@@ -2917,6 +2977,8 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"speed":
 			speed_boost_timer = float(ab.get("duration", 4.0))
 			speed_boost_mult = float(ab.get("speed_mult", 1.8))
+			if ab_name == "Feline Haste":
+				nyx_frenzy_timer = float(ab.get("duration", 5.0))
 			if local_auth:
 				health = mini(max_health, health + 15)
 				if health >= max_health:
@@ -2931,7 +2993,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			if ab_name == "Shadow Dash":
 				_shadow_dash_timer = 0.24
 				_shadow_dash_dir = Vector2.from_angle(cast_angle)
-				_shadow_dash_dmg = dmg
+				_shadow_dash_dmg = dmg * (2 if nyx_frenzy_timer > 0.0 else 1)
 				_shadow_dash_hit_ids.clear()
 				control_lock_timer = 0.24
 			else:
@@ -3531,27 +3593,22 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"dragon_laser":
 			if is_bot or is_preview_dummy:
 				var tgt_fire: Node2D = _find_nearest_enemy_player(cast_pos, 750.0)
-				if tgt_fire != null:
-					_execute_touch_fire_local(int(tgt_fire.get("peer_id")))
+				var fire_spot: Vector2 = tgt_fire.global_position if tgt_fire != null else (cast_pos + Vector2.from_angle(cast_angle) * 180.0)
+				_execute_touch_fire_local(_clamp_to_arena(fire_spot))
 			else:
-				touch_fire_timer = float(ab.get("duration", 3.0))
+				touch_fire_timer = float(ab.get("duration", 4.0))
 				_spawn_air_wave_circle(cast_pos, 64.0, Color(1.0, 0.42, 0.14))
 				_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 1.25)
 		"ult_dragon_strike":
-			control_lock_timer = 1.2
-			var tgt_ds: Node2D = _find_nearest_enemy_player(cast_pos, 460.0)
-			var ds_pos: Vector2 = tgt_ds.global_position if tgt_ds != null else (cast_pos + Vector2.from_angle(cast_angle) * 220.0)
-			_spawn_summon("dragon_strike", ds_pos + Vector2(-90.0 * (1.0 if facing_right else -1.0), -26.0), 0, 0.85, col, ab_name, false)
-			if local_auth:
-				for p in get_tree().get_nodes_in_group("players"):
-					if is_instance_valid(p) and int(p.get("peer_id")) != peer_id:
-						if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
-							continue
-						if (p as Node2D).global_position.distance_to(ds_pos) <= 185.0 and p.has_method("apply_hit"):
-							p.apply_hit(dmg, peer_id, ab_name, player_name, Vector2.ZERO)
-			_spawn_vfx_burst(ds_pos, 185.0, col)
-			add_screen_shake(2.6)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+			control_lock_timer = 0.35
+			var ds_dir: Vector2 = Vector2.from_angle(cast_angle)
+			var ds_spawn: Vector2 = cast_pos + ds_dir * 42.0
+			var drg := _spawn_summon("dragon_strike", ds_spawn, dmg, 2.2, col, ab_name, local_auth)
+			if drg != null:
+				drg.set("flight_dir", ds_dir)
+				drg.set("move_dir_x", 1.0 if ds_dir.x >= 0.0 else -1.0)
+			add_screen_shake(1.6)
+			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -1.0, 0.78)
 		"banish_enemy":
 			if is_bot or is_preview_dummy:
 				var tgt_bn: Node2D = _find_nearest_enemy_player(cast_pos, 650.0)
@@ -4209,9 +4266,10 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		_laser_visual_width = 16.0
 		_laser_visual_len = 560.0
 		_electric_laser_accum += delta
-		if _electric_laser_accum >= 0.24:
+		if _electric_laser_accum >= 0.27:
 			_electric_laser_accum = 0.0
-			_cast_beam_attack(global_position + Vector2.from_angle(aim_angle) * 24.0, aim_angle, 560.0, 22.0, 12, Color(0.45, 0.92, 1.0), "Electric Laser Gun", 0.12, _is_controlled_locally())
+			var laser_tick_dmg: int = 16 if nyx_frenzy_timer > 0.0 else 8
+			_cast_beam_attack(global_position + Vector2.from_angle(aim_angle) * 24.0, aim_angle, 560.0, 22.0, laser_tick_dmg, Color(0.45, 0.92, 1.0), "Electric Laser Gun", 0.12, _is_controlled_locally())
 	if poison_dot_timer > 0.0:
 		poison_dot_timer = maxf(0.0, poison_dot_timer - delta)
 		_poison_dot_accum += delta
@@ -5172,6 +5230,9 @@ func _draw() -> void:
 				var w: float = float(spec[3])
 				draw_line(p_start, p_end, Color(0.72, 0.42, 1.0, 0.85 * dash_alpha), w + 2.2)
 				draw_line(p_start, p_end, Color(0.96, 0.92, 1.0, 0.95 * dash_alpha), w * 0.65)
+		if touch_fire_timer > 0.0:
+			var fire_pulse_r: float = 42.0 + sin(Time.get_ticks_msec() * 0.014) * 5.0
+			draw_arc(Vector2.ZERO, fire_pulse_r, 0.0, TAU, 32, Color(1.0, 0.44, 0.12, 0.88), 3.0)
 		if touch_banish_timer > 0.0:
 			var pulse_r: float = 42.0 + sin(Time.get_ticks_msec() * 0.012) * 5.0
 			draw_arc(Vector2.ZERO, pulse_r, 0.0, TAU, 32, Color(0.84, 0.48, 1.0, 0.85), 3.0)
@@ -5406,6 +5467,10 @@ class AgentWeaponVisual extends Node2D:
 	const TEX_RAVEN_BOW: Texture2D = preload("res://assets/sprites/weapons/raven_shadow_bow.png")
 	const TEX_ORC_SKULL_CRUSHER: Texture2D = preload("res://assets/sprites/weapons/orc_skull_crusher.png")
 	const TEX_JACKSON_GLOVE: Texture2D = preload("res://assets/sprites/weapons/jackson_boxing_glove.png")
+	const TEX_YAGAMI_KATANA: Texture2D = preload("res://assets/sprites/weapons/yagami_katana.png")
+	const TEX_ROOK_FROST_BLADE: Texture2D = preload("res://assets/sprites/weapons/rook_frost_blade.png")
+	const TEX_AFERA_SPEAR: Texture2D = preload("res://assets/sprites/weapons/afera_tribal_spear.png")
+	const TEX_WEAPONS_SHEET_VIS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 	var weapon_style: String = "sword"
 	var weapon_color: Color = Color(0.85, 0.90, 0.98)
 	var _flame_t: float = 0.0
@@ -5417,6 +5482,23 @@ class AgentWeaponVisual extends Node2D:
 
 	func _draw() -> void:
 		match weapon_style:
+			"deagle":
+				var ws: Vector2 = TEX_WEAPONS_SHEET_VIS.get_size()
+				var fw: float = ws.x / 11.0
+				var fh: float = ws.y / 3.0
+				draw_texture_rect_region(TEX_WEAPONS_SHEET_VIS, Rect2(-6.0, -14.0, 56.0, 28.0), Rect2(9.0 * fw, 0.0, fw, fh))
+			"afera_spear":
+				draw_set_transform(Vector2(10.0, 2.0), -0.18, Vector2.ONE)
+				draw_texture_rect(TEX_AFERA_SPEAR, Rect2(-22.0, -5.5, 76.0, 11.0), false)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			"rook_frost_blade":
+				draw_set_transform(Vector2(14.0, 4.0), -0.40, Vector2.ONE)
+				draw_texture_rect(TEX_ROOK_FROST_BLADE, Rect2(-6.0, -10.0, 48.0, 20.0), false)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			"yagami_katana":
+				draw_set_transform(Vector2(14.0, 4.0), -0.45, Vector2.ONE)
+				draw_texture_rect(TEX_YAGAMI_KATANA, Rect2(-6.0, -7.0, 52.0, 14.0), false)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"boxing_glove":
 				draw_texture_rect(TEX_JACKSON_GLOVE, Rect2(2.0, -16.0, 32.0, 32.0), false)
 			"greatsword":
@@ -5877,6 +5959,7 @@ class SpearImpaleVfx extends Node2D:
 
 
 class BoxingFistVfx extends Node2D:
+	const TEX_GLOVE: Texture2D = preload("res://assets/sprites/weapons/jackson_boxing_glove.png")
 	var start_pos: Vector2 = Vector2.ZERO
 	var end_pos: Vector2 = Vector2.ZERO
 	var fist_angle: float = 0.0
@@ -5903,21 +5986,8 @@ class BoxingFistVfx extends Node2D:
 
 	func _draw() -> void:
 		var a: float = clampf(1.0 - maxf(0.0, (_age - slam_time) / _hold_fade), 0.0, 1.0)
-		var ink := Color(0.08, 0.05, 0.07, a)
-		var red := Color(0.19, 0.46, 0.88, a)
-		var hi := Color(0.45, 0.72, 1.0, a)
-		var gold := Color(0.97, 0.78, 0.20, a)
-		# Wrist cuff
-		draw_rect(Rect2(-26.0, -14.0, 14.0, 28.0), ink)
-		draw_rect(Rect2(-24.0, -12.0, 10.0, 24.0), gold)
-		# Main boxing glove body
-		draw_circle(Vector2(2.0, 0.0), 21.0, ink)
-		draw_circle(Vector2(2.0, 0.0), 18.0, red)
-		# Thumb tuck
-		draw_circle(Vector2(0.0, 15.0), 9.0, ink)
-		draw_circle(Vector2(0.0, 15.0), 6.5, red)
-		# Glove highlight
-		draw_circle(Vector2(4.0, -6.0), 8.5, hi)
+		draw_circle(Vector2(2.0, 0.0), 26.0, Color(0.28, 0.62, 1.0, 0.24 * a))
+		draw_texture_rect(TEX_GLOVE, Rect2(-26.0, -26.0, 52.0, 52.0), false, Color(1.0, 1.0, 1.0, a))
 
 
 func _spawn_prism_mirror(dur: float, col: Color) -> void:
@@ -6014,45 +6084,36 @@ func _execute_touch_teleport_local(target_pos: Vector2) -> void:
 func execute_touch_fire(world_pos: Vector2) -> bool:
 	if touch_fire_timer <= 0.0 or is_dead:
 		return false
-	var best_p: Node2D = null
-	var best_d: float = 68.0
-	for p in get_tree().get_nodes_in_group("players"):
-		if not is_instance_valid(p) or p == self:
-			continue
-		if p.has_method("is_alive") and not p.is_alive():
-			continue
-		if NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id:
-			continue
-		var d: float = (p as Node2D).global_position.distance_to(world_pos)
-		if d <= best_d:
-			best_d = d
-			best_p = p as Node2D
-	if best_p == null:
-		return false
 	touch_fire_timer = 0.0
-	var target_pid: int = int(best_p.get("peer_id"))
+	_fire_cooldown = maxf(_fire_cooldown, 0.22)
+	var fire_pos: Vector2 = _clamp_to_arena(world_pos)
 	if NetworkManager.is_network_active():
-		execute_touch_fire_rpc.rpc(target_pid)
+		execute_touch_fire_rpc.rpc(fire_pos)
 	else:
-		_execute_touch_fire_local(target_pid)
+		_execute_touch_fire_local(fire_pos)
 	return true
 
 
 @rpc("any_peer", "call_local", "reliable")
-func execute_touch_fire_rpc(target_pid: int) -> void:
-	_execute_touch_fire_local(target_pid)
+func execute_touch_fire_rpc(fire_pos: Vector2) -> void:
+	_execute_touch_fire_local(fire_pos)
 
 
-func _execute_touch_fire_local(target_pid: int) -> void:
-	var target: Node2D = _find_player_by_peer_id(target_pid)
-	if target == null or (target.has_method("is_alive") and not target.is_alive()):
-		return
-	var tpos: Vector2 = target.global_position
-	if _is_controlled_locally() and target.has_method("apply_hit"):
-		target.apply_hit(80, peer_id, "Dragon Flame", player_name, Vector2(0.0, -140.0))
-	_spawn_vfx_burst(tpos, 72.0, Color(1.0, 0.36, 0.12))
-	_spawn_rising_particles(tpos, Color(1.0, 0.45, 0.12), false, 16)
-	_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.2)
+func _execute_touch_fire_local(fire_pos: Vector2) -> void:
+	touch_fire_timer = 0.0
+	var parent_fire: Node = get_parent()
+	if parent_fire != null:
+		var flame_fx := DragonTapFireVfx.new()
+		flame_fx.fire_pos = fire_pos
+		flame_fx.caster = self
+		flame_fx.shooter_id = peer_id
+		flame_fx.shooter_team = team_id
+		flame_fx.shooter_name = player_name
+		flame_fx.local_auth = _is_controlled_locally()
+		parent_fire.add_child(flame_fx)
+	_spawn_rising_particles(fire_pos, Color(1.0, 0.45, 0.12), false, 16)
+	add_screen_shake(1.6)
+	_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.15)
 
 
 func _pick_random_banish_pos(from_pos: Vector2) -> Vector2:
@@ -6276,6 +6337,70 @@ class ScreamWaveWifiVfx extends Node2D:
 				pts.append(Vector2.from_angle(ang) * (r + ripple))
 			draw_polyline(pts, c, 7.5 - float(arc_i) * 1.2)
 			draw_polyline(pts, Color(0.92, 0.99, 1.0, a * 0.85), 2.4)
+
+
+class DragonTapFireVfx extends Node2D:
+	const TEX_FLAME_SHEET: Texture2D = preload("res://assets/sprites/vfx/inferno_anim_sheet.png")
+	const FRAME_COUNT: int = 10
+	const FRAME_W: float = 160.0
+	const FRAME_H: float = 192.0
+	var fire_pos: Vector2 = Vector2.ZERO
+	var caster: Node2D = null
+	var shooter_id: int = 0
+	var shooter_team: int = -1
+	var shooter_name: String = ""
+	var local_auth: bool = false
+	var burn_radius: float = 98.0
+	var _t: float = 0.0
+	var _dur: float = 2.0
+	var _tick_accum: float = 0.15
+	var _barrel_check_done: bool = false
+
+	func _ready() -> void:
+		z_index = 14
+		global_position = Vector2.ZERO
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= _dur:
+			queue_free()
+			return
+		if local_auth:
+			_tick_accum += delta
+			if _tick_accum >= 0.25:
+				_tick_accum -= 0.25
+				for p in get_tree().get_nodes_in_group("players"):
+					if not is_instance_valid(p) or p == caster:
+						continue
+					if p.has_method("is_alive") and not p.is_alive():
+						continue
+					if NetworkManager.is_team_mode() and int(p.get("team_id")) == shooter_team:
+						continue
+					if (p as Node2D).global_position.distance_to(fire_pos) <= burn_radius and p.has_method("apply_hit"):
+						p.apply_hit(10, shooter_id, "Dragon Flame", shooter_name, Vector2(0.0, -30.0))
+						if is_instance_valid(caster) and caster.has_method("gain_ult_charge"):
+							caster.call("gain_ult_charge", 0.5)
+			if not _barrel_check_done and _t >= 0.30:
+				_barrel_check_done = true
+				for b in get_tree().get_nodes_in_group("destructible_bombs"):
+					if not is_instance_valid(b):
+						continue
+					if b.has_meta("prop_node"):
+						var prop_n: Node2D = b.get_meta("prop_node") as Node2D
+						if is_instance_valid(prop_n) and prop_n.global_position.distance_to(fire_pos) <= burn_radius + 22.0 and prop_n.has_method("detonate_barrel"):
+							prop_n.call("detonate_barrel", shooter_id, shooter_name, shooter_team)
+		queue_redraw()
+
+	func _draw() -> void:
+		var prog: float = clampf(_t / _dur, 0.0, 1.0)
+		var alpha: float = 1.0 - maxf(0.0, (prog - 0.80) / 0.20)
+		var f_idx: int = int(_t * 14.0) % FRAME_COUNT
+		var src_rect := Rect2(float(f_idx) * FRAME_W, 0.0, FRAME_W, FRAME_H)
+		var fw: float = 165.0
+		var fh: float = 195.0
+		draw_set_transform(fire_pos + Vector2(0.0, 56.0), 0.0, Vector2.ONE)
+		draw_texture_rect_region(TEX_FLAME_SHEET, Rect2(-fw * 0.5, -fh, fw, fh), src_rect, Color(1.0, 1.0, 1.0, 0.96 * alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 class InfernoGrabVfx extends Node2D:

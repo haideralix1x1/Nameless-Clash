@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://v6dajfx1iyqq"
-path="res://.godot/imported/kaito_head.png-28abeb272cd7551b743627e39df19903.ctex"
+uid="uid://bu2qhai1nf6ps"
+path="res://.godot/imported/afera_tribal_spear.png-b08a28e6bc5a55bc9ee709fe9da84d83.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/modular/kaito_head.png"
-dest_files=["res://.godot/imported/kaito_head.png-28abeb272cd7551b743627e39df19903.ctex"]
+source_file="res://assets/sprites/weapons/afera_tribal_spear.png"
+dest_files=["res://.godot/imported/afera_tribal_spear.png-b08a28e6bc5a55bc9ee709fe9da84d83.ctex"]
 
 [params]
 

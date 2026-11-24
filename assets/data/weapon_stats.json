@@ -1,0 +1,200 @@
+{
+	"0": {
+		"bullet_range": 1000.0,
+		"bullet_speed": 1500.0,
+		"damage": 24.0,
+		"fire_interval": 0.14,
+		"mag_size": 30.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 60.0,
+		"reload_time": 1.6,
+		"spread_deg": 3.0
+	},
+	"1": {
+		"bullet_range": 950.0,
+		"bullet_speed": 1500.0,
+		"damage": 18.0,
+		"fire_interval": 0.1,
+		"mag_size": 30.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 35.0,
+		"reload_time": 1.4,
+		"spread_deg": 2.0
+	},
+	"10": {
+		"bullet_range": 2600.0,
+		"bullet_speed": 800.0,
+		"damage": 110.0,
+		"fire_interval": 1.4,
+		"mag_size": 1.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 265.0,
+		"reload_time": 2.2,
+		"spread_deg": 1.0
+	},
+	"11": {
+		"bullet_range": 250.0,
+		"bullet_speed": 620.0,
+		"damage": 14.0,
+		"fire_interval": 0.06,
+		"mag_size": 60.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 30.0,
+		"reload_time": 2.0,
+		"spread_deg": 8.0
+	},
+	"12": {
+		"bullet_range": 1250.0,
+		"bullet_speed": 600.0,
+		"damage": 110.0,
+		"fire_interval": 1.25,
+		"mag_size": 1.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 175.0,
+		"reload_time": 2.2,
+		"spread_deg": 1.6
+	},
+	"13": {
+		"bullet_range": 1050.0,
+		"bullet_speed": 1200.0,
+		"damage": 50.0,
+		"fire_interval": 0.36,
+		"mag_size": 12.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 95.0,
+		"reload_time": 1.6,
+		"spread_deg": 1.0
+	},
+	"14": {
+		"bullet_range": 820.0,
+		"bullet_speed": 1350.0,
+		"damage": 13.0,
+		"fire_interval": 0.055,
+		"mag_size": 100.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 45.0,
+		"reload_time": 2.4,
+		"spread_deg": 4.5
+	},
+	"15": {
+		"bullet_range": 600.0,
+		"bullet_speed": 1300.0,
+		"damage": 10.0,
+		"fire_interval": 0.85,
+		"mag_size": 6.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 40.0,
+		"reload_time": 1.6,
+		"spread_deg": 0.6
+	},
+	"16": {
+		"bullet_range": 260.0,
+		"bullet_speed": 680.0,
+		"damage": 5.0,
+		"fire_interval": 0.9,
+		"mag_size": 5.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 55.0,
+		"reload_time": 1.8,
+		"spread_deg": 1.5
+	},
+	"17": {
+		"bullet_range": 810.0,
+		"bullet_speed": 2000.0,
+		"damage": 16.0,
+		"fire_interval": 0.06,
+		"mag_size": 100.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 40.0,
+		"reload_time": 2.2,
+		"spread_deg": 4.0
+	},
+	"2": {
+		"bullet_range": 1150.0,
+		"bullet_speed": 1700.0,
+		"damage": 34.0,
+		"fire_interval": 0.18,
+		"mag_size": 20.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 80.0,
+		"reload_time": 1.7,
+		"spread_deg": 1.8
+	},
+	"3": {
+		"bullet_range": 650.0,
+		"bullet_speed": 1800.0,
+		"damage": 14.0,
+		"fire_interval": 0.07,
+		"mag_size": 32.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 20.0,
+		"reload_time": 1.2,
+		"spread_deg": 2.6
+	},
+	"4": {
+		"bullet_range": 450.0,
+		"bullet_speed": 2200.0,
+		"damage": 12,
+		"fire_interval": 0.05,
+		"mag_size": 25,
+		"pellet_count": 1,
+		"recoil_impulse": 15.0,
+		"reload_time": 1.1,
+		"spread_deg": 3.4
+	},
+	"5": {
+		"bullet_range": 350.0,
+		"bullet_speed": 1250.0,
+		"damage": 18.0,
+		"fire_interval": 0.42,
+		"mag_size": 8.0,
+		"pellet_count": 8.0,
+		"recoil_impulse": 150.0,
+		"reload_time": 1.8,
+		"spread_deg": 11.6
+	},
+	"6": {
+		"bullet_range": 350.0,
+		"bullet_speed": 1500.0,
+		"damage": 22.0,
+		"fire_interval": 0.85,
+		"mag_size": 6.0,
+		"pellet_count": 8.0,
+		"recoil_impulse": 195.0,
+		"reload_time": 0.4,
+		"spread_deg": 9.0
+	},
+	"7": {
+		"bullet_range": 2600.0,
+		"bullet_speed": 6000.0,
+		"damage": 250.0,
+		"fire_interval": 1.45,
+		"mag_size": 5.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 210.0,
+		"reload_time": 2.2,
+		"spread_deg": 0.2
+	},
+	"8": {
+		"bullet_range": 1500.0,
+		"bullet_speed": 3200.0,
+		"damage": 70.0,
+		"fire_interval": 0.48,
+		"mag_size": 10.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 135.0,
+		"reload_time": 1.8,
+		"spread_deg": 0.4
+	},
+	"9": {
+		"bullet_range": 700.0,
+		"bullet_speed": 2000.0,
+		"damage": 80.0,
+		"fire_interval": 0.85,
+		"mag_size": 7.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 65.0,
+		"reload_time": 1.2,
+		"spread_deg": 1.0
+	}
+}

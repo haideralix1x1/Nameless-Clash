@@ -188,12 +188,39 @@ func _physics_process(delta: float) -> void:
 
 	match summon_kind:
 		"dragon_strike":
-			global_position.x += move_dir_x * 380.0 * delta
+			var d_dir: Vector2 = flight_dir.normalized() if flight_dir.length() > 0.01 else Vector2(move_dir_x, 0.0)
+			global_position += d_dir * 560.0 * delta
 			if is_instance_valid(_sprite):
-				_sprite.flip_h = move_dir_x < 0.0
+				_sprite.flip_h = d_dir.x < 0.0
 				_sprite.position.y = sin(_phase * 2.2) * 8.0
 				var d_flap: float = sin(_phase * 3.0)
 				_sprite.scale = Vector2(_base_scale + d_flap * 0.06, _base_scale - d_flap * 0.07)
+			var detected_enemy: Node2D = _find_nearest_enemy(78.0)
+			if detected_enemy != null:
+				var d_space := get_world_2d().direct_space_state
+				var los_hit := d_space.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, detected_enemy.global_position, 1))
+				if los_hit.is_empty():
+					var blast_pos: Vector2 = detected_enemy.global_position
+					if can_deal:
+						for p in get_tree().get_nodes_in_group("players"):
+							if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
+								if p.has_method("is_alive") and not p.is_alive():
+									continue
+								if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
+									continue
+								if (p as Node2D).global_position.distance_to(blast_pos) <= 155.0 and p.has_method("apply_hit"):
+									var kb: Vector2 = ((p as Node2D).global_position - blast_pos).normalized() * 320.0
+									p.apply_hit(damage, owner_peer_id, weapon_name, owner_name, kb)
+					var exp_scene: PackedScene = load("res://scenes/Explosion.tscn") as PackedScene
+					if exp_scene != null and get_parent() != null:
+						var exp := exp_scene.instantiate()
+						exp.global_position = blast_pos
+						exp.explosion_radius = 155.0
+						exp.max_damage = 0
+						exp.can_deal_damage = false
+						get_parent().add_child(exp)
+					queue_free()
+					return
 		"flash_bird", "winged_lion", "bat", "shadow_mummy", "giant_snake", "mini_prism":
 			var spd: float = 340.0 if summon_kind == "winged_lion" else (320.0 if summon_kind == "giant_snake" else (300.0 if summon_kind == "flash_bird" else 260.0))
 			var detect_r: float = 280.0 if summon_kind == "winged_lion" else (4000.0 if summon_kind == "bat" else 950.0)

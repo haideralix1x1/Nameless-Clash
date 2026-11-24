@@ -842,6 +842,7 @@ func _refresh_character_pose() -> void:
 	if _modular == null:
 		return
 	var flip_h := not _facing_right
+	_modular.freeze_procedural_anim = true
 	_modular.set_sync_frame(_manual_frame, flip_h)
 	_modular._current_anim = _selected_anim
 
@@ -1802,10 +1803,11 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	_range_gun_lbl.modulate = Color(1.0, 0.55, 0.45)
 	right_vb.add_child(_range_gun_lbl)
 
-	_range_spin = _add_spin_row(right_vb, "Range (px):", 80.0, 4000.0, 10.0)
+	_range_spin = _add_spin_row(right_vb, "Range (px):", 80.0, 8000.0, 10.0)
+	_range_spin.allow_greater = true
 	_range_slider = HSlider.new()
 	_range_slider.min_value = 80.0
-	_range_slider.max_value = 4000.0
+	_range_slider.max_value = 8000.0
 	_range_slider.step = 10.0
 	right_vb.add_child(_range_slider)
 
@@ -1828,16 +1830,17 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 				_range_canvas.queue_redraw()
 	)
 
-	_w_dmg_spin    = _add_spin_row(right_vb, "Damage:",      1.0,   300.0,  1.0)
-	_w_rof_spin    = _add_spin_row(right_vb, "Fire Delay:",  0.03,  2.50,   0.01)
-	_w_spread_spin = _add_spin_row(right_vb, "Spread (°):",  0.0,   25.0,   0.2)
-	_w_speed_spin  = _add_spin_row(right_vb, "Speed (px/s):",150.0, 3200.0, 25.0)
-	_w_mag_spin    = _add_spin_row(right_vb, "Mag Size:",    1.0,   250.0,  1.0)
-	_w_reload_spin = _add_spin_row(right_vb, "Reload (s):",  0.2,   6.0,    0.1)
-	_w_recoil_spin = _add_spin_row(right_vb, "Recoil:",      0.0,   350.0,  5.0)
-	_w_pellet_spin = _add_spin_row(right_vb, "Pellets:",     1.0,   16.0,   1.0)
+	_w_dmg_spin    = _add_spin_row(right_vb, "Damage:",      1.0,   600.0,  1.0)
+	_w_rof_spin    = _add_spin_row(right_vb, "Fire Delay:",  0.01,  5.00,   0.01)
+	_w_spread_spin = _add_spin_row(right_vb, "Spread (°):",  0.0,   50.0,   0.2)
+	_w_speed_spin  = _add_spin_row(right_vb, "Speed (px/s):",150.0, 6400.0, 25.0)
+	_w_mag_spin    = _add_spin_row(right_vb, "Mag Size:",    1.0,   500.0,  1.0)
+	_w_reload_spin = _add_spin_row(right_vb, "Reload (s):",  0.1,   12.0,   0.1)
+	_w_recoil_spin = _add_spin_row(right_vb, "Recoil:",      0.0,   700.0,  5.0)
+	_w_pellet_spin = _add_spin_row(right_vb, "Pellets:",     1.0,   32.0,   1.0)
 
 	for sb: SpinBox in [_w_dmg_spin, _w_rof_spin, _w_spread_spin, _w_speed_spin, _w_mag_spin, _w_reload_spin, _w_recoil_spin, _w_pellet_spin]:
+		sb.allow_greater = true
 		sb.value_changed.connect(func(_v: float): _on_weapon_stat_changed())
 
 	_range_stats_lbl = Label.new()
@@ -1907,7 +1910,7 @@ func _sync_range_inspector() -> void:
 	var sd := _get_stat_dict(_range_selected_wid)
 	if _range_gun_lbl != null:
 		_range_gun_lbl.text = "#%d %s (%s)" % [_range_selected_wid, wd.display_name, wd.category]
-	var r_val := clampf(float(_weapon_ranges.get(str(_range_selected_wid), sd.get("bullet_range", 860.0))), 80.0, 4000.0)
+	var r_val := maxf(float(_weapon_ranges.get(str(_range_selected_wid), sd.get("bullet_range", 860.0))), 80.0)
 	_range_spin.value = r_val
 	_range_slider.set_value_no_signal(r_val)
 	_w_dmg_spin.value    = float(sd.get("damage", wd.damage))
@@ -2089,7 +2092,7 @@ func _on_range_canvas_gui_input(event: InputEvent) -> void:
 					var delta_w := world_m - _range_shooter_pos
 					if delta_w.length() > 8.0:
 						_range_aim_angle = delta_w.angle()
-						var new_r := snappedf(clampf(delta_w.length(), 80.0, 4000.0), 10.0)
+						var new_r := snappedf(clampf(delta_w.length(), 80.0, 8000.0), 10.0)
 						_weapon_ranges[str(_range_selected_wid)] = new_r
 						_sync_range_inspector()
 						_range_canvas.queue_redraw()
@@ -2097,10 +2100,10 @@ func _on_range_canvas_gui_input(event: InputEvent) -> void:
 				_range_drag_mode = 0
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
 			var step := 100.0 if mb.shift_pressed else 25.0
-			_range_spin.value = clampf(_range_spin.value + step, 80.0, 4000.0)
+			_range_spin.value = clampf(_range_spin.value + step, 80.0, 8000.0)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
 			var step := 100.0 if mb.shift_pressed else 25.0
-			_range_spin.value = clampf(_range_spin.value - step, 80.0, 4000.0)
+			_range_spin.value = clampf(_range_spin.value - step, 80.0, 8000.0)
 	elif event is InputEventMouseMotion and _range_drag_mode != 0:
 		var mm := event as InputEventMouseMotion
 		var world_m := (mm.position - vp.position) / sc
@@ -2111,7 +2114,7 @@ func _on_range_canvas_gui_input(event: InputEvent) -> void:
 			var delta_w := world_m - _range_shooter_pos
 			if delta_w.length() > 8.0:
 				_range_aim_angle = delta_w.angle()
-				var new_r := snappedf(clampf(delta_w.length(), 80.0, 4000.0), 10.0)
+				var new_r := snappedf(clampf(delta_w.length(), 80.0, 8000.0), 10.0)
 				_weapon_ranges[str(_range_selected_wid)] = new_r
 				_sync_range_inspector()
 		_range_canvas.queue_redraw()

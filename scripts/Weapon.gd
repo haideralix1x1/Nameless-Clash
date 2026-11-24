@@ -281,15 +281,15 @@ static func _apply_stat_overrides(w: WeaponData, key: String, ranges: Dictionary
 	w.bullet_range = float(ranges.get(key, w.bullet_range if w.bullet_range > 0.0 else 860.0))
 	if stats.has(key) and stats[key] is Dictionary:
 		var sd: Dictionary = stats[key] as Dictionary
-		if sd.has("bullet_range"): w.bullet_range = clampf(float(sd["bullet_range"]), 80.0, 4000.0)
+		if sd.has("bullet_range"): w.bullet_range = maxf(float(sd["bullet_range"]), 40.0)
 		if sd.has("damage"): w.damage = maxi(1, int(sd["damage"]))
-		if sd.has("fire_interval"): w.fire_interval = clampf(float(sd["fire_interval"]), 0.03, 3.0)
-		if sd.has("spread_deg"): w.spread_deg = clampf(float(sd["spread_deg"]), 0.0, 30.0)
-		if sd.has("bullet_speed"): w.bullet_speed = clampf(float(sd["bullet_speed"]), 150.0, 3500.0)
-		if sd.has("mag_size"): w.mag_size = clampi(int(sd["mag_size"]), 1, 250)
-		if sd.has("reload_time"): w.reload_time = clampf(float(sd["reload_time"]), 0.2, 6.0)
-		if sd.has("recoil_impulse"): w.recoil_impulse = clampf(float(sd["recoil_impulse"]), 0.0, 400.0)
-		if sd.has("pellet_count"): w.pellet_count = clampi(int(sd["pellet_count"]), 1, 16)
+		if sd.has("fire_interval"): w.fire_interval = maxf(float(sd["fire_interval"]), 0.01)
+		if sd.has("spread_deg"): w.spread_deg = maxf(float(sd["spread_deg"]), 0.0)
+		if sd.has("bullet_speed"): w.bullet_speed = maxf(float(sd["bullet_speed"]), 50.0)
+		if sd.has("mag_size"): w.mag_size = maxi(1, int(sd["mag_size"]))
+		if sd.has("reload_time"): w.reload_time = maxf(float(sd["reload_time"]), 0.05)
+		if sd.has("recoil_impulse"): w.recoil_impulse = maxf(float(sd["recoil_impulse"]), 0.0)
+		if sd.has("pellet_count"): w.pellet_count = maxi(1, int(sd["pellet_count"]))
 
 
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:

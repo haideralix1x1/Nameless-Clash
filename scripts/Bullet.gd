@@ -6,6 +6,7 @@ const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
 const TEX_RAVEN: Texture2D = preload("res://assets/sprites/characters/summons/raven_proj.png")
 const TEX_HEAVY_FORGE: Texture2D = preload("res://assets/sprites/vfx/ogre_falling_forge.png")
 const TEX_MUMMY_HEAD: Texture2D = preload("res://assets/sprites/modular/mummy_head.png")
+const TEX_AFERA_SPEAR: Texture2D = preload("res://assets/sprites/weapons/afera_tribal_spear.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -809,10 +810,7 @@ func _draw() -> void:
 				Vector2(-5.0, -3.5), Vector2(14.0, 0.0), Vector2(-5.0, 3.5)
 			]), bullet_color)
 		"thrown_spear":
-			draw_line(Vector2(-15.0, 0.0), Vector2(8.0, 0.0), Color(0.62, 0.44, 0.22), 3.0)
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(17.0, 0.0), Vector2(6.0, -4.5), Vector2(6.0, 4.5)
-			]), bullet_color)
+			draw_texture_rect(TEX_AFERA_SPEAR, Rect2(-26.0, -4.5, 52.0, 9.0), false)
 		"grapple_hook":
 			draw_circle(Vector2(-4.0, 0.0), 4.0, Color(0.55, 0.58, 0.65))
 			draw_polyline(PackedVector2Array([Vector2(-4.0, 0.0), Vector2(12.0, 0.0)]), Color(0.85, 0.88, 0.94), 3.0)
@@ -942,10 +940,13 @@ func _draw() -> void:
 		"smoke_orb":
 			draw_set_transform(Vector2.ZERO, -rotation, Vector2.ONE)
 			var pulse: float = 1.0 + sin(_age * 6.5) * 0.06
-			var smoke_outer := Color(0.08, 0.09, 0.13, 0.36)
-			var smoke_mid := Color(0.14, 0.16, 0.22, 0.46)
-			var smoke_hi := Color(0.28, 0.32, 0.40, 0.34)
-			var smoke_core := Color(0.20, 0.23, 0.30, 0.42)
+			var is_green_poison: bool = (status_effect_name == "poison")
+			var smoke_outer := Color(0.06, 0.34, 0.12, 0.40) if is_green_poison else Color(0.08, 0.09, 0.13, 0.36)
+			var smoke_mid := Color(0.14, 0.62, 0.22, 0.50) if is_green_poison else Color(0.14, 0.16, 0.22, 0.46)
+			var smoke_hi := Color(0.46, 0.98, 0.48, 0.38) if is_green_poison else Color(0.28, 0.32, 0.40, 0.34)
+			var smoke_core := Color(0.24, 0.82, 0.30, 0.46) if is_green_poison else Color(0.20, 0.23, 0.30, 0.42)
+			var vap_dark := Color(0.10, 0.48, 0.18) if is_green_poison else Color(0.11, 0.13, 0.18)
+			var vap_hi := Color(0.38, 0.94, 0.42) if is_green_poison else Color(0.26, 0.30, 0.38)
 			# Soft outer billowing smoke cloud puffs (semi-transparent)
 			var outer_puffs: Array[Vector4] = [
 				Vector4(0.0, 2.0, 36.0, 0.0),
@@ -980,8 +981,8 @@ func _draw() -> void:
 				var vy: float = -10.0 - v_phase * 42.0
 				var vr: float = lerpf(8.0, 18.0, v_phase)
 				var va: float = sin(v_phase * PI) * 0.42
-				draw_circle(Vector2(vx, vy), vr, Color(0.11, 0.13, 0.18, va))
-				draw_circle(Vector2(vx - 2.5, vy - 2.5), vr * 0.62, Color(0.26, 0.30, 0.38, va * 0.72))
+				draw_circle(Vector2(vx, vy), vr, Color(vap_dark.r, vap_dark.g, vap_dark.b, va))
+				draw_circle(Vector2(vx - 2.5, vy - 2.5), vr * 0.62, Color(vap_hi.r, vap_hi.g, vap_hi.b, va * 0.72))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

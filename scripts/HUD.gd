@@ -2712,12 +2712,11 @@ func _build_hud_layout_overlay() -> void:
 	for spec in handle_specs:
 		var key: String = str(spec["key"])
 		var col: Color = spec["col"] as Color
+		var sz: Vector2 = spec["size"] as Vector2
 		var btn := Button.new()
 		btn.text = str(spec["label"])
-		btn.custom_minimum_size = spec["size"]
-		btn.size = spec["size"]
 		btn.focus_mode = Control.FOCUS_NONE
-		_style_action_button(btn, col.darkened(0.55), col, 13)
+		_style_circle_btn(btn, col.darkened(0.58), col, int(sz.x), 13)
 		btn.modulate = Color(1.0, 1.0, 1.0, 0.86)
 		btn.gui_input.connect(func(ev: InputEvent):
 			if ev is InputEventMouseButton:

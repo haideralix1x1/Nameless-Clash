@@ -6,7 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 30
+const MAX_PART_INDEX := 29
 
 const PART_OWNER_NAMES: Array[String] = [
 	"contra", "mike_jones", "bruski", "commando", "rook_frost",
@@ -14,8 +14,7 @@ const PART_OWNER_NAMES: Array[String] = [
 	"pirate", "yagami", "dead_buddy", "nothing", "wraith",
 	"mummy", "jack_47", "viper_x", "nyx", "akuza",
 	"mirror_ogre", "ignis", "prism", "afera", "raven",
-	"ray_lina", "draken", "soulless", "kaito", "bramble",
-	"jackson"
+	"ray_lina", "draken", "soulless", "bramble", "jackson"
 ]
 
 
@@ -59,6 +58,8 @@ var _is_ignis_hands_fire: bool = false
 var _is_soulless_smoke: bool = false
 var _wing_flap_t: float = 0.0
 var _fire_anim_t: float = 0.0
+var _jet_bob_t: float = 0.0
+var freeze_procedural_anim: bool = false
 var hands_z_over_weapon: int = 0
 
 var _base_colors: Dictionary = {
@@ -130,6 +131,17 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _current_anim == "jetpack" and not freeze_procedural_anim:
+		_jet_bob_t += delta * 9.0
+		var dir_lean: float = -1.0 if _flip_h else 1.0
+		var target_rot: float = dir_lean * (0.11 + sin(_jet_bob_t * 0.75) * 0.04)
+		rotation = lerpf(rotation, target_rot, clampf(delta * 10.0, 0.0, 1.0))
+	else:
+		_jet_bob_t = 0.0
+		if freeze_procedural_anim:
+			rotation = 0.0
+		else:
+			rotation = lerpf(rotation, 0.0, clampf(delta * 12.0, 0.0, 1.0))
 	if (_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
 		var base_s: float = float(FRAME_SIZE.y) / float(maxi(_sprite_back.texture.get_height(), 1))
 		if _current_anim == "jetpack":
@@ -672,7 +684,9 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim)
 
 	var head_ov: Dictionary = ov.get("head", {})
-	var head_pos := Vector2(float(head_ov.get("x", 0.0)) * dir, float(head_ov.get("y", 0.0)))
+	var jet_bob_y: float = sin(_jet_bob_t) * 3.0 if (_current_anim == "jetpack" and not freeze_procedural_anim) else 0.0
+
+	var head_pos := Vector2(float(head_ov.get("x", 0.0)) * dir, float(head_ov.get("y", 0.0)) + jet_bob_y)
 	var head_rot: float = dir * deg_to_rad(float(head_ov.get("rot", 0.0)))
 	var head_z: int = int(head_ov.get("z", 0))
 	if _sprite_gear != null:
@@ -685,17 +699,17 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		_anim_head.z_index = head_z
 	var torso_ov: Dictionary = ov.get("torso", {})
 	if _anim_torso != null:
-		_anim_torso.position = Vector2(float(torso_ov.get("x", 0.0)) * dir, float(torso_ov.get("y", 0.0)))
+		_anim_torso.position = Vector2(float(torso_ov.get("x", 0.0)) * dir, float(torso_ov.get("y", 0.0)) + jet_bob_y)
 		_anim_torso.rotation = dir * deg_to_rad(float(torso_ov.get("rot", 0.0)))
 		_anim_torso.z_index = int(torso_ov.get("z", 0))
 	var legs_ov: Dictionary = ov.get("legs", {})
 	if _anim_legs != null:
-		_anim_legs.position = Vector2(float(legs_ov.get("x", 0.0)) * dir, float(legs_ov.get("y", 0.0)))
+		_anim_legs.position = Vector2(float(legs_ov.get("x", 0.0)) * dir, float(legs_ov.get("y", 0.0)) + jet_bob_y)
 		_anim_legs.rotation = dir * deg_to_rad(float(legs_ov.get("rot", 0.0)))
 		_anim_legs.z_index = int(legs_ov.get("z", 0))
 	var back_ov: Dictionary = ov.get("back", {})
 	if _sprite_back != null and not ((_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _current_anim == "jetpack"):
-		_sprite_back.position = Vector2(float(back_ov.get("x", 0.0)) * dir, float(back_ov.get("y", 0.0)))
+		_sprite_back.position = Vector2(float(back_ov.get("x", 0.0)) * dir, float(back_ov.get("y", 0.0)) + jet_bob_y)
 		_sprite_back.rotation = dir * deg_to_rad(float(back_ov.get("rot", 0.0)))
 		_sprite_back.z_index = int(back_ov.get("z", 0))
 
@@ -703,11 +717,11 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		var hn_ov: Dictionary = ov.get("hand_near", {})
 		var hf_ov: Dictionary = ov.get("hand_far", {})
 		_sprite_hands.z_index = int(hn_ov.get("z", 1))
-		_sprite_hands.position = Vector2(float(hn_ov.get("x", -15.5)) * dir, float(hn_ov.get("y", 8.0)))
+		_sprite_hands.position = Vector2(float(hn_ov.get("x", -15.5)) * dir, float(hn_ov.get("y", 8.0)) + jet_bob_y)
 		_sprite_hands.rotation = dir * deg_to_rad(float(hn_ov.get("rot", 0.0)))
 		if _sprite_hand_far != null:
 			_sprite_hand_far.z_index = int(hf_ov.get("z", 0))
-			_sprite_hand_far.position = Vector2(float(hf_ov.get("x", 23.0)) * dir, float(hf_ov.get("y", 7.5)))
+			_sprite_hand_far.position = Vector2(float(hf_ov.get("x", 23.0)) * dir, float(hf_ov.get("y", 7.5)) + jet_bob_y)
 			_sprite_hand_far.rotation = dir * deg_to_rad(float(hf_ov.get("rot", 0.0)))
 			_sprite_hand_far.scale = _sprite_hands.scale
 		return
@@ -750,14 +764,14 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	var kick_vec: Vector2 = Vector2.from_angle(aim_ang) * kick_px
 	var kick_rot: float = dir * deg_to_rad(kick_px * 1.8)
 	_sprite_hands.z_index = int(hn_w.get("z", maxi(1, hands_z_over_weapon)))
-	_sprite_hands.position = Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y))) - kick_vec
+	_sprite_hands.position = Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y)) + jet_bob_y) - kick_vec
 	var hn_rot_rad: float = deg_to_rad(float(hn_w["rot"])) if hn_w.has("rot") else hn_rot_def
 	_sprite_hands.rotation = dir * hn_rot_rad + rel_tilt * tilt_mul - kick_rot
 	if _sprite_hand_far != null:
 		_sprite_hand_far.z_index = int(hf_w.get("z", 0))
 		_sprite_hand_far.scale = _sprite_hands.scale
 		var far_kick: Vector2 = kick_vec * 0.65 if stance == "dual" else Vector2.ZERO
-		_sprite_hand_far.position = Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y))) - far_kick
+		_sprite_hand_far.position = Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y)) + jet_bob_y) - far_kick
 		var hf_rot_rad: float = deg_to_rad(float(hf_w["rot"])) if hf_w.has("rot") else hf_rot_def
 		_sprite_hand_far.rotation = dir * hf_rot_rad + rel_tilt * far_tilt_mul
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3l3l7swaxbf6"
-path="res://.godot/imported/kaito_torso.png-5af65c53f7609f1c8169d16007c399ca.ctex"
+uid="uid://djb6e3e4360wv"
+path="res://.godot/imported/yagami_katana.png-fb9571e095118e56dddf066db5f89293.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/modular/kaito_torso.png"
-dest_files=["res://.godot/imported/kaito_torso.png-5af65c53f7609f1c8169d16007c399ca.ctex"]
+source_file="res://assets/sprites/weapons/yagami_katana.png"
+dest_files=["res://.godot/imported/yagami_katana.png-fb9571e095118e56dddf066db5f89293.ctex"]
 
 [params]
 

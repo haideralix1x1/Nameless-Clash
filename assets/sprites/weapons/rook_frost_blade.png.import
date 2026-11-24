@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bk6fnsa26ijtt"
-path="res://.godot/imported/kaito_hands.png-cc42cd1a126ffc846d58a447f55f0a00.ctex"
+uid="uid://gniytr6m1wci"
+path="res://.godot/imported/rook_frost_blade.png-15b0f7984de12d7dbf8237c151bf36f4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/modular/kaito_hands.png"
-dest_files=["res://.godot/imported/kaito_hands.png-cc42cd1a126ffc846d58a447f55f0a00.ctex"]
+source_file="res://assets/sprites/weapons/rook_frost_blade.png"
+dest_files=["res://.godot/imported/rook_frost_blade.png-15b0f7984de12d7dbf8237c151bf36f4.ctex"]
 
 [params]
 
