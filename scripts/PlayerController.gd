@@ -5272,7 +5272,7 @@ func _draw() -> void:
 		if personal_shield_hp > 0 and personal_shield_timer > 0.0:
 			draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 28, Color(0.35, 0.85, 1.0, 0.85), 4.0)
 		if freeze_timer > 0.0:
-			draw_rect(Rect2(-22.0, -34.0, 44.0, 62.0), Color(0.55, 0.92, 1.0, 0.45))
+			draw_rect(Rect2(-34.0, -56.0, 68.0, 88.0), Color(0.55, 0.92, 1.0, 0.25))
 		if _yagami_ult_slash_timer > 0.0:
 			var sa: float = clampf(_yagami_ult_slash_timer / 0.42, 0.0, 1.0)
 			var dir_s: float = 1.0 if facing_right else -1.0
@@ -5851,12 +5851,12 @@ class IceBlockOverlay extends Node2D:
 		queue_redraw()
 
 	func _draw() -> void:
-		var r := Rect2(-26.0, -38.0, 52.0, 68.0)
+		var r := Rect2(-34.0, -56.0, 68.0, 88.0)
 		draw_rect(r, Color(0.32, 0.82, 1.0, 0.42))
 		draw_rect(r, Color(0.85, 0.98, 1.0, 0.90), false, 2.5)
-		draw_line(Vector2(-18.0, -28.0), Vector2(-6.0, -12.0), Color(1.0, 1.0, 1.0, 0.65), 3.0)
-		draw_line(Vector2(6.0, -24.0), Vector2(18.0, -6.0), Color(1.0, 1.0, 1.0, 0.50), 2.5)
-		draw_line(Vector2(-16.0, 6.0), Vector2(2.0, 22.0), Color(1.0, 1.0, 1.0, 0.45), 2.5)
+		draw_line(Vector2(-24.0, -44.0), Vector2(-8.0, -22.0), Color(1.0, 1.0, 1.0, 0.65), 3.0)
+		draw_line(Vector2(8.0, -38.0), Vector2(24.0, -14.0), Color(1.0, 1.0, 1.0, 0.50), 2.5)
+		draw_line(Vector2(-20.0, 4.0), Vector2(4.0, 24.0), Color(1.0, 1.0, 1.0, 0.45), 2.5)
 
 
 class StatusAuraOverlay extends Node2D:
