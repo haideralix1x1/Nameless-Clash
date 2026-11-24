@@ -52,12 +52,15 @@ var _anim_play_btn: Button
 var _anim_opt: OptionButton
 var _frame_slider: HSlider
 var _frame_lbl: Label
+var _kf_btns: Array[Button] = []
 var _flip_btn: Button
 var _part_btns: Dictionary = {}
 var _x_spin: SpinBox
 var _y_spin: SpinBox
 var _rot_spin: SpinBox
 var _z_spin: SpinBox
+var _sx_spin: SpinBox
+var _sy_spin: SpinBox
 var _status_lbl: Label
 
 var _selected_part: String = "hand_near"
@@ -68,12 +71,16 @@ var _per_agent_scope: bool = true
 var _agent_mode: bool = false
 var _all_anims_scope: bool = true
 var _anim_scope_btn: CheckButton
+var _per_frame_scope: bool = false
+var _frame_scope_btn: CheckButton
 var _facing_right: bool = true
 var _anim_playing: bool = false
 var _selected_anim: String = "idle"
 var _anim_timer: float = 0.0
 var _manual_frame: int = 0
 var _preview_weapon_id: int = 0
+var _copied_keyframe: Dictionary = {}
+var _temp_preview_overrides: Dictionary = {}
 
 var _dragging: bool = false
 var _drag_rotating: bool = false
@@ -341,7 +348,7 @@ func _build_ui() -> void:
 
 	top_hbox.add_child(_make_section_label("Stance:"))
 	_stance_opt = OptionButton.new()
-	_stance_opt.custom_minimum_size = Vector2(165, 0)
+	_stance_opt.custom_minimum_size = Vector2(140, 0)
 	for i in range(STANCES.size()):
 		_stance_opt.add_item(STANCE_LABELS[i], i)
 	_stance_opt.item_selected.connect(func(idx: int):
@@ -356,7 +363,7 @@ func _build_ui() -> void:
 
 	top_hbox.add_child(_make_section_label("Weapon:"))
 	_weapon_opt = OptionButton.new()
-	_weapon_opt.custom_minimum_size = Vector2(125, 0)
+	_weapon_opt.custom_minimum_size = Vector2(110, 0)
 	for w_idx in range(11):
 		var wd := WeaponData.get_weapon(w_idx, 0, false)
 		_weapon_opt.add_item("%d: %s" % [w_idx, wd.display_name], w_idx)
@@ -381,13 +388,13 @@ func _build_ui() -> void:
 	top_hbox.add_child(top_spacer)
 
 	var undo_btn := Button.new()
-	undo_btn.text = "Undo (Ctrl+Z)"
+	undo_btn.text = "Undo"
 	undo_btn.pressed.connect(_undo)
 	top_hbox.add_child(undo_btn)
 
 	var save_btn := Button.new()
 	save_btn.text = "SAVE POSE"
-	save_btn.custom_minimum_size = Vector2(120, 34)
+	save_btn.custom_minimum_size = Vector2(96, 30)
 	save_btn.modulate = Color(0.45, 1.0, 0.65)
 	save_btn.pressed.connect(_save_pose_data)
 	top_hbox.add_child(save_btn)
@@ -406,7 +413,7 @@ func _build_ui() -> void:
 	mid_split.add_child(left_dock)
 
 	var left_vb := VBoxContainer.new()
-	left_vb.add_theme_constant_override("separation", 8)
+	left_vb.add_theme_constant_override("separation", 5)
 	left_dock.add_child(left_vb)
 
 	left_vb.add_child(_make_section_label("Select Part to Move"))
@@ -432,6 +439,41 @@ func _build_ui() -> void:
 	rst_stance.text = "Reset Current Stance"
 	rst_stance.pressed.connect(_reset_selected_stance)
 	left_vb.add_child(rst_stance)
+
+	left_vb.add_child(_make_section_label("Background"))
+	var bg_row := HBoxContainer.new()
+	bg_row.add_theme_constant_override("separation", 4)
+	left_vb.add_child(bg_row)
+
+	var bg_picker := ColorPickerButton.new()
+	bg_picker.color = Color(0.07, 0.09, 0.13)
+	bg_picker.edit_alpha = false
+	bg_picker.custom_minimum_size = Vector2(44, 28)
+	bg_picker.tooltip_text = "Pick custom stage background color"
+	bg_picker.color_changed.connect(func(c: Color):
+		if is_instance_valid(_canvas_panel):
+			_canvas_panel.add_theme_stylebox_override("panel", _make_dock_style(c, 0))
+	)
+	bg_row.add_child(bg_picker)
+
+	var apply_bg := func(c: Color):
+		bg_picker.color = c
+		if is_instance_valid(_canvas_panel):
+			_canvas_panel.add_theme_stylebox_override("panel", _make_dock_style(c, 0))
+
+	for preset in [
+		["Dark", Color(0.07, 0.09, 0.13)],
+		["White", Color(0.95, 0.96, 0.98)],
+		["Gray", Color(0.45, 0.48, 0.52)],
+		["Green", Color(0.12, 0.68, 0.24)]
+	]:
+		var p_btn := Button.new()
+		p_btn.text = str(preset[0])
+		p_btn.custom_minimum_size = Vector2(0, 28)
+		p_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var p_col: Color = preset[1]
+		p_btn.pressed.connect(func(): apply_bg.call(p_col))
+		bg_row.add_child(p_btn)
 
 	var left_spacer := Control.new()
 	left_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -488,7 +530,7 @@ func _build_ui() -> void:
 	mid_split.add_child(right_dock)
 
 	var right_vb := VBoxContainer.new()
-	right_vb.add_theme_constant_override("separation", 10)
+	right_vb.add_theme_constant_override("separation", 5)
 	right_dock.add_child(right_vb)
 
 	right_vb.add_child(_make_section_label("Selected Part Transform"))
@@ -496,10 +538,16 @@ func _build_ui() -> void:
 	_y_spin = _add_spin_row(right_vb, "Pos Y:", -80.0, 80.0, 0.5)
 	_rot_spin = _add_spin_row(right_vb, "Rot (deg):", -180.0, 180.0, 1.0)
 	_z_spin = _add_spin_row(right_vb, "Z-Order:", -10.0, 10.0, 1.0)
+	_sx_spin = _add_spin_row(right_vb, "Scale X:", 0.2, 3.0, 0.05)
+	_sy_spin = _add_spin_row(right_vb, "Scale Y:", 0.2, 3.0, 0.05)
+	_sx_spin.value = 1.0
+	_sy_spin.value = 1.0
 	_x_spin.value_changed.connect(func(_v: float): _on_spin_changed())
 	_y_spin.value_changed.connect(func(_v: float): _on_spin_changed())
 	_rot_spin.value_changed.connect(func(_v: float): _on_spin_changed())
 	_z_spin.value_changed.connect(func(_v: float): _on_spin_changed())
+	_sx_spin.value_changed.connect(func(_v: float): _on_spin_changed())
+	_sy_spin.value_changed.connect(func(_v: float): _on_spin_changed())
 
 	right_vb.add_child(_make_section_label("Layer Order (Z)"))
 	var z_back_btn := Button.new()
@@ -519,35 +567,40 @@ func _build_ui() -> void:
 	var hint := Label.new()
 	hint.text = "Controls:\n• Left-Drag: Move part\n• Right-Drag / Wheel: Rotate\n• Ctrl+Z: Undo\n• Release mouse to drop"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD
-	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_font_size_override("font_size", 11)
 	hint.modulate = Color(0.72, 0.78, 0.86)
 	right_vb.add_child(hint)
 
 	# 3. BOTTOM TIMELINE BAR (Animation Preview, Scope, Flip, Frame Scrubber)
 	var bot_bar := PanelContainer.new()
-	bot_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
+	bot_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 5))
 	_pose_mode_root.add_child(bot_bar)
 
 	var bot_hbox := HBoxContainer.new()
-	bot_hbox.add_theme_constant_override("separation", 12)
+	bot_hbox.add_theme_constant_override("separation", 6)
 	bot_bar.add_child(bot_hbox)
 
 	_anim_play_btn = Button.new()
-	_anim_play_btn.text = "Activate Anim Preview"
+	_anim_play_btn.text = "▶ Play"
 	_anim_play_btn.toggle_mode = true
-	_anim_play_btn.custom_minimum_size = Vector2(170, 32)
+	_anim_play_btn.custom_minimum_size = Vector2(90, 28)
 	_anim_play_btn.toggled.connect(func(on: bool):
 		_anim_playing = on
-		_anim_play_btn.text = "Pause Anim Preview" if on else "Activate Anim Preview"
+		_anim_play_btn.text = "⏸ Pause" if on else "▶ Play"
+		if on:
+			_clear_temp_preview()
+			_sync_spinboxes_from_pose()
+			_refresh_character_pose()
 	)
 	bot_hbox.add_child(_anim_play_btn)
 
-	bot_hbox.add_child(_make_section_label("Animation:"))
+	bot_hbox.add_child(_make_section_label("Anim:"))
 	_anim_opt = OptionButton.new()
-	_anim_opt.custom_minimum_size = Vector2(150, 0)
+	_anim_opt.custom_minimum_size = Vector2(126, 0)
 	for i in range(ANIMS.size()):
 		_anim_opt.add_item(ANIM_LABELS[i], i)
 	_anim_opt.item_selected.connect(func(idx: int):
+		_clear_temp_preview()
 		_selected_anim = ANIMS[idx]
 		_anim_timer = 0.0
 		if _selected_anim == "agent_idle" or _selected_anim == "agent_attack":
@@ -564,25 +617,42 @@ func _build_ui() -> void:
 		var frames: Array = adef.get("frames", [0])
 		if not frames.is_empty():
 			_manual_frame = int(frames[0])
-			_frame_slider.set_value_no_signal(_manual_frame)
-			_frame_lbl.text = "Frame: %d" % _manual_frame
 		_sync_spinboxes_from_pose()
 		_refresh_character_pose()
 	)
 	bot_hbox.add_child(_anim_opt)
 
 	_anim_scope_btn = CheckButton.new()
-	_anim_scope_btn.text = "Apply to All Animations"
+	_anim_scope_btn.text = "All Anims"
 	_anim_scope_btn.button_pressed = true
 	_anim_scope_btn.toggled.connect(func(on: bool):
 		_all_anims_scope = on
+		if on and is_instance_valid(_frame_scope_btn):
+			_per_frame_scope = false
+			_frame_scope_btn.set_pressed_no_signal(false)
 		_sync_spinboxes_from_pose()
 		_refresh_character_pose()
 	)
 	bot_hbox.add_child(_anim_scope_btn)
 
+	_frame_scope_btn = CheckButton.new()
+	_frame_scope_btn.text = "● REC"
+	_frame_scope_btn.button_pressed = false
+	_frame_scope_btn.toggled.connect(func(on: bool):
+		_clear_temp_preview()
+		_per_frame_scope = on
+		_frame_scope_btn.modulate = Color(1.0, 0.35, 0.35) if on else Color.WHITE
+		if on and is_instance_valid(_anim_scope_btn):
+			_all_anims_scope = false
+			_anim_scope_btn.set_pressed_no_signal(false)
+		_sync_spinboxes_from_pose()
+		_refresh_character_pose()
+		_refresh_keyframe_strip()
+	)
+	bot_hbox.add_child(_frame_scope_btn)
+
 	_flip_btn = Button.new()
-	_flip_btn.text = "Flip Facing"
+	_flip_btn.text = "Flip"
 	_flip_btn.pressed.connect(func():
 		_facing_right = not _facing_right
 		_refresh_character_pose()
@@ -591,21 +661,118 @@ func _build_ui() -> void:
 
 	_frame_lbl = Label.new()
 	_frame_lbl.text = "Frame: 0"
-	_frame_lbl.custom_minimum_size = Vector2(68, 0)
+	_frame_lbl.custom_minimum_size = Vector2(56, 0)
 	bot_hbox.add_child(_frame_lbl)
+
+	var tl_vbox := VBoxContainer.new()
+	tl_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tl_vbox.add_theme_constant_override("separation", 0)
+	bot_hbox.add_child(tl_vbox)
 
 	_frame_slider = HSlider.new()
 	_frame_slider.min_value = 0
 	_frame_slider.max_value = 7
 	_frame_slider.step = 1
+	_frame_slider.tick_count = 8
+	_frame_slider.ticks_on_borders = true
 	_frame_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_frame_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_frame_slider.value_changed.connect(func(val: float):
+		_clear_temp_preview()
 		_manual_frame = int(val)
-		_frame_lbl.text = "Frame: %d" % _manual_frame
+		_sync_spinboxes_from_pose()
 		_refresh_character_pose()
 	)
-	bot_hbox.add_child(_frame_slider)
+	tl_vbox.add_child(_frame_slider)
+
+	var kf_row := HBoxContainer.new()
+	kf_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	kf_row.add_theme_constant_override("separation", 2)
+	tl_vbox.add_child(kf_row)
+	_kf_btns.clear()
+	for fi in range(8):
+		var fb := Button.new()
+		fb.text = str(fi)
+		fb.custom_minimum_size = Vector2(24, 20)
+		fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var frame_idx := fi
+		fb.pressed.connect(func():
+			_clear_temp_preview()
+			_manual_frame = frame_idx
+			_sync_spinboxes_from_pose()
+			_refresh_character_pose()
+		)
+		kf_row.add_child(fb)
+		_kf_btns.append(fb)
+
+	var copy_kf_btn := Button.new()
+	copy_kf_btn.text = "Copy"
+	copy_kf_btn.custom_minimum_size = Vector2(48, 26)
+	copy_kf_btn.pressed.connect(func():
+		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		var src_dict: Dictionary = {}
+		if _per_agent_scope:
+			var ak := str(_selected_part_id)
+			if _pose_data["agents"].has(ak) and _pose_data["agents"][ak].has(fkey):
+				src_dict = (_pose_data["agents"][ak][fkey] as Dictionary).duplicate(true)
+		elif _pose_data["stances"].has(fkey):
+			src_dict = (_pose_data["stances"][fkey] as Dictionary).duplicate(true)
+		if src_dict.is_empty():
+			src_dict = _get_active_pose_dict().duplicate(true)
+		_copied_keyframe = src_dict
+		if is_instance_valid(_status_lbl):
+			_status_lbl.text = "Copied keyframe from Frame %d" % _manual_frame
+			_status_lbl.modulate = Color(0.45, 0.90, 1.0)
+	)
+	bot_hbox.add_child(copy_kf_btn)
+
+	var paste_kf_btn := Button.new()
+	paste_kf_btn.text = "Paste"
+	paste_kf_btn.custom_minimum_size = Vector2(52, 26)
+	paste_kf_btn.pressed.connect(func():
+		if _copied_keyframe.is_empty():
+			if is_instance_valid(_status_lbl):
+				_status_lbl.text = "Nothing copied! Click Copy first."
+				_status_lbl.modulate = Color(1.0, 0.65, 0.35)
+			return
+		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		_push_undo()
+		if _per_agent_scope:
+			var ak := str(_selected_part_id)
+			if not _pose_data["agents"].has(ak):
+				_pose_data["agents"][ak] = {}
+			_pose_data["agents"][ak][fkey] = _copied_keyframe.duplicate(true)
+		else:
+			_pose_data["stances"][fkey] = _copied_keyframe.duplicate(true)
+		ModularCharacter._pose_overrides = _pose_data.duplicate(true)
+		ModularCharacter._pose_overrides_loaded = true
+		_sync_spinboxes_from_pose()
+		_refresh_character_pose()
+		_refresh_keyframe_strip()
+		if is_instance_valid(_status_lbl):
+			_status_lbl.text = "Pasted keyframe to Frame %d" % _manual_frame
+			_status_lbl.modulate = Color(0.45, 1.0, 0.65)
+	)
+	bot_hbox.add_child(paste_kf_btn)
+
+	var del_kf_btn := Button.new()
+	del_kf_btn.text = "Del"
+	del_kf_btn.custom_minimum_size = Vector2(40, 26)
+	del_kf_btn.pressed.connect(func():
+		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		_push_undo()
+		if _per_agent_scope:
+			var ak := str(_selected_part_id)
+			if _pose_data["agents"].has(ak):
+				(_pose_data["agents"][ak] as Dictionary).erase(fkey)
+		else:
+			(_pose_data["stances"] as Dictionary).erase(fkey)
+		ModularCharacter._pose_overrides = _pose_data.duplicate(true)
+		ModularCharacter._pose_overrides_loaded = true
+		_sync_spinboxes_from_pose()
+		_refresh_character_pose()
+		_refresh_keyframe_strip()
+	)
+	bot_hbox.add_child(del_kf_btn)
 
 	_build_ui_setter_tab(main_vbox)
 	_build_range_editor_tab(main_vbox)
@@ -667,13 +834,15 @@ func _select_part(pname: String) -> void:
 
 
 func _get_target_stance_key() -> String:
+	if _per_frame_scope:
+		return _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
 	if _all_anims_scope:
 		return _selected_stance
 	return _selected_stance + "@" + _selected_anim
 
 
 func _get_active_pose_dict() -> Dictionary:
-	return ModularCharacter.get_pose_override(_selected_part_id, _selected_stance, _selected_anim)
+	return ModularCharacter.get_pose_override(_selected_part_id, _selected_stance, _selected_anim, _manual_frame)
 
 
 func _get_default_part_pose(pname: String) -> Dictionary:
@@ -703,12 +872,22 @@ func _get_part_val(pname: String) -> Dictionary:
 	return _get_default_part_pose(pname)
 
 
+func _clear_temp_preview() -> void:
+	if _temp_preview_overrides.is_empty():
+		return
+	_temp_preview_overrides.clear()
+	ModularCharacter._pose_overrides = _pose_data.duplicate(true)
+	ModularCharacter._pose_overrides_loaded = true
+
+
 func _set_part_val(pname: String, val: Dictionary) -> void:
 	var old_hn: Dictionary = (_drag_start_val if _dragging else _get_part_val("hand_near")) if pname == "hand_near" else {}
 	var base_w: Dictionary = (_drag_start_weapon_val if (_dragging and not _drag_start_weapon_val.is_empty()) else _get_part_val("weapon")) if pname == "hand_near" else {}
 	var skey := _get_target_stance_key()
 	var target_container: Dictionary
-	if _per_agent_scope:
+	if not _per_frame_scope:
+		target_container = _temp_preview_overrides
+	elif _per_agent_scope:
 		var agents: Dictionary = _pose_data["agents"]
 		var ak := str(_selected_part_id)
 		if not agents.has(ak):
@@ -721,12 +900,19 @@ func _set_part_val(pname: String, val: Dictionary) -> void:
 		if not stances.has(skey):
 			stances[skey] = {}
 		target_container = stances[skey]
-	target_container[pname] = {
+	var part_dict := {
 		"x": snappedf(float(val.get("x", 0.0)), 0.5),
 		"y": snappedf(float(val.get("y", 0.0)), 0.5),
 		"rot": snappedf(float(val.get("rot", 0.0)), 1.0),
 		"z": int(round(float(val.get("z", 0))))
 	}
+	var sx_val := snappedf(float(val.get("sx", 1.0)), 0.05)
+	var sy_val := snappedf(float(val.get("sy", 1.0)), 0.05)
+	if absf(sx_val - 1.0) > 0.001:
+		part_dict["sx"] = sx_val
+	if absf(sy_val - 1.0) > 0.001:
+		part_dict["sy"] = sy_val
+	target_container[pname] = part_dict
 	if pname == "hand_near" and (_selected_stance != "none" or _agent_mode):
 		var new_hn: Dictionary = target_container["hand_near"]
 		var dx: float = float(new_hn["x"]) - float(old_hn.get("x", 0.0))
@@ -748,7 +934,25 @@ func _set_part_val(pname: String, val: Dictionary) -> void:
 				"z": int(round(float(base_w.get("z", 0))))
 			}
 	# Live-sync ModularCharacter static cache so preview reflects edits immediately
-	ModularCharacter._pose_overrides = _pose_data.duplicate(true)
+	var preview_data := _pose_data.duplicate(true)
+	if not _per_frame_scope and not _temp_preview_overrides.is_empty():
+		if _per_agent_scope:
+			var ak := str(_selected_part_id)
+			if not preview_data["agents"].has(ak):
+				preview_data["agents"][ak] = {}
+			if not preview_data["agents"][ak].has(skey):
+				preview_data["agents"][ak][skey] = {}
+			for pk in _temp_preview_overrides:
+				preview_data["agents"][ak][skey][pk] = (_temp_preview_overrides[pk] as Dictionary).duplicate(true)
+		else:
+			if not preview_data["stances"].has(skey):
+				preview_data["stances"][skey] = {}
+			for pk in _temp_preview_overrides:
+				preview_data["stances"][skey][pk] = (_temp_preview_overrides[pk] as Dictionary).duplicate(true)
+		if is_instance_valid(_status_lbl):
+			_status_lbl.text = "Unrecorded preview (enable ● REC to record)"
+			_status_lbl.modulate = Color(1.0, 0.78, 0.35)
+	ModularCharacter._pose_overrides = preview_data
 	ModularCharacter._pose_overrides_loaded = true
 
 
@@ -759,6 +963,10 @@ func _sync_spinboxes_from_pose() -> void:
 	_y_spin.value = float(val.get("y", 0.0))
 	_rot_spin.value = float(val.get("rot", 0.0))
 	_z_spin.value = float(val.get("z", 0))
+	if is_instance_valid(_sx_spin):
+		_sx_spin.value = float(val.get("sx", 1.0))
+	if is_instance_valid(_sy_spin):
+		_sy_spin.value = float(val.get("sy", 1.0))
 	_syncing_ui = false
 
 
@@ -786,7 +994,14 @@ func _on_spin_changed() -> void:
 	if _syncing_ui:
 		return
 	_push_undo()
-	_set_part_val(_selected_part, {"x": _x_spin.value, "y": _y_spin.value, "rot": _rot_spin.value, "z": int(_z_spin.value)})
+	_set_part_val(_selected_part, {
+		"x": _x_spin.value,
+		"y": _y_spin.value,
+		"rot": _rot_spin.value,
+		"z": int(_z_spin.value),
+		"sx": _sx_spin.value if is_instance_valid(_sx_spin) else 1.0,
+		"sy": _sy_spin.value if is_instance_valid(_sy_spin) else 1.0
+	})
 	_refresh_character_pose()
 
 
@@ -821,6 +1036,29 @@ func _reset_selected_stance() -> void:
 	_refresh_character_pose()
 
 
+func _refresh_keyframe_strip() -> void:
+	if is_instance_valid(_frame_slider):
+		_frame_slider.set_value_no_signal(_manual_frame)
+	if is_instance_valid(_frame_lbl):
+		_frame_lbl.text = "Frame: %d" % _manual_frame
+	if _kf_btns.is_empty():
+		return
+	var ak := str(_selected_part_id)
+	var agent_dict: Dictionary = _pose_data.get("agents", {}).get(ak, {}) if _pose_data.get("agents", {}).get(ak) is Dictionary else {}
+	var stance_dict: Dictionary = _pose_data.get("stances", {}) if _pose_data.get("stances") is Dictionary else {}
+	for fi in range(mini(8, _kf_btns.size())):
+		var fb: Button = _kf_btns[fi]
+		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(fi)
+		var has_key: bool = (agent_dict.has(fkey) and not (agent_dict[fkey] as Dictionary).is_empty()) or (stance_dict.has(fkey) and not (stance_dict[fkey] as Dictionary).is_empty())
+		fb.text = ("◆" + str(fi)) if has_key else str(fi)
+		if fi == _manual_frame:
+			fb.modulate = Color(1.0, 0.35, 0.35) if _per_frame_scope else Color(0.30, 0.95, 1.0)
+		elif has_key:
+			fb.modulate = Color(1.0, 0.85, 0.30)
+		else:
+			fb.modulate = Color(0.82, 0.86, 0.92)
+
+
 func _process(delta: float) -> void:
 	if _canvas_panel != null:
 		_stage_root.position = _canvas_panel.size * 0.5
@@ -828,12 +1066,10 @@ func _process(delta: float) -> void:
 	if _anim_playing:
 		_anim_timer += delta
 		var adef: Dictionary = PREVIEW_ANIM_DEFS.get(_selected_anim, {"frames": [0, 1], "fps": 3.5, "loop": true})
-		var frames: Array = adef.get("frames", [0])
-		var fps: float = float(adef.get("fps", 4.0))
+		var frames: Array = [0, 1, 2, 3, 4, 5, 6, 7] if _per_frame_scope else adef.get("frames", [0])
+		var fps: float = 6.0 if _per_frame_scope else float(adef.get("fps", 4.0))
 		var idx: int = int(_anim_timer * fps) % max(1, frames.size())
 		_manual_frame = int(frames[idx])
-		_frame_slider.set_value_no_signal(_manual_frame)
-		_frame_lbl.text = "Frame: %d" % _manual_frame
 		_refresh_character_pose()
 	_overlay.queue_redraw()
 
@@ -841,6 +1077,7 @@ func _process(delta: float) -> void:
 func _refresh_character_pose() -> void:
 	if _modular == null:
 		return
+	_refresh_keyframe_strip()
 	var flip_h := not _facing_right
 	_modular.freeze_procedural_anim = true
 	_modular.set_sync_frame(_manual_frame, flip_h)
@@ -872,10 +1109,15 @@ func _refresh_character_pose() -> void:
 	# Procedural preview motion applied to the hand so the socketed weapon follows automatically
 	if _anim_playing and _modular._sprite_hands != null:
 		if _selected_anim == "agent_attack":
+			var ag_atk: Dictionary = AgentData.get_agent(_selected_agent_idx)
+			var is_ranged_atk: bool = bool((ag_atk.get("base_weapon", {}) as Dictionary).get("ranged", false))
 			var swing_phase: float = fmod(_anim_timer * 2.2, 1.0)
-			var swing_ang: float = sin(swing_phase * TAU) * 45.0
-			_modular._sprite_hands.rotation += dir * deg_to_rad(swing_ang)
-			_modular._sprite_hands.position.x += dir * sin(swing_phase * TAU) * 4.0
+			if is_ranged_atk:
+				_modular._sprite_hands.position.x -= dir * absf(sin(swing_phase * TAU)) * 3.0
+			else:
+				var swing_ang: float = sin(swing_phase * TAU) * 45.0
+				_modular._sprite_hands.rotation += dir * deg_to_rad(swing_ang)
+				_modular._sprite_hands.position.x += dir * sin(swing_phase * TAU) * 4.0
 		elif _selected_anim == "agent_idle":
 			_modular._sprite_hands.position.y += sin(_anim_timer * 3.5) * 1.5
 		elif _selected_anim == "jetpack":
@@ -886,6 +1128,7 @@ func _refresh_character_pose() -> void:
 	_weapon_pivot.position = sock["pos"] as Vector2
 	_weapon_pivot.z_index = int(sock["z"])
 	_weapon_pivot.rotation = float(sock["rot"])
+	_weapon_pivot.scale = Vector2(float(w_ov.get("sx", 1.0)), float(w_ov.get("sy", 1.0)))
 
 	if _agent_mode and _agent_weapon_node != null:
 		var ag: Dictionary = AgentData.get_agent(_selected_agent_idx)

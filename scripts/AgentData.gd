@@ -177,8 +177,8 @@ const AGENTS: Array[Dictionary] = [
 		"role": "Outback Marksman",
 		"accent": Color(0.92, 0.42, 0.24),
 		"base_weapon": {
-			"name": "Frontier Hunting Bow",
-			"style": "bow",
+			"name": "Frontier Revolver",
+			"style": "bruski_revolver",
 			"damage": 24,
 			"cooldown": 0.36,
 			"range": 260.0,

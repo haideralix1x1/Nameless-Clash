@@ -104,16 +104,19 @@ static func _merge_pose_bucket(dst: Dictionary, bucket: Variant) -> void:
 			dst[pk] = (b[pk] as Dictionary).duplicate(true)
 
 
-static func get_pose_override(part_id: int, stance: String, anim_name: String = "") -> Dictionary:
+static func get_pose_override(part_id: int, stance: String, anim_name: String = "", frame_idx: int = -1) -> Dictionary:
 	if not _pose_overrides_loaded:
 		reload_pose_overrides()
 	var merged: Dictionary = {}
 	var anim_key: String = (stance + "@" + anim_name) if anim_name != "" else ""
+	var frame_key: String = (anim_key + "#f" + str(frame_idx)) if (anim_key != "" and frame_idx >= 0) else ""
 	var stances: Dictionary = _pose_overrides.get("stances", {})
 	if stances.has(stance):
 		_merge_pose_bucket(merged, stances[stance])
 	if anim_key != "" and stances.has(anim_key):
 		_merge_pose_bucket(merged, stances[anim_key])
+	if frame_key != "" and stances.has(frame_key):
+		_merge_pose_bucket(merged, stances[frame_key])
 	var agents: Dictionary = _pose_overrides.get("agents", {})
 	var ak := str(part_id)
 	if agents.has(ak) and agents[ak] is Dictionary:
@@ -122,6 +125,8 @@ static func get_pose_override(part_id: int, stance: String, anim_name: String = 
 			_merge_pose_bucket(merged, ast[stance])
 		if anim_key != "" and ast.has(anim_key):
 			_merge_pose_bucket(merged, ast[anim_key])
+		if frame_key != "" and ast.has(frame_key):
+			_merge_pose_bucket(merged, ast[frame_key])
 	return merged
 
 
@@ -402,7 +407,9 @@ func _apply_sprite_strip(spr: Sprite2D, path: String) -> void:
 	if tex != null:
 		spr.texture = tex
 		var fh := maxi(tex.get_height(), 1)
-		spr.scale = Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
+		var bs := Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
+		spr.scale = bs
+		spr.set_meta("base_scale", bs)
 	spr.hframes = SHEET_FRAMES
 
 
@@ -415,7 +422,16 @@ func _apply_animated_strip(anim_node: AnimatedSprite2D, path: String) -> void:
 		var tex := _load_texture(path)
 		if tex != null:
 			var fh := maxi(tex.get_height(), 1)
-			anim_node.scale = Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
+			var bs := Vector2.ONE * (float(FRAME_SIZE.y) / float(fh))
+			anim_node.scale = bs
+			anim_node.set_meta("base_scale", bs)
+
+
+func _apply_part_scale(node: Node2D, ov_part: Dictionary) -> void:
+	if node == null:
+		return
+	var bs: Vector2 = node.get_meta("base_scale", Vector2.ONE) if node.has_meta("base_scale") else node.scale
+	node.scale = Vector2(bs.x * float(ov_part.get("sx", 1.0)), bs.y * float(ov_part.get("sy", 1.0)))
 
 
 func _load_texture(path: String) -> Texture2D:
@@ -681,7 +697,8 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		return
 	var dir: float = 1.0 if facing_r else -1.0
 	var active_stance: String = "throw_bomb" if (stance == "throw_bomb" or throw_prog >= 0.0) else stance
-	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim)
+	var active_frame: int = _manual_frame if _manual_sync_mode else (_get_sheet_frame_for_anim(_current_anim, _anim_legs.frame) if _anim_legs != null else 0)
+	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim, active_frame)
 
 	var head_ov: Dictionary = ov.get("head", {})
 	var jet_bob_y: float = sin(_jet_bob_t) * 3.0 if (_current_anim == "jetpack" and not freeze_procedural_anim) else 0.0
@@ -693,25 +710,30 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		_sprite_gear.position = head_pos
 		_sprite_gear.rotation = head_rot
 		_sprite_gear.z_index = head_z
+		_apply_part_scale(_sprite_gear, head_ov)
 	if _anim_head != null:
 		_anim_head.position = head_pos
 		_anim_head.rotation = head_rot
 		_anim_head.z_index = head_z
+		_apply_part_scale(_anim_head, head_ov)
 	var torso_ov: Dictionary = ov.get("torso", {})
 	if _anim_torso != null:
 		_anim_torso.position = Vector2(float(torso_ov.get("x", 0.0)) * dir, float(torso_ov.get("y", 0.0)) + jet_bob_y)
 		_anim_torso.rotation = dir * deg_to_rad(float(torso_ov.get("rot", 0.0)))
 		_anim_torso.z_index = int(torso_ov.get("z", 0))
+		_apply_part_scale(_anim_torso, torso_ov)
 	var legs_ov: Dictionary = ov.get("legs", {})
 	if _anim_legs != null:
 		_anim_legs.position = Vector2(float(legs_ov.get("x", 0.0)) * dir, float(legs_ov.get("y", 0.0)) + jet_bob_y)
 		_anim_legs.rotation = dir * deg_to_rad(float(legs_ov.get("rot", 0.0)))
 		_anim_legs.z_index = int(legs_ov.get("z", 0))
+		_apply_part_scale(_anim_legs, legs_ov)
 	var back_ov: Dictionary = ov.get("back", {})
 	if _sprite_back != null and not ((_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _current_anim == "jetpack"):
 		_sprite_back.position = Vector2(float(back_ov.get("x", 0.0)) * dir, float(back_ov.get("y", 0.0)) + jet_bob_y)
 		_sprite_back.rotation = dir * deg_to_rad(float(back_ov.get("rot", 0.0)))
 		_sprite_back.z_index = int(back_ov.get("z", 0))
+		_apply_part_scale(_sprite_back, back_ov)
 
 	if _current_anim == "dead" or stance == "none":
 		var hn_ov: Dictionary = ov.get("hand_near", {})
@@ -719,11 +741,12 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 		_sprite_hands.z_index = int(hn_ov.get("z", 1))
 		_sprite_hands.position = Vector2(float(hn_ov.get("x", -15.5)) * dir, float(hn_ov.get("y", 8.0)) + jet_bob_y)
 		_sprite_hands.rotation = dir * deg_to_rad(float(hn_ov.get("rot", 0.0)))
+		_apply_part_scale(_sprite_hands, hn_ov)
 		if _sprite_hand_far != null:
 			_sprite_hand_far.z_index = int(hf_ov.get("z", 0))
 			_sprite_hand_far.position = Vector2(float(hf_ov.get("x", 23.0)) * dir, float(hf_ov.get("y", 7.5)) + jet_bob_y)
 			_sprite_hand_far.rotation = dir * deg_to_rad(float(hf_ov.get("rot", 0.0)))
-			_sprite_hand_far.scale = _sprite_hands.scale
+			_apply_part_scale(_sprite_hand_far, hf_ov)
 		return
 
 	var base_ang: float = 0.0 if facing_r else PI
@@ -767,9 +790,10 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	_sprite_hands.position = Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y)) + jet_bob_y) - kick_vec
 	var hn_rot_rad: float = deg_to_rad(float(hn_w["rot"])) if hn_w.has("rot") else hn_rot_def
 	_sprite_hands.rotation = dir * hn_rot_rad + rel_tilt * tilt_mul - kick_rot
+	_apply_part_scale(_sprite_hands, hn_w)
 	if _sprite_hand_far != null:
 		_sprite_hand_far.z_index = int(hf_w.get("z", 0))
-		_sprite_hand_far.scale = _sprite_hands.scale
+		_apply_part_scale(_sprite_hand_far, hf_w)
 		var far_kick: Vector2 = kick_vec * 0.65 if stance == "dual" else Vector2.ZERO
 		_sprite_hand_far.position = Vector2(float(hf_w.get("x", hf_def.x)) * dir, float(hf_w.get("y", hf_def.y)) + jet_bob_y) - far_kick
 		var hf_rot_rad: float = deg_to_rad(float(hf_w["rot"])) if hf_w.has("rot") else hf_rot_def

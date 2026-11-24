@@ -5476,6 +5476,7 @@ class AgentWeaponVisual extends Node2D:
 	const TEX_YAGAMI_KATANA: Texture2D = preload("res://assets/sprites/weapons/yagami_katana.png")
 	const TEX_ROOK_FROST_BLADE: Texture2D = preload("res://assets/sprites/weapons/rook_frost_blade.png")
 	const TEX_AFERA_SPEAR: Texture2D = preload("res://assets/sprites/weapons/afera_tribal_spear.png")
+	const TEX_BRUSKI_REVOLVER: Texture2D = preload("res://assets/sprites/weapons/bruski_revolver.png")
 	const TEX_WEAPONS_SHEET_VIS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 	var weapon_style: String = "sword"
 	var weapon_color: Color = Color(0.85, 0.90, 0.98)
@@ -5493,6 +5494,8 @@ class AgentWeaponVisual extends Node2D:
 				var fw: float = ws.x / 11.0
 				var fh: float = ws.y / 3.0
 				draw_texture_rect_region(TEX_WEAPONS_SHEET_VIS, Rect2(-6.0, -14.0, 56.0, 28.0), Rect2(9.0 * fw, 0.0, fw, fh))
+			"bruski_revolver":
+				draw_texture_rect(TEX_BRUSKI_REVOLVER, Rect2(-4.0, -11.0, 38.0, 22.0), false)
 			"afera_spear":
 				draw_set_transform(Vector2(10.0, 2.0), -0.18, Vector2.ONE)
 				draw_texture_rect(TEX_AFERA_SPEAR, Rect2(-22.0, -5.5, 76.0, 11.0), false)
