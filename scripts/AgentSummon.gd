@@ -188,39 +188,51 @@ func _physics_process(delta: float) -> void:
 
 	match summon_kind:
 		"dragon_strike":
+			var detect_r: float = 185.0
+			var d_space := get_world_2d().direct_space_state
+			if not is_instance_valid(linked_target) or (linked_target.has_method("is_alive") and not linked_target.is_alive()):
+				linked_target = null
+				var cand: Node2D = _find_nearest_enemy(detect_r)
+				if cand != null:
+					var los_hit := d_space.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, cand.global_position, 1))
+					if los_hit.is_empty():
+						linked_target = cand
 			var d_dir: Vector2 = flight_dir.normalized() if flight_dir.length() > 0.01 else Vector2(move_dir_x, 0.0)
-			global_position += d_dir * 560.0 * delta
+			var spd_d: float = 540.0
+			if is_instance_valid(linked_target):
+				d_dir = (linked_target.global_position - global_position).normalized()
+				flight_dir = d_dir
+				spd_d = 660.0
+			global_position += d_dir * spd_d * delta
 			if is_instance_valid(_sprite):
 				_sprite.flip_h = d_dir.x < 0.0
 				_sprite.position.y = sin(_phase * 2.2) * 8.0
 				var d_flap: float = sin(_phase * 3.0)
 				_sprite.scale = Vector2(_base_scale + d_flap * 0.06, _base_scale - d_flap * 0.07)
-			var detected_enemy: Node2D = _find_nearest_enemy(78.0)
-			if detected_enemy != null:
-				var d_space := get_world_2d().direct_space_state
-				var los_hit := d_space.intersect_ray(PhysicsRayQueryParameters2D.create(global_position, detected_enemy.global_position, 1))
-				if los_hit.is_empty():
-					var blast_pos: Vector2 = detected_enemy.global_position
-					if can_deal:
-						for p in get_tree().get_nodes_in_group("players"):
-							if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
-								if p.has_method("is_alive") and not p.is_alive():
-									continue
-								if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
-									continue
-								if (p as Node2D).global_position.distance_to(blast_pos) <= 155.0 and p.has_method("apply_hit"):
-									var kb: Vector2 = ((p as Node2D).global_position - blast_pos).normalized() * 320.0
-									p.apply_hit(damage, owner_peer_id, weapon_name, owner_name, kb)
-					var exp_scene: PackedScene = load("res://scenes/Explosion.tscn") as PackedScene
-					if exp_scene != null and get_parent() != null:
-						var exp := exp_scene.instantiate()
-						exp.global_position = blast_pos
-						exp.explosion_radius = 155.0
-						exp.max_damage = 0
-						exp.can_deal_damage = false
-						get_parent().add_child(exp)
-					queue_free()
-					return
+			queue_redraw()
+			var blast_target: Node2D = linked_target if (is_instance_valid(linked_target) and global_position.distance_to(linked_target.global_position) <= 58.0) else _find_nearest_enemy(58.0)
+			if blast_target != null:
+				var blast_pos: Vector2 = blast_target.global_position
+				if can_deal:
+					for p in get_tree().get_nodes_in_group("players"):
+						if is_instance_valid(p) and int(p.get("peer_id")) != owner_peer_id:
+							if p.has_method("is_alive") and not p.is_alive():
+								continue
+							if NetworkManager.is_team_mode() and int(p.get("team_id")) == owner_team:
+								continue
+							if (p as Node2D).global_position.distance_to(blast_pos) <= 155.0 and p.has_method("apply_hit"):
+								var kb: Vector2 = ((p as Node2D).global_position - blast_pos).normalized() * 320.0
+								p.apply_hit(damage, owner_peer_id, weapon_name, owner_name, kb)
+				var exp_scene: PackedScene = load("res://scenes/Explosion.tscn") as PackedScene
+				if exp_scene != null and get_parent() != null:
+					var exp := exp_scene.instantiate()
+					exp.global_position = blast_pos
+					exp.explosion_radius = 155.0
+					exp.max_damage = 0
+					exp.can_deal_damage = false
+					get_parent().add_child(exp)
+				queue_free()
+				return
 		"flash_bird", "winged_lion", "bat", "shadow_mummy", "giant_snake", "mini_prism":
 			var spd: float = 340.0 if summon_kind == "winged_lion" else (320.0 if summon_kind == "giant_snake" else (300.0 if summon_kind == "flash_bird" else 260.0))
 			var detect_r: float = 280.0 if summon_kind == "winged_lion" else (4000.0 if summon_kind == "bat" else 950.0)
@@ -542,8 +554,13 @@ func _find_nearest_enemy(max_range: float) -> Node2D:
 
 func _draw() -> void:
 	match summon_kind:
-		"flash_bird", "bat", "barbarian", "zombie_dog", "bomb_eagle", "shadow_mummy", "small_snake", "giant_snake", "bee", "dragon_strike":
+		"flash_bird", "bat", "barbarian", "zombie_dog", "bomb_eagle", "shadow_mummy", "small_snake", "giant_snake", "bee":
 			pass
+		"dragon_strike":
+			var pulse_d: float = 0.72 + 0.28 * sin(_phase * 2.5)
+			var lock_col: Color = Color(1.0, 0.36, 0.14) if is_instance_valid(linked_target) else Color(0.28, 1.0, 0.62)
+			draw_circle(Vector2.ZERO, 185.0, Color(lock_col.r, lock_col.g, lock_col.b, 0.08 * pulse_d))
+			draw_arc(Vector2.ZERO, 185.0, 0.0, TAU, 40, Color(lock_col.r, lock_col.g, lock_col.b, 0.55 * pulse_d), 2.5)
 		"blood_bubble":
 			draw_circle(Vector2.ZERO, 10.0, Color(0.88, 0.12, 0.22, 0.65))
 			draw_arc(Vector2.ZERO, 10.0, 0.0, TAU, 18, Color(1.0, 0.35, 0.45, 0.92), 2.0)

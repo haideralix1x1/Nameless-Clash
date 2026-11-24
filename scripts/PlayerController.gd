@@ -2382,9 +2382,9 @@ func _update_visual_state(delta: float) -> void:
 		_modular_rig.modulate = Color.WHITE
 
 	if earth_shake_timer > 0.0 and not is_dead and boar_ride_timer <= 0.0:
-		_modular_rig.position = Vector2(randf_range(-4.5, 4.5), randf_range(-3.0, 2.5))
+		_modular_rig.position = Vector2(randf_range(-4.5, 4.5), -16.5 + randf_range(-3.0, 2.5))
 	elif boar_ride_timer <= 0.0:
-		_modular_rig.position = Vector2.ZERO
+		_modular_rig.position = Vector2(0.0, -16.5)
 
 	if invis_timer > 0.0 and not is_dead:
 		var invis_alpha: float = 0.35 if (is_local_human or is_preview_dummy) else 0.0
@@ -2436,7 +2436,8 @@ func _update_visual_state(delta: float) -> void:
 	if is_instance_valid(_modular_rig):
 		var sock: Dictionary = _modular_rig.get_weapon_socket_transform(active_stance, facing_right, w_ov, def_wy)
 		var crouch_y: float = 3.0 if (is_crouching and w_ov.has("y")) else 0.0
-		_weapon_pivot.position = (sock["pos"] as Vector2) + Vector2(0.0, crouch_y)
+		var rig_scale_ratio: float = _modular_rig.scale.x / 0.92
+		_weapon_pivot.position = _modular_rig.position + (sock["pos"] as Vector2) * rig_scale_ratio + Vector2(0.0, crouch_y)
 		_weapon_pivot.z_index = int(sock["z"])
 		if NetworkManager.is_agent_clash_mode():
 			extra_pose_rot = float(sock["pose_rot"])
@@ -3363,7 +3364,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				control_lock_timer = 0.72
 				var dir_x: float = 1.0 if tgt_je.global_position.x >= cast_pos.x else -1.0
 				facing_right = dir_x >= 0.0
-				aim_angle = 0.0 if facing_right else PI
+				aim_angle = (tgt_je.global_position - cast_pos).angle()
 				var start_p: Vector2 = cast_pos
 				var land_p: Vector2 = tgt_je.global_position + Vector2(-28.0 * dir_x, -4.0)
 				if tgt_je.has_method("apply_stun"):
@@ -3381,10 +3382,15 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 						var arc_y: float = -sin(t * PI) * 82.0
 						global_position = start_p.lerp(land_p, t) + Vector2(0.0, arc_y)
 						velocity = Vector2.ZERO
+						if is_instance_valid(tgt_je):
+							aim_angle = (tgt_je.global_position - global_position).angle()
+							facing_right = tgt_je.global_position.x >= global_position.x
 				, 0.0, 1.0, 0.36)
 				jump_tw.finished.connect(func():
 					if is_instance_valid(self) and not is_dead:
+						_melee_swing_timer = 0.22
 						if is_instance_valid(tgt_je) and (not tgt_je.has_method("is_alive") or tgt_je.is_alive()):
+							aim_angle = (tgt_je.global_position - global_position).angle()
 							if local_auth and tgt_je.has_method("apply_hit"):
 								tgt_je.apply_hit(dmg, peer_id, ab_name, player_name, Vector2(dir_x * 220.0, -140.0))
 							_spawn_rising_particles(tgt_je.global_position, col, false, 10)
@@ -4221,7 +4227,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if is_instance_valid(_boar_sprite):
 			_boar_sprite.visible = false
 		if is_instance_valid(_modular_rig):
-			_modular_rig.position.y = 0.0
+			_modular_rig.position.y = -16.5
 			_modular_rig.z_index = 0
 	if boar_ride_timer > 0.0:
 		for k in _boar_hit_cooldowns.keys():
@@ -5931,29 +5937,9 @@ class SpearImpaleVfx extends Node2D:
 	func _draw() -> void:
 		if not is_instance_valid(caster):
 			return
-		var c_local: Vector2 = to_local(caster.global_position + Vector2(0.0, -4.0))
-		var t_local: Vector2 = to_local(target_pos + Vector2(0.0, -6.0))
-		var dir: Vector2 = (t_local - c_local).normalized()
-		if dir.length_squared() < 0.01:
-			dir = Vector2.RIGHT
-		var perp: Vector2 = Vector2(-dir.y, dir.x)
-		var alpha: float = clampf(1.0 - maxf(0.0, (_age - 0.36) / 0.29), 0.0, 1.0)
-		var thrust: float = clampf((_age - 0.14) / 0.22, 0.0, 1.0)
-		var spear_len: float = lerpf(42.0, 84.0, thrust)
-		var tip: Vector2 = c_local + dir * spear_len
-		var tail: Vector2 = c_local - dir * 18.0
-		# Spear shaft
-		draw_line(tail, tip - dir * 18.0, Color(0.55, 0.32, 0.12, alpha), 6.0)
-		# Glowing golden-orange spearhead
-		var head_pts := PackedVector2Array([
-			tip + dir * 10.0,
-			tip - dir * 18.0 + perp * 9.5,
-			tip - dir * 18.0 - perp * 9.5
-		])
-		draw_colored_polygon(head_pts, Color(1.0, 0.62, 0.16, alpha))
-		draw_line(head_pts[0], head_pts[1], Color(1.0, 0.96, 0.65, alpha), 2.0)
-		draw_line(head_pts[0], head_pts[2], Color(1.0, 0.96, 0.65, alpha), 2.0)
 		if _age >= 0.36:
+			var t_local: Vector2 = to_local(target_pos + Vector2(0.0, -6.0))
+			var alpha: float = clampf(1.0 - maxf(0.0, (_age - 0.36) / 0.29), 0.0, 1.0)
 			var imp_p: float = (_age - 0.36) / 0.29
 			draw_arc(t_local, lerpf(10.0, 56.0, imp_p), 0.0, TAU, 24, Color(1.0, 0.65, 0.18, alpha * 0.85), 3.5)
 

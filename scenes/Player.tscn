@@ -65,7 +65,7 @@ position = Vector2(0, 2)
 shape = SubResource("CapsuleShape2D_player")
 
 [node name="JetpackParticles" type="CPUParticles2D" parent="."]
-position = Vector2(-6, 12)
+position = Vector2(-6, 2)
 emitting = false
 amount = 24
 lifetime = 0.25
@@ -79,8 +79,8 @@ scale_amount_max = 6.0
 color = Color(1, 0.62, 0.14, 0.9)
 
 [node name="ModularRig" type="Node2D" parent="."]
-position = Vector2(0, -5)
-scale = Vector2(0.92, 0.92)
+position = Vector2(0, -16.5)
+scale = Vector2(1.06, 1.06)
 script = ExtResource("2_modular_script")
 
 [node name="Sprite2D_Back" type="Sprite2D" parent="ModularRig"]
@@ -102,8 +102,8 @@ texture = ExtResource("7_hands_tex")
 hframes = 8
 
 [node name="WeaponPivot" type="Node2D" parent="."]
-position = Vector2(0, 5)
-scale = Vector2(1.16, 1.16)
+position = Vector2(0, -1)
+scale = Vector2(1.28, 1.28)
 
 [node name="SecondaryWeapon" type="Sprite2D" parent="WeaponPivot"]
 visible = false
@@ -150,7 +150,7 @@ scale_amount_max = 11.0
 color = Color(0.82, 0.78, 0.72, 0.75)
 
 [node name="OverheadUI" type="Node2D" parent="."]
-position = Vector2(0, -58)
+position = Vector2(0, -78)
 
 [node name="NameLabel" type="Label" parent="OverheadUI"]
 offset_left = -56.0
