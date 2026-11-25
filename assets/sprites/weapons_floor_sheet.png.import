@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://5rtf0kiski28"
-path="res://.godot/imported/raven_proj.png-d25815b142026e650026345b84c0d95a.ctex"
+uid="uid://hoe0bkjmkdpu"
+path="res://.godot/imported/weapons_floor_sheet.png-436017a7f54b65c85cc0da17d0605eef.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/characters/summons/raven_proj.png"
-dest_files=["res://.godot/imported/raven_proj.png-d25815b142026e650026345b84c0d95a.ctex"]
+source_file="res://assets/sprites/weapons_floor_sheet.png"
+dest_files=["res://.godot/imported/weapons_floor_sheet.png-436017a7f54b65c85cc0da17d0605eef.ctex"]
 
 [params]
 

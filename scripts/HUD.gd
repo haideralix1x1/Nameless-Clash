@@ -6,12 +6,6 @@ signal pickup_weapon_requested(crate_idx: int)
 signal interact_requested(inter_idx: int)
 
 const UIStyle = preload("res://scripts/UIStyle.gd")
-const WEAPONS_TEX: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
-const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
-const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
-const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
-const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
-const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 const STICK_RADIUS: float = 94.0
 const KNOB_RADIUS: float = 36.0
 const AIM_FIRE_THRESHOLD: float = 0.78
@@ -272,7 +266,7 @@ func _process(delta: float) -> void:
 		else:
 			_btn_shoe.modulate = Color.WHITE
 
-	if is_instance_valid(_preset_overlay) and _preset_overlay.visible:
+	if is_instance_valid(_preset_overlay) and _preset_overlay.visible and not NetworkManager.is_test_mode():
 		_preset_time_left = maxf(0.0, _preset_time_left - delta)
 		if _preset_time_left <= 0.001:
 			var fallback_idx: int = _chosen_preset_idx if _chosen_preset_idx >= 0 else 0
@@ -956,7 +950,7 @@ func _build_ui() -> void:
 	hud_h.add_child(w_row)
 
 	var atlas := AtlasTexture.new()
-	atlas.atlas = WEAPONS_TEX
+	atlas.atlas = WeaponData.TEX_SELECTION_SHEET
 	atlas.region = Rect2(0, 0, 256, 128)
 	_weapon_icon = TextureRect.new()
 	_weapon_icon.texture = atlas
@@ -1014,7 +1008,7 @@ func _build_ui() -> void:
 	w_info.add_child(_ammo_label)
 
 	var sec_atlas := AtlasTexture.new()
-	sec_atlas.atlas = WEAPONS_TEX
+	sec_atlas.atlas = WeaponData.TEX_SELECTION_SHEET
 	sec_atlas.region = Rect2(0, 0, 256, 128)
 	_secondary_weapon_icon = TextureRect.new()
 	_secondary_weapon_icon.texture = sec_atlas
@@ -1625,13 +1619,12 @@ func _on_weapon_changed(weapon_data: WeaponData) -> void:
 func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
 	if not is_instance_valid(icon_rect) or w_data == null:
 		return
-	if w_data.id == 11 or w_data.id == 13 or w_data.id == 15 or w_data.id == 16 or w_data.id == 17:
-		icon_rect.texture = TEX_FLAMETHROWER if w_data.id == 11 else (TEX_PLASMA_CANNON if w_data.id == 13 else (TEX_HOOK_GUN if w_data.id == 15 else (TEX_BUBBLE_GUN if w_data.id == 16 else TEX_MACHINE_GUN)))
-		return
+	icon_rect.texture = WeaponData.get_weapon_atlas_texture(w_data.id, 0)
+	return
 	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
 	if atlas == null:
 		atlas = AtlasTexture.new()
-		atlas.atlas = WEAPONS_TEX
+		atlas.atlas = WeaponData.TEX_SELECTION_SHEET
 		icon_rect.texture = atlas
 	atlas.region = Rect2(w_data.sprite_frame * 256, skin_row * 128, 256, 128)
 
@@ -2143,10 +2136,10 @@ func _build_preset_overlay() -> void:
 	_preset_overlay.anchor_right = 0.5
 	_preset_overlay.anchor_top = 0.5
 	_preset_overlay.anchor_bottom = 0.5
-	_preset_overlay.offset_left = -360
-	_preset_overlay.offset_right = 360
-	_preset_overlay.offset_top = -245
-	_preset_overlay.offset_bottom = 245
+	_preset_overlay.offset_left = -430
+	_preset_overlay.offset_right = 430
+	_preset_overlay.offset_top = -255
+	_preset_overlay.offset_bottom = 255
 	_preset_overlay.visible = false
 	_preset_overlay.add_theme_stylebox_override("panel", UIStyle.make_card_stylebox("blue", Color(0.16, 0.22, 0.34, 0.98), 16, 14))
 	_preset_overlay.visibility_changed.connect(func():
@@ -2163,7 +2156,7 @@ func _build_preset_overlay() -> void:
 	pv.add_child(hdr)
 
 	_preset_timer_label = Label.new()
-	_preset_timer_label.text = "CHOOSE 2-GUN + BOMBS PRESET"
+	_preset_timer_label.text = "CHOOSE GUNS + SHIELD & HELMET PRESET"
 	_preset_timer_label.add_theme_font_size_override("font_size", 18)
 	_preset_timer_label.modulate = Color(1.0, 0.86, 0.28)
 	_preset_timer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2281,10 +2274,58 @@ func _build_preset_overlay() -> void:
 		var bomb_icon := TextureRect.new()
 		bomb_icon.name = "BombIcon"
 		bomb_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bomb_icon.custom_minimum_size = Vector2(42, 42)
+		bomb_icon.custom_minimum_size = Vector2(36, 36)
 		bomb_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		bomb_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		row_h.add_child(bomb_icon)
+
+		var armor_box := VBoxContainer.new()
+		armor_box.name = "ArmorBox"
+		armor_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		armor_box.custom_minimum_size = Vector2(148, 0)
+		armor_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		armor_box.add_theme_constant_override("separation", 3)
+		row_h.add_child(armor_box)
+
+		var sh_row := HBoxContainer.new()
+		sh_row.name = "ShieldRow"
+		sh_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sh_row.add_theme_constant_override("separation", 5)
+		armor_box.add_child(sh_row)
+
+		var sh_icon := TextureRect.new()
+		sh_icon.name = "ShieldIcon"
+		sh_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sh_icon.custom_minimum_size = Vector2(20, 20)
+		sh_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sh_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		sh_row.add_child(sh_icon)
+
+		var sh_lbl := Label.new()
+		sh_lbl.name = "ShieldLbl"
+		sh_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sh_lbl.add_theme_font_size_override("font_size", 11)
+		sh_row.add_child(sh_lbl)
+
+		var hm_row := HBoxContainer.new()
+		hm_row.name = "HelmetRow"
+		hm_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hm_row.add_theme_constant_override("separation", 5)
+		armor_box.add_child(hm_row)
+
+		var hm_icon := TextureRect.new()
+		hm_icon.name = "HelmetIcon"
+		hm_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hm_icon.custom_minimum_size = Vector2(20, 20)
+		hm_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		hm_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		hm_row.add_child(hm_icon)
+
+		var hm_lbl := Label.new()
+		hm_lbl.name = "HelmetLbl"
+		hm_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hm_lbl.add_theme_font_size_override("font_size", 11)
+		hm_row.add_child(hm_lbl)
 
 	_refresh_preset_cards()
 
@@ -2297,11 +2338,16 @@ func _refresh_preset_cards() -> void:
 		var s_id: int = int(eff["secondary"])
 		var w_pri: WeaponData = WeaponData.get_weapon(p_id, 0, 0)
 		var w_sec: WeaponData = WeaponData.get_weapon(s_id, 0, 0)
-		var p_name: String = ProfileManager.WEAPON_NAMES[clampi(p_id, 0, ProfileManager.WEAPON_NAMES.size() - 1)]
-		var s_name: String = ProfileManager.WEAPON_NAMES[clampi(s_id, 0, ProfileManager.WEAPON_NAMES.size() - 1)]
+		var p_name: String = w_pri.display_name
+		var s_name: String = w_sec.display_name
 		var bombs_n: int = int(eff.get("bombs", 0))
 		var b_type: String = str(eff.get("bomb_type", "frag"))
 		var bomb_txt: String = ("%dx %s" % [bombs_n, b_type.capitalize()]) if bombs_n > 0 else "No Bombs"
+		var sh_tier: String = str(eff.get("shield_tier", "light"))
+		var sh_hp: int = int(eff.get("shield_hp", 0))
+		var hm_tier: String = str(eff.get("helmet_tier", "light"))
+		var hm_hp: int = int(eff.get("helmet_hp", 0))
+		var hm_red: int = int(round(float(eff.get("helmet_reduce", 0.0)) * 100.0))
 
 		var row_h := card.get_node_or_null("MarginContainer/HBoxContainer")
 		if row_h == null and card.get_child_count() > 0:
@@ -2310,14 +2356,8 @@ func _refresh_preset_cards() -> void:
 			(row_h.get_node("TitleLbl") as Label).text = "%s\n(%s)" % [str(eff["name"]), bomb_txt]
 			(row_h.get_node("PriLbl") as Label).text = p_name
 			(row_h.get_node("SecLbl") as Label).text = s_name
-			var at_p := AtlasTexture.new()
-			at_p.atlas = WEAPONS_TEX
-			at_p.region = Rect2(w_pri.sprite_frame * 256, 0, 256, 128)
-			(row_h.get_node("PriIcon") as TextureRect).texture = at_p
-			var at_s := AtlasTexture.new()
-			at_s.atlas = WEAPONS_TEX
-			at_s.region = Rect2(w_sec.sprite_frame * 256, 0, 256, 128)
-			(row_h.get_node("SecIcon") as TextureRect).texture = at_s
+			(row_h.get_node("PriIcon") as TextureRect).texture = _get_weapon_icon_tex(p_id, w_pri)
+			(row_h.get_node("SecIcon") as TextureRect).texture = _get_weapon_icon_tex(s_id, w_sec)
 			var b_icon := row_h.get_node("BombIcon") as TextureRect
 			b_icon.visible = bombs_n > 0
 			match b_type:
@@ -2326,6 +2366,50 @@ func _refresh_preset_cards() -> void:
 				"time": b_icon.texture = BombHudIcon.TEX_BOMB_TIME
 				"mine": b_icon.texture = BombHudIcon.TEX_BOMB_MINE
 				_: b_icon.texture = BombHudIcon.TEX_BOMB_FRAG
+			var sh_col: Color = Color(1.0, 0.52, 0.22) if sh_tier == "heavy" else (Color(0.32, 0.86, 1.0) if sh_tier == "medium" else Color(0.75, 0.88, 0.98))
+			var hm_col: Color = Color(1.0, 0.58, 0.22) if hm_tier == "heavy" else (Color(1.0, 0.86, 0.32) if hm_tier == "medium" else Color(0.78, 0.86, 0.94))
+			var sh_lbl := row_h.get_node("ArmorBox/ShieldRow/ShieldLbl") as Label
+			sh_lbl.text = "%s Shield (%d)" % [sh_tier.capitalize(), sh_hp]
+			sh_lbl.modulate = sh_col
+			(row_h.get_node("ArmorBox/ShieldRow/ShieldIcon") as TextureRect).texture = _make_armor_icon("shield", sh_col)
+			var hm_lbl := row_h.get_node("ArmorBox/HelmetRow/HelmetLbl") as Label
+			hm_lbl.text = "%s Helm (-%d%%)" % [hm_tier.capitalize(), hm_red]
+			hm_lbl.modulate = hm_col
+			(row_h.get_node("ArmorBox/HelmetRow/HelmetIcon") as TextureRect).texture = _make_armor_icon("helmet", hm_col)
+
+
+func _get_weapon_icon_tex(w_id: int, _wd: WeaponData) -> Texture2D:
+	return WeaponData.get_weapon_atlas_texture(w_id, 0)
+
+
+func _make_armor_icon(kind: String, col: Color) -> Texture2D:
+	var img := Image.create(24, 24, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var ink := Color(0.06, 0.08, 0.12, 1.0)
+	var hi := col.lightened(0.35)
+	for py in range(24):
+		for px in range(24):
+			var dx: float = absf(float(px) - 11.5)
+			if kind == "shield":
+				if py >= 3 and py <= 20:
+					var half_w: float = 8.0 if py <= 11 else lerpf(8.0, 0.5, float(py - 11) / 9.0)
+					if dx <= half_w + 1.2 and dx >= half_w - 0.8:
+						img.set_pixel(px, py, ink)
+					elif py == 3 and dx <= half_w + 1.0:
+						img.set_pixel(px, py, ink)
+					elif dx < half_w - 0.8:
+						img.set_pixel(px, py, hi if (px < 11 and py < 12) else col)
+			else:
+				# Tactical combat helmet dome + visor brim
+				var dy: float = float(py) - 13.5
+				var r_sq: float = dx * dx + dy * dy
+				if py <= 15 and r_sq <= 82.0 and r_sq >= 56.0:
+					img.set_pixel(px, py, ink)
+				elif py <= 14 and r_sq < 56.0:
+					img.set_pixel(px, py, hi if (px < 11 and py < 10) else col)
+				elif py >= 15 and py <= 17 and dx <= 9.5:
+					img.set_pixel(px, py, ink if (py == 17 or dx >= 8.2) else Color(0.18, 0.22, 0.28))
+	return ImageTexture.create_from_image(img)
 
 
 func _make_bomb_icon(b_type: String) -> Texture2D:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://crg3by6akrxjc"
-path="res://.godot/imported/winged_lion.png-828de29bced88e3483335487bb9cd9c5.ctex"
+uid="uid://5rtf0kiski28"
+path="res://.godot/imported/raven_proj.png-54e4e9c1e5c3a3e1f45f71ea5000a333.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/summons/winged_lion.png"
-dest_files=["res://.godot/imported/winged_lion.png-828de29bced88e3483335487bb9cd9c5.ctex"]
+source_file="res://assets/sprites/summons/raven_proj.png"
+dest_files=["res://.godot/imported/raven_proj.png-54e4e9c1e5c3a3e1f45f71ea5000a333.ctex"]
 
 [params]
 

@@ -1,6 +1,35 @@
 extends Node
 
 signal profile_changed
+signal coins_changed(new_coins: int)
+signal gun_skins_changed
+signal agents_unlocked_changed
+signal economy_config_changed
+
+const ECONOMY_CONFIG_PATH: String = "res://assets/data/coin_economy.json"
+const USER_ECONOMY_CONFIG_PATH: String = "user://coin_economy.json"
+const DEFAULT_AGENT_UNLOCK_PRICE: int = 5000
+
+# Starter unlocked agents (10 total):
+# 0: Contra, 1: Mike Jones, 2: Bruski, 5: Warlord, 12: Jack-47,
+# 13: Viper-X, 18: Stone, 19: Afera (Tribal Monk), 22: Jackson (Boxer), 23: Grimhare
+const STARTER_UNLOCKED_AGENTS: Array[int] = [0, 1, 2, 5, 12, 13, 18, 19, 22, 23]
+
+const GUN_SKIN_CATALOG: Array[Dictionary] = [
+	{"key": "default",       "name": "Standard Issue",   "price": 0,   "sheet_row": 0, "tint": Color(1.0, 1.0, 1.0),   "bullet": Color(1.0, 0.85, 0.25), "badge": Color(0.75, 0.80, 0.88)},
+	{"key": "desert_camo",   "name": "Desert Camo",      "price": 200, "sheet_row": 1, "tint": Color(0.95, 0.84, 0.64),"bullet": Color(1.0, 0.86, 0.45), "badge": Color(0.86, 0.74, 0.50)},
+	{"key": "biohazard",     "name": "Toxic Biohazard",  "price": 300, "sheet_row": 2, "tint": Color(0.54, 1.0, 0.36), "bullet": Color(0.45, 1.0, 0.24), "badge": Color(0.46, 0.96, 0.28)},
+	{"key": "ocean_wave",    "name": "Ocean Wave",       "price": 350, "sheet_row": 3, "tint": Color(0.32, 0.94, 1.0), "bullet": Color(0.24, 0.92, 1.0), "badge": Color(0.22, 0.88, 0.96)},
+	{"key": "arctic",        "name": "Arctic Glacier",   "price": 400, "sheet_row": 4, "tint": Color(0.82, 0.96, 1.0), "bullet": Color(0.68, 0.94, 1.0), "badge": Color(0.72, 0.92, 1.0)},
+	{"key": "neon",          "name": "Cyber Neon",       "price": 450, "sheet_row": 5, "tint": Color(0.56, 0.86, 1.0), "bullet": Color(0.22, 0.92, 1.0), "badge": Color(0.24, 0.84, 1.0)},
+	{"key": "magma",         "name": "Molten Magma",     "price": 500, "sheet_row": 6, "tint": Color(1.0, 0.52, 0.26), "bullet": Color(1.0, 0.42, 0.14), "badge": Color(1.0, 0.46, 0.18)},
+	{"key": "nebula",        "name": "Cosmic Nebula",    "price": 600, "sheet_row": 7, "tint": Color(0.86, 0.50, 1.0), "bullet": Color(0.84, 0.38, 1.0), "badge": Color(0.82, 0.42, 1.0)},
+	{"key": "crimson_royal", "name": "Crimson Imperial", "price": 700, "sheet_row": 8, "tint": Color(1.0, 0.42, 0.44), "bullet": Color(1.0, 0.28, 0.30), "badge": Color(0.96, 0.28, 0.32)},
+	{"key": "gold",          "name": "24K Royal Gold",   "price": 850, "sheet_row": 9, "tint": Color(1.0, 0.86, 0.34), "bullet": Color(1.0, 0.88, 0.24), "badge": Color(1.0, 0.84, 0.24)}
+]
+# Weapons whose columns in weapons_selection_sheet.png contain dedicated custom art for all 10 skin rows (no extra tint needed)
+const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4]
+const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 19, 20, 21, 23, 22]
 
 const PROFILE_PATH: String = "user://player_profile.cfg"
 
@@ -42,8 +71,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 4
 	},
 	{
-		"callsign": "Rook Frost",
-		"name": "Rook Frost (Spec-Ops)",
+		"callsign": "White Frost",
+		"name": "White Frost (Spec-Ops)",
 		"desc": "SWAT breaching specialist in a dark tactical helmet with twin white ski goggles.",
 		"part_id": 4,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -97,7 +126,7 @@ const ARCHETYPES: Array[Dictionary] = [
 	},
 	{
 		"callsign": "Wraith",
-		"name": "Wraith (Spooky Ghost)",
+		"name": "Wraith (Undead)",
 		"desc": "Haunting phantom floating in an alabaster shroud with grim reaper scythe slung behind.",
 		"part_id": 14,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -105,8 +134,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 4
 	},
 	{
-		"callsign": "Mummy",
-		"name": "Mummy (Ancient Mummy)",
+		"callsign": "Pharaoh",
+		"name": "Pharaoh (Ancient Mummy)",
 		"desc": "Bandage-wrapped tomb guardian with glowing amber eyes and golden pharaoh band.",
 		"part_id": 15,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -160,7 +189,7 @@ const ARCHETYPES: Array[Dictionary] = [
 	},
 	{
 		"callsign": "Ignis",
-		"name": "Ignis (Magma Golem)",
+		"name": "Ignis (Magma)",
 		"desc": "Volcanic stone colossus pulsing with molten orange magma eyes and glowing rock cracks.",
 		"part_id": 21,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -168,8 +197,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 5
 	},
 	{
-		"callsign": "Prism",
-		"name": "Prism (Crystal Golem)",
+		"callsign": "Stone",
+		"name": "Stone (Rocky Golem)",
 		"desc": "Radiant pink quartz elemental crowned with sharp crystal spires and faceted stone armor.",
 		"part_id": 22,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -213,8 +242,8 @@ const ARCHETYPES: Array[Dictionary] = [
 		"weapon": 6
 	},
 	{
-		"callsign": "Bramble",
-		"name": "Bramble (Crimson Hare)",
+		"callsign": "Grimhare",
+		"name": "Grimhare (Cursed Hare)",
 		"desc": "Fierce crimson-furred brawler hare in a dark navy vest with swift dashes, uppercuts, and a crimson flurry.",
 		"part_id": 28,
 		"shirt": Color.WHITE, "pants": Color.WHITE,
@@ -224,7 +253,7 @@ const ARCHETYPES: Array[Dictionary] = [
 ]
 
 const WEAPON_NAMES: Array[String] = [
-	"AK47", "M4A1", "SCAR-H", "SMG", "Uzi",
+	"AK47", "M16A4", "SCAR-L", "SMG", "Uzi",
 	"Shotgun", "Pump Shotgun", "Sniper", "Auto Sniper", "Deagle", "Bazooka"
 ]
 
@@ -339,9 +368,21 @@ var secondary_weapon_id: int = 9
 var weapon_skin_id: int = 0
 var m4a1_rail_mod: int = 0
 var taunt_id: int = 0
+var coins: int = 500
+var owned_gun_skins: Dictionary = {}
+var equipped_gun_skins: Dictionary = {}
+var unlocked_agents: Array[int] = []
+
+var kill_reward: int = 25
+var treasure_reward: int = 15
+var win_reward: int = 100
+var match_reward: int = 30
+var agent_unlock_price: int = DEFAULT_AGENT_UNLOCK_PRICE
+var gun_skin_prices: Dictionary = {}
 
 
 func _ready() -> void:
+	load_economy_config()
 	player_name = _default_name()
 	apply_archetype_preset(0, false)
 	load_profile()
@@ -474,6 +515,233 @@ func load_profile() -> void:
 	weapon_skin_id = clampi(int(cfg.get_value("loadout", "weapon_skin_id", 0)), 0, WEAPON_SKIN_NAMES.size() - 1)
 	m4a1_rail_mod = clampi(int(cfg.get_value("loadout", "m4a1_rail_mod", 0)), 0, RAIL_MOD_NAMES.size() - 1)
 	taunt_id = clampi(int(cfg.get_value("loadout", "taunt_id", 0)), 0, AgentData.TAUNTS.size() - 1)
+	coins = maxi(0, int(cfg.get_value("economy", "coins", 500)))
+	var raw_owned: Variant = cfg.get_value("economy", "owned_gun_skins", {})
+	owned_gun_skins = (raw_owned as Dictionary).duplicate(true) if raw_owned is Dictionary else {}
+	var raw_eq: Variant = cfg.get_value("economy", "equipped_gun_skins", {})
+	equipped_gun_skins = (raw_eq as Dictionary).duplicate(true) if raw_eq is Dictionary else {}
+	unlocked_agents.clear()
+	var raw_agents: Variant = cfg.get_value("economy", "unlocked_agents", [])
+	if raw_agents is Array:
+		for a_id in (raw_agents as Array):
+			var ai: int = int(a_id)
+			if not unlocked_agents.has(ai):
+				unlocked_agents.append(ai)
+	if not is_agent_unlocked(archetype_id, false):
+		apply_archetype_preset(0, false)
+
+
+func load_economy_config() -> void:
+	kill_reward = 25
+	treasure_reward = 15
+	win_reward = 100
+	match_reward = 30
+	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
+	gun_skin_prices = {}
+	for path in [ECONOMY_CONFIG_PATH, USER_ECONOMY_CONFIG_PATH]:
+		if not FileAccess.file_exists(path):
+			continue
+		var txt: String = FileAccess.get_file_as_string(path)
+		var parsed: Variant = JSON.parse_string(txt)
+		if parsed is Dictionary:
+			var d: Dictionary = parsed as Dictionary
+			if d.has("kill_reward"):
+				kill_reward = maxi(0, int(d["kill_reward"]))
+			if d.has("treasure_reward"):
+				treasure_reward = maxi(0, int(d["treasure_reward"]))
+			if d.has("win_reward"):
+				win_reward = maxi(0, int(d["win_reward"]))
+			if d.has("match_reward"):
+				match_reward = maxi(0, int(d["match_reward"]))
+			if d.has("agent_unlock_price"):
+				agent_unlock_price = maxi(0, int(d["agent_unlock_price"]))
+			if d.has("gun_skin_prices") and d["gun_skin_prices"] is Dictionary:
+				var gp: Dictionary = d["gun_skin_prices"] as Dictionary
+				for wk in gp.keys():
+					if gp[wk] is Dictionary:
+						var wkey := str(wk)
+						if not gun_skin_prices.has(wkey):
+							gun_skin_prices[wkey] = {}
+						for sk in (gp[wk] as Dictionary).keys():
+							(gun_skin_prices[wkey] as Dictionary)[str(sk)] = maxi(0, int((gp[wk] as Dictionary)[sk]))
+
+
+func save_economy_config(save_to_project: bool = true) -> bool:
+	var payload: Dictionary = {
+		"kill_reward": kill_reward,
+		"treasure_reward": treasure_reward,
+		"win_reward": win_reward,
+		"match_reward": match_reward,
+		"agent_unlock_price": agent_unlock_price,
+		"gun_skin_prices": gun_skin_prices
+	}
+	var json_txt: String = JSON.stringify(payload, "\t")
+	var ok_any: bool = false
+	var uf := FileAccess.open(USER_ECONOMY_CONFIG_PATH, FileAccess.WRITE)
+	if uf != null:
+		uf.store_string(json_txt)
+		uf.close()
+		ok_any = true
+	if save_to_project:
+		var abs_path: String = ProjectSettings.globalize_path(ECONOMY_CONFIG_PATH)
+		var pf := FileAccess.open(abs_path, FileAccess.WRITE)
+		if pf != null:
+			pf.store_string(json_txt)
+			pf.close()
+			ok_any = true
+	economy_config_changed.emit()
+	return ok_any
+
+
+func reset_economy_defaults() -> void:
+	kill_reward = 25
+	treasure_reward = 15
+	win_reward = 100
+	match_reward = 30
+	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
+	gun_skin_prices.clear()
+	economy_config_changed.emit()
+
+
+func get_kill_reward() -> int:
+	return kill_reward
+
+
+func get_treasure_reward() -> int:
+	return treasure_reward
+
+
+func get_win_reward() -> int:
+	return win_reward
+
+
+func get_match_reward() -> int:
+	return match_reward
+
+
+func get_agent_unlock_price() -> int:
+	return agent_unlock_price
+
+
+func get_gun_skin_price(weapon_id: int, skin_key: String) -> int:
+	if skin_key == "default" or skin_key.is_empty():
+		return 0
+	var wk := str(weapon_id)
+	if gun_skin_prices.has(wk) and gun_skin_prices[wk] is Dictionary:
+		var wd: Dictionary = gun_skin_prices[wk] as Dictionary
+		if wd.has(skin_key):
+			return maxi(0, int(wd[skin_key]))
+	return int(get_gun_skin_def(skin_key).get("price", 0))
+
+
+func set_gun_skin_price(weapon_id: int, skin_key: String, price: int) -> void:
+	if skin_key == "default" or skin_key.is_empty():
+		return
+	var wk := str(weapon_id)
+	if not gun_skin_prices.has(wk) or not (gun_skin_prices[wk] is Dictionary):
+		gun_skin_prices[wk] = {}
+	(gun_skin_prices[wk] as Dictionary)[skin_key] = maxi(0, price)
+
+
+func is_agent_unlocked(arch_idx: int, allow_practice: bool = false) -> bool:
+	if allow_practice:
+		return true
+	var idx: int = clampi(arch_idx, 0, ARCHETYPES.size() - 1)
+	if STARTER_UNLOCKED_AGENTS.has(idx):
+		return true
+	return unlocked_agents.has(idx)
+
+
+func buy_agent(arch_idx: int) -> bool:
+	var idx: int = clampi(arch_idx, 0, ARCHETYPES.size() - 1)
+	if is_agent_unlocked(idx, false):
+		return true
+	var price: int = get_agent_unlock_price()
+	if not spend_coins(price):
+		return false
+	if not unlocked_agents.has(idx):
+		unlocked_agents.append(idx)
+	save_profile()
+	agents_unlocked_changed.emit()
+	notify_changed()
+	return true
+
+
+func get_gun_skin_def(skin_key: String) -> Dictionary:
+	for s in GUN_SKIN_CATALOG:
+		if str(s["key"]) == skin_key:
+			return s
+	return GUN_SKIN_CATALOG[0]
+
+
+func get_gun_skin_tint(weapon_id: int, skin_key: String) -> Color:
+	if CUSTOM_SKIN_ART_WEAPONS.has(weapon_id):
+		return Color.WHITE
+	return get_gun_skin_def(skin_key).get("tint", Color.WHITE) as Color
+
+
+func owns_gun_skin(weapon_id: int, skin_key: String) -> bool:
+	if skin_key == "default" or skin_key.is_empty():
+		return true
+	var wk := str(weapon_id)
+	if owned_gun_skins.has(wk) and owned_gun_skins[wk] is Array:
+		return (owned_gun_skins[wk] as Array).has(skin_key)
+	return false
+
+
+func get_equipped_gun_skin(weapon_id: int) -> String:
+	var wk := str(weapon_id)
+	if equipped_gun_skins.has(wk):
+		var sk: String = str(equipped_gun_skins[wk])
+		if owns_gun_skin(weapon_id, sk):
+			return sk
+	return "default"
+
+
+func add_coins(amount: int) -> void:
+	if amount <= 0:
+		return
+	coins += amount
+	save_profile()
+	coins_changed.emit(coins)
+
+
+func spend_coins(amount: int) -> bool:
+	if amount < 0 or coins < amount:
+		return false
+	coins -= amount
+	save_profile()
+	coins_changed.emit(coins)
+	return true
+
+
+func buy_gun_skin(weapon_id: int, skin_key: String) -> bool:
+	if owns_gun_skin(weapon_id, skin_key):
+		equip_gun_skin(weapon_id, skin_key)
+		return true
+	var price: int = get_gun_skin_price(weapon_id, skin_key)
+	if not spend_coins(price):
+		return false
+	var wk := str(weapon_id)
+	if not owned_gun_skins.has(wk) or not (owned_gun_skins[wk] is Array):
+		owned_gun_skins[wk] = ["default"]
+	var arr: Array = owned_gun_skins[wk] as Array
+	if not arr.has(skin_key):
+		arr.append(skin_key)
+	equipped_gun_skins[wk] = skin_key
+	save_profile()
+	gun_skins_changed.emit()
+	notify_changed()
+	return true
+
+
+func equip_gun_skin(weapon_id: int, skin_key: String) -> void:
+	if not owns_gun_skin(weapon_id, skin_key):
+		return
+	equipped_gun_skins[str(weapon_id)] = skin_key
+	save_profile()
+	gun_skins_changed.emit()
+	notify_changed()
 
 
 func save_profile() -> void:
@@ -498,6 +766,10 @@ func save_profile() -> void:
 	cfg.set_value("loadout", "weapon_skin_id", weapon_skin_id)
 	cfg.set_value("loadout", "m4a1_rail_mod", m4a1_rail_mod)
 	cfg.set_value("loadout", "taunt_id", taunt_id)
+	cfg.set_value("economy", "coins", coins)
+	cfg.set_value("economy", "owned_gun_skins", owned_gun_skins)
+	cfg.set_value("economy", "equipped_gun_skins", equipped_gun_skins)
+	cfg.set_value("economy", "unlocked_agents", unlocked_agents)
 	cfg.save(_get_profile_path())
 
 
@@ -525,6 +797,7 @@ func to_dict() -> Dictionary:
 		"primary_weapon_id": primary_weapon_id,
 		"secondary_weapon_id": secondary_weapon_id,
 		"weapon_skin_id": weapon_skin_id,
+		"equipped_gun_skins": equipped_gun_skins.duplicate(true),
 		"m4a1_rail_mod": m4a1_rail_mod,
 		"taunt_id": taunt_id
 	}

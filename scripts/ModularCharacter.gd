@@ -60,6 +60,7 @@ var _wing_flap_t: float = 0.0
 var _fire_anim_t: float = 0.0
 var _jet_bob_t: float = 0.0
 var freeze_procedural_anim: bool = false
+var current_weapon_id: int = -1
 var hands_z_over_weapon: int = 0
 
 var _base_colors: Dictionary = {
@@ -104,7 +105,7 @@ static func _merge_pose_bucket(dst: Dictionary, bucket: Variant) -> void:
 			dst[pk] = (b[pk] as Dictionary).duplicate(true)
 
 
-static func get_pose_override(part_id: int, stance: String, anim_name: String = "", frame_idx: int = -1) -> Dictionary:
+static func get_pose_override(part_id: int, stance: String, anim_name: String = "", frame_idx: int = -1, weapon_id: int = -1) -> Dictionary:
 	if not _pose_overrides_loaded:
 		reload_pose_overrides()
 	var merged: Dictionary = {}
@@ -127,6 +128,24 @@ static func get_pose_override(part_id: int, stance: String, anim_name: String = 
 			_merge_pose_bucket(merged, ast[anim_key])
 		if frame_key != "" and ast.has(frame_key):
 			_merge_pose_bucket(merged, ast[frame_key])
+	if weapon_id >= 0 and stance != "none" and stance != "throw_bomb":
+		var ws: String = "w" + str(weapon_id)
+		var w_anim: String = (ws + "@" + anim_name) if anim_name != "" else ""
+		var w_frame: String = (w_anim + "#f" + str(frame_idx)) if (w_anim != "" and frame_idx >= 0) else ""
+		if stances.has(ws):
+			_merge_pose_bucket(merged, stances[ws])
+		if w_anim != "" and stances.has(w_anim):
+			_merge_pose_bucket(merged, stances[w_anim])
+		if w_frame != "" and stances.has(w_frame):
+			_merge_pose_bucket(merged, stances[w_frame])
+		if agents.has(ak) and agents[ak] is Dictionary:
+			var ast_w: Dictionary = agents[ak]
+			if ast_w.has(ws):
+				_merge_pose_bucket(merged, ast_w[ws])
+			if w_anim != "" and ast_w.has(w_anim):
+				_merge_pose_bucket(merged, ast_w[w_anim])
+			if w_frame != "" and ast_w.has(w_frame):
+				_merge_pose_bucket(merged, ast_w[w_frame])
 	return merged
 
 
@@ -685,7 +704,7 @@ func stop_shoe_throw() -> void:
 
 
 static func get_weapon_stance(w_id: int) -> String:
-	if w_id in [3, 4, 9]:
+	if w_id in [3, 4, 9, 19, 20]:
 		return "pistol"
 	if w_id in [10, 11, 12]:
 		return "bazooka"
@@ -698,7 +717,7 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	var dir: float = 1.0 if facing_r else -1.0
 	var active_stance: String = "throw_bomb" if (stance == "throw_bomb" or throw_prog >= 0.0) else stance
 	var active_frame: int = _manual_frame if _manual_sync_mode else (_get_sheet_frame_for_anim(_current_anim, _anim_legs.frame) if _anim_legs != null else 0)
-	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim, active_frame)
+	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim, active_frame, current_weapon_id)
 
 	var head_ov: Dictionary = ov.get("head", {})
 	var jet_bob_y: float = sin(_jet_bob_t) * 3.0 if (_current_anim == "jetpack" and not freeze_procedural_anim) else 0.0
@@ -837,7 +856,8 @@ func get_weapon_socket_transform(stance: String, facing_r: bool, w_ov: Dictionar
 	var hn_rot_def: float = float(defs["hn_rot"])
 
 	var active_stance: String = "throw_bomb" if stance == "throw_bomb" else stance
-	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim)
+	var active_frame: int = _manual_frame if _manual_sync_mode else (_get_sheet_frame_for_anim(_current_anim, _anim_legs.frame) if _anim_legs != null else 0)
+	var ov: Dictionary = get_pose_override(_current_part_id, active_stance, _current_anim, active_frame, current_weapon_id)
 	var hn_w: Dictionary = ov.get("hand_near", {})
 	var pose_hn_pos := Vector2(float(hn_w.get("x", hn_def.x)) * dir, float(hn_w.get("y", hn_def.y)))
 	var hn_pose_rot_rad: float = deg_to_rad(float(hn_w["rot"])) if hn_w.has("rot") else hn_rot_def

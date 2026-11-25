@@ -6,12 +6,6 @@ const TEX_BG_FACTORY: Texture2D = preload("res://assets/tilemaps/factory_bg.png"
 const TEX_BG_DESERT: Texture2D = preload("res://assets/tilemaps/desert_bg.png")
 const TEX_TILES: Texture2D = preload("res://assets/tilemaps/bunker_tileset.png")
 const TEX_CRATE: Texture2D = preload("res://assets/sprites/weapon_crate.png")
-const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
-const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
-const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
-const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
-const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
-const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine", "cluster"]
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
@@ -117,7 +111,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			inter_pos = node.global_position + (node.get("btn_pos") as Vector2)
 		elif "button_pos" in node:
 			inter_pos = node.global_position + (node.get("button_pos") as Vector2)
-		var is_remote_button: bool = (node is InteractableFan or node is InteractableDoor or node is InteractableSpikeTrap or node is InteractableSwitchHazard)
+		var is_remote_button: bool = (node is InteractableFan or node is InteractableMissileLauncher or node is InteractableDoor or node is InteractableSpikeTrap or node is InteractableSwitchHazard)
 		if world_pos.distance_to(inter_pos) <= 78.0 and (is_remote_button or local_p.global_position.distance_to(inter_pos) <= 135.0):
 			_on_interact_requested(i)
 			get_viewport().set_input_as_handled()
@@ -859,13 +853,14 @@ func _build_interactables() -> void:
 			_world_geometry.add_child(fan)
 			_interactables.append(fan)
 	elif map_id == 1:
-		# Map 1 (Factory Ruins): Industrial Steam Jump Pads
+		# Map 1 (Factory Ruins): Industrial Steam Jump Pads + Missile Launchers
 		for px in [arena_width * 0.24, arena_width * 0.76]:
 			var pad := InteractableJumpPad.new()
 			pad.position = _snap_to_floor(Vector2(px, arena_height - 120.0), 14.0)
 			pad.pad_color = Color(1.0, 0.52, 0.16)
 			pad.launch_vel = Vector2(0.0, -1080.0)
 			_world_geometry.add_child(pad)
+		_spawn_missile_launcher_pair(0.14, 0.86, arena_height * 0.52)
 	elif map_id == 2:
 		# Map 2 (Desert Outpost): Paired Sand Teleporters
 		var p_a := _snap_to_floor(Vector2(arena_width * 0.18, arena_height - 120.0), 26.0)
@@ -908,6 +903,7 @@ func _build_interactables() -> void:
 		mine_mgr.target_mines = 3
 		_mine_mgr = mine_mgr
 		_world_geometry.add_child(mine_mgr)
+		_spawn_missile_launcher_pair(0.16, 0.84, arena_height * 0.48)
 	elif map_id == 5:
 		# Map 5 (Soarin Islands): Emerald Sky-Wind Launch Geysers
 		for px in [arena_width * 0.26, arena_width * 0.74]:
@@ -944,6 +940,7 @@ func _build_interactables() -> void:
 		sen.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height - 120.0), 22.0)
 		_world_geometry.add_child(sen)
 		_interactables.append(sen)
+		_spawn_missile_launcher_pair(0.16, 0.84, arena_height * 0.52)
 	elif map_id == 9:
 		# Map 9 (High Tower): Speed Boost Shrine
 		for sx in [arena_width * 0.26, arena_width * 0.74]:
@@ -1022,6 +1019,23 @@ func _build_interactables() -> void:
 		_interactables.append(pr)
 
 
+func _spawn_missile_launcher_pair(left_x_ratio: float, right_x_ratio: float, probe_y: float) -> void:
+	var left_pos: Vector2 = _snap_to_floor(Vector2(arena_width * left_x_ratio, probe_y), 26.0, true)
+	var right_pos: Vector2 = _snap_to_floor(Vector2(arena_width * right_x_ratio, probe_y), 26.0, true)
+	var specs: Array[Dictionary] = [
+		{"launcher_pos": left_pos, "button_pos": left_pos + Vector2(-78.0, -4.0), "shoot_dir": Vector2.RIGHT},
+		{"launcher_pos": right_pos, "button_pos": right_pos + Vector2(78.0, -4.0), "shoot_dir": Vector2.LEFT}
+	]
+	for mspec in specs:
+		var ml := InteractableMissileLauncher.new()
+		ml.inter_idx = _interactables.size()
+		ml.launcher_pos = mspec["launcher_pos"]
+		ml.button_pos = mspec["button_pos"]
+		ml.shoot_dir = mspec["shoot_dir"]
+		_world_geometry.add_child(ml)
+		_interactables.append(ml)
+
+
 func _get_map_prop_kinds(map_id: int) -> Array:
 	match map_id:
 		5, 12:
@@ -1041,6 +1055,10 @@ func _on_interact_requested(inter_idx: int) -> void:
 	if node is InteractableFan:
 		var fan := node as InteractableFan
 		NetworkManager.toggle_interactable(inter_idx, not fan.is_on)
+	elif node is InteractableMissileLauncher:
+		var ml := node as InteractableMissileLauncher
+		if ml.cooldown_left <= 0.0:
+			NetworkManager.toggle_interactable(inter_idx, true)
 	elif node is InteractableHealStation:
 		var heal := node as InteractableHealStation
 		if heal.cooldown_left <= 0.0:
@@ -1103,6 +1121,7 @@ func _on_interact_requested(inter_idx: int) -> void:
 		if tb.cooldown_left <= 0.0:
 			for p in get_tree().get_nodes_in_group("players"):
 				if is_instance_valid(p) and p.get("is_local_human") == true and p.has_method("is_alive") and p.is_alive():
+					ProfileManager.add_coins(ProfileManager.get_treasure_reward())
 					if p.has_method("set_nearby_interactable"):
 						p.set_nearby_interactable(-1, "")
 					break
@@ -1115,6 +1134,8 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 	var node: Node2D = _interactables[inter_idx]
 	if node is InteractableFan:
 		(node as InteractableFan).set_fan_state(new_state)
+	elif node is InteractableMissileLauncher:
+		(node as InteractableMissileLauncher).fire_missile()
 	elif node is InteractableHealStation:
 		(node as InteractableHealStation).trigger_cooldown()
 	elif node is InteractableProp:
@@ -1142,7 +1163,8 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(42.0, 0.0), 12.0, false), "abil_orb", slots[1])
 		else:
 			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-58.0, 0.0), 15.0, false), "health", 100)
-			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", 17)
+			var tb_weapon_id: int = 22 if (randi() % 2 == 0) else 17
+			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", tb_weapon_id)
 			if NetworkManager.allow_explosives:
 				var b_type_str: String = "frag"
 				var best_d: float = 1e9
@@ -1435,12 +1457,24 @@ func _try_bot_pickup_weapon_crate(crate_idx: int, bot: Node2D) -> bool:
 	if val == cur_w:
 		return false
 	var cd: float = float(bot.get("_bot_weapon_pickup_cd")) if "_bot_weapon_pickup_cd" in bot else 0.0
-	var is_high_tier: bool = val in [7, 8, 10, 11, 12, 13, 14, 15, 16, 17]
-	if cd > 0.0 and not is_high_tier:
-		return false
+	var is_treasure_gun: bool = bool(entry.get("from_treasure", false)) or val == 17 or val == 22
+	if is_treasure_gun:
+		# High chance to pick up Treasure Box exclusive weapons (Groza / Machine Gun)
+		if randf() > 0.90:
+			if "_bot_weapon_pickup_cd" in bot:
+				bot.set("_bot_weapon_pickup_cd", 3.0)
+			return false
+	else:
+		# Regular floor guns are optional — only pick up occasionally when passing by
+		if cd > 0.0:
+			return false
+		if randf() > 0.28:
+			if "_bot_weapon_pickup_cd" in bot:
+				bot.set("_bot_weapon_pickup_cd", 4.5)
+			return false
 	_consume_weapon_crate(crate_idx, bot)
 	if "_bot_weapon_pickup_cd" in bot:
-		bot.set("_bot_weapon_pickup_cd", 6.5)
+		bot.set("_bot_weapon_pickup_cd", 12.0 if not is_treasure_gun else 8.0)
 	return true
 
 
@@ -1556,7 +1590,7 @@ func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool
 			continue
 		var base_pri: float = 0.0
 		if node is InteractableTreasureBox and (node as InteractableTreasureBox).cooldown_left <= 0.0:
-			base_pri = 120.0 if not in_combat else (115.0 if d <= 200.0 else 0.0)
+			base_pri = 132.0 if not in_combat else (122.0 if d <= 220.0 else 0.0)
 		elif node is InteractableHealStation and (node as InteractableHealStation).cooldown_left <= 0.0:
 			if hp_ratio < 0.55 and not in_combat:
 				base_pri = 135.0
@@ -1611,9 +1645,13 @@ func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool
 					base_pri = 105.0
 			"weapon":
 				if not agent_mode and val != cur_w:
-					var is_high_tier: bool = val in [7, 8, 10, 11, 12, 13, 14, 15, 16, 17]
-					if (w_cd <= 0.0 or is_high_tier) and (not in_combat or (is_high_tier and d <= 190.0)):
-						base_pri = 112.0 if is_high_tier else 72.0
+					var is_treasure_gun: bool = bool(c.get("from_treasure", false)) or val == 17 or val == 22
+					if is_treasure_gun:
+						if not in_combat or d <= 220.0:
+							base_pri = 138.0
+					elif w_cd <= 0.0 and not in_combat and d <= 155.0:
+						# Floor guns are optional: only detour slightly if already passing close by
+						base_pri = 36.0
 			"bomb":
 				if not agent_mode and NetworkManager.allow_explosives and not in_combat:
 					base_pri = 58.0
@@ -1634,18 +1672,12 @@ func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool
 
 
 func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
-	if w_id == 11 or w_id == 13 or w_id == 15 or w_id == 16 or w_id == 17:
-		w_spr.texture = TEX_FLAMETHROWER if w_id == 11 else (TEX_PLASMA_CANNON if w_id == 13 else (TEX_HOOK_GUN if w_id == 15 else (TEX_BUBBLE_GUN if w_id == 16 else TEX_MACHINE_GUN)))
-		w_spr.hframes = 1
-		w_spr.vframes = 1
-		w_spr.frame = 0
-		w_spr.scale = Vector2(0.191, 0.191) if w_id == 11 else (Vector2(0.313, 0.313) if w_id == 17 else Vector2(0.278, 0.278))
-	else:
-		w_spr.texture = TEX_WEAPONS
-		w_spr.hframes = 11
-		w_spr.vframes = 3
-		w_spr.frame = WeaponData.get_weapon(w_id, 0, 0).sprite_frame
-		w_spr.scale = Vector2(0.278, 0.278)
+	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, 0)
+	w_spr.texture = spec["tex"] as Texture2D
+	w_spr.hframes = int(spec["hframes"])
+	w_spr.vframes = int(spec["vframes"])
+	w_spr.frame = int(spec["frame"])
+	w_spr.scale = Vector2(0.313, 0.313) if w_id == 17 else Vector2(0.278, 0.278)
 
 
 func _pick_safest_spawn() -> Vector2:
@@ -1889,6 +1921,8 @@ func _spawn_bot(bot_index: int) -> void:
 	)
 	bot.global_position = spawn_pos
 	_players_container.add_child(bot)
+	if not NetworkManager.is_agent_clash_mode() and not NetworkManager.random_guns_mode and bot.has_method("apply_gun_preset"):
+		bot.apply_gun_preset(randi() % WeaponData.GUN_PRESETS.size())
 
 
 func _get_active_bots() -> Array[Node]:
@@ -2120,6 +2154,146 @@ class SwingingPlatform extends Node2D:
 			var p1: Vector2 = p0 + dir * 0.72
 			var col: Color = Color(0.58, 0.62, 0.68) if (i % 2 == 0) else Color(0.36, 0.40, 0.46)
 			draw_line(p0, p1, col, 4.5)
+
+
+class InteractableMissileLauncher extends Node2D:
+	const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
+	const RESET_COOLDOWN: float = 5.0
+	var inter_idx: int = 0
+	var launcher_pos: Vector2 = Vector2.ZERO
+	var button_pos: Vector2 = Vector2.ZERO
+	var shoot_dir: Vector2 = Vector2.RIGHT
+	var cooldown_left: float = 0.0
+	var _recoil: float = 0.0
+	var _flash_t: float = 0.0
+	var _btn_area: Area2D
+
+	func _ready() -> void:
+		z_index = 4
+		_btn_area = Area2D.new()
+		_btn_area.position = button_pos
+		_btn_area.collision_layer = 0
+		_btn_area.collision_mask = 2
+		var bcol := CollisionShape2D.new()
+		var bshape := CircleShape2D.new()
+		bshape.radius = 52.0
+		bcol.shape = bshape
+		_btn_area.add_child(bcol)
+		_btn_area.body_entered.connect(_on_btn_entered)
+		_btn_area.body_exited.connect(_on_btn_exited)
+		add_child(_btn_area)
+		queue_redraw()
+
+	func fire_missile() -> void:
+		if cooldown_left > 0.0:
+			return
+		cooldown_left = RESET_COOLDOWN
+		_recoil = 1.0
+		_flash_t = 0.16
+		var dir: Vector2 = shoot_dir.normalized() if shoot_dir.length() > 0.01 else Vector2.RIGHT
+		var world_root: Node = get_parent().get_parent() if get_parent() != null else get_parent()
+		if world_root != null:
+			var b := BULLET_SCENE.instantiate()
+			b.global_position = global_position + launcher_pos + dir * 34.0
+			b.velocity = dir * 820.0
+			b.damage = 110
+			b.shooter_peer_id = 0
+			b.shooter_team = -1
+			b.shooter_name = "Defense"
+			b.weapon_name = "Missile Launcher"
+			b.bullet_color = Color(1.0, 0.42, 0.14)
+			b.is_explosive = true
+			b.explosion_radius = 155.0
+			b.visual_style = "rocket"
+			b.max_lifetime = 3.2
+			b.can_deal_damage = (not NetworkManager.is_network_active()) or NetworkManager.is_host_active()
+			world_root.add_child(b)
+			var sfx := AudioStreamPlayer2D.new()
+			sfx.global_position = global_position + launcher_pos
+			sfx.stream = load("res://assets/audio/shoot_rpg.wav") as AudioStream
+			sfx.volume_db = -1.0
+			sfx.max_distance = 1800.0
+			sfx.bus = &"SFX"
+			sfx.finished.connect(sfx.queue_free)
+			world_root.add_child(sfx)
+			sfx.play()
+		for body in _btn_area.get_overlapping_bodies():
+			if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+				body.set_nearby_interactable(-1, "")
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		var dirty: bool = false
+		if cooldown_left > 0.0:
+			cooldown_left = maxf(0.0, cooldown_left - delta)
+			dirty = true
+			if cooldown_left <= 0.0:
+				for body in _btn_area.get_overlapping_bodies():
+					if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+						body.set_nearby_interactable(inter_idx, "USE\nFIRE MISSILE")
+		if _recoil > 0.0:
+			_recoil = maxf(0.0, _recoil - delta * 4.5)
+			dirty = true
+		if _flash_t > 0.0:
+			_flash_t = maxf(0.0, _flash_t - delta)
+			dirty = true
+		if dirty:
+			queue_redraw()
+
+	func _on_btn_entered(body: Node2D) -> void:
+		if cooldown_left <= 0.0 and body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(inter_idx, "USE\nFIRE MISSILE")
+
+	func _on_btn_exited(body: Node2D) -> void:
+		if body.is_in_group("players") and body.get("is_local_human") == true and body.has_method("set_nearby_interactable"):
+			body.set_nearby_interactable(-1, "")
+
+	func _draw() -> void:
+		var dir: Vector2 = shoot_dir.normalized() if shoot_dir.length() > 0.01 else Vector2.RIGHT
+		var ready: bool = cooldown_left <= 0.0
+		var ink := Color(0.06, 0.08, 0.12)
+		# Power cable from button to launcher
+		draw_line(button_pos, launcher_pos, Color(0.32, 0.36, 0.44, 0.9), 3.0)
+		# Control switch box
+		var b_rect := Rect2(button_pos.x - 16.0, button_pos.y - 16.0, 32.0, 32.0)
+		draw_rect(b_rect, Color(0.14, 0.16, 0.22))
+		draw_rect(b_rect, Color(0.55, 0.62, 0.72), false, 2.5)
+		var btn_col: Color = Color(1.0, 0.24, 0.18) if ready else Color(0.32, 0.38, 0.48)
+		draw_circle(button_pos, 9.0, btn_col)
+		draw_arc(button_pos, 9.0, 0.0, TAU, 16, ink, 2.0)
+
+		# Launcher pedestal & armored turret tube
+		var lp: Vector2 = launcher_pos - dir * (_recoil * 8.0)
+		draw_rect(Rect2(launcher_pos.x - 18.0, launcher_pos.y + 8.0, 36.0, 18.0), Color(0.20, 0.24, 0.30))
+		draw_rect(Rect2(launcher_pos.x - 18.0, launcher_pos.y + 8.0, 36.0, 18.0), ink, false, 2.5)
+		var ang: float = dir.angle()
+		draw_set_transform(lp, ang, Vector2.ONE)
+		# Main olive-steel launcher barrel
+		draw_rect(Rect2(-24.0, -12.0, 48.0, 24.0), Color(0.26, 0.32, 0.28))
+		draw_rect(Rect2(-24.0, -12.0, 48.0, 24.0), ink, false, 3.0)
+		# Caution orange stripe on barrel
+		draw_rect(Rect2(8.0, -10.0, 10.0, 20.0), Color(0.95, 0.48, 0.14))
+		# Loaded missile warhead peeking out when ready
+		if ready:
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(24.0, -8.5), Vector2(38.0, 0.0), Vector2(24.0, 8.5)
+			]), Color(0.95, 0.26, 0.18))
+			draw_polyline(PackedVector2Array([
+				Vector2(24.0, -8.5), Vector2(38.0, 0.0), Vector2(24.0, 8.5), Vector2(24.0, -8.5)
+			]), ink, 2.2)
+		if _flash_t > 0.0:
+			var fa: float = clampf(_flash_t / 0.16, 0.0, 1.0)
+			draw_circle(Vector2(30.0, 0.0), 16.0 * fa, Color(1.0, 0.65, 0.18, fa * 0.9))
+			draw_circle(Vector2(28.0, 0.0), 8.0 * fa, Color(1.0, 0.96, 0.72, fa))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		# 5-second reload progress bar above launcher while resetting
+		if not ready:
+			var prog: float = clampf(1.0 - (cooldown_left / RESET_COOLDOWN), 0.0, 1.0)
+			var bar_r := Rect2(launcher_pos.x - 22.0, launcher_pos.y - 24.0, 44.0, 6.0)
+			draw_rect(bar_r, Color(0.08, 0.10, 0.14, 0.9))
+			draw_rect(Rect2(bar_r.position.x + 1.0, bar_r.position.y + 1.0, 42.0 * prog, 4.0), Color(1.0, 0.65, 0.18))
+			draw_rect(bar_r, ink, false, 1.5)
 
 
 class InteractableFan extends Node2D:

@@ -3,7 +3,7 @@ extends Control
 ## Run this scene (F6 in Godot) to drag character parts & weapons into place,
 ## preview animations, and save pose overrides for MainMenu & gameplay.
 
-const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 const PlayerControllerScript = preload("res://scripts/PlayerController.gd")
 const STANCES: Array[String] = ["none", "rifle", "pistol", "bazooka", "throw_bomb"]
 const STANCE_LABELS: Array[String] = [
@@ -68,6 +68,8 @@ var _selected_stance: String = "none"
 var _selected_agent_idx: int = 0
 var _selected_part_id: int = 0
 var _per_agent_scope: bool = true
+var _per_weapon_scope: bool = true
+var _weapon_scope_btn: CheckButton
 var _agent_mode: bool = false
 var _all_anims_scope: bool = true
 var _anim_scope_btn: CheckButton
@@ -121,9 +123,26 @@ var _active_editor_tab: int = 0
 var _tab_pose_btn: Button
 var _tab_ui_btn: Button
 var _tab_range_btn: Button
+var _tab_coin_btn: Button
 var _pose_mode_root: VBoxContainer
 var _ui_setter_root: VBoxContainer
 var _range_mode_root: VBoxContainer
+var _coin_mode_root: VBoxContainer
+
+var _coin_kill_spin: SpinBox
+var _coin_treasure_spin: SpinBox
+var _coin_win_spin: SpinBox
+var _coin_match_spin: SpinBox
+var _coin_agent_spin: SpinBox
+var _coin_bal_lbl: Label
+var _coin_status_lbl: Label
+var _coin_selected_wid: int = 0
+var _coin_gun_btns: Dictionary = {}
+var _coin_skin_spins: Dictionary = {}
+var _coin_gun_title_lbl: Label
+var _coin_gun_preview: TextureRect
+var _coin_skin_list_box: VBoxContainer
+var _coin_syncing: bool = false
 
 const BUNKER_W: float = 2240.0
 const BUNKER_H: float = 1248.0
@@ -286,6 +305,13 @@ func _build_ui() -> void:
 	_tab_range_btn.pressed.connect(func(): _switch_editor_tab(2))
 	tab_hbox.add_child(_tab_range_btn)
 
+	_tab_coin_btn = Button.new()
+	_tab_coin_btn.text = "Coin Adjustment"
+	_tab_coin_btn.toggle_mode = true
+	_tab_coin_btn.custom_minimum_size = Vector2(165, 30)
+	_tab_coin_btn.pressed.connect(func(): _switch_editor_tab(3))
+	tab_hbox.add_child(_tab_coin_btn)
+
 	_pose_mode_root = VBoxContainer.new()
 	_pose_mode_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pose_mode_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -364,10 +390,11 @@ func _build_ui() -> void:
 	top_hbox.add_child(_make_section_label("Weapon:"))
 	_weapon_opt = OptionButton.new()
 	_weapon_opt.custom_minimum_size = Vector2(110, 0)
-	for w_idx in range(11):
+	for w_idx in range(WeaponData.get_total_weapon_count()):
 		var wd := WeaponData.get_weapon(w_idx, 0, false)
 		_weapon_opt.add_item("%d: %s" % [w_idx, wd.display_name], w_idx)
 	_weapon_opt.item_selected.connect(func(idx: int):
+		_clear_temp_preview()
 		_preview_weapon_id = idx
 		if _agent_mode:
 			_agent_mode = false
@@ -382,6 +409,19 @@ func _build_ui() -> void:
 		_refresh_character_pose()
 	)
 	top_hbox.add_child(_weapon_opt)
+
+	_weapon_scope_btn = CheckButton.new()
+	_weapon_scope_btn.text = "This Gun"
+	_weapon_scope_btn.tooltip_text = "ON: edits only this specific gun (e.g. M4A1). OFF: edits the shared stance (e.g. all rifles)."
+	_weapon_scope_btn.button_pressed = _per_weapon_scope
+	_weapon_scope_btn.toggled.connect(func(on: bool):
+		_clear_temp_preview()
+		_per_weapon_scope = on
+		_sync_spinboxes_from_pose()
+		_refresh_character_pose()
+		_refresh_keyframe_strip()
+	)
+	top_hbox.add_child(_weapon_scope_btn)
 
 	var top_spacer := Control.new()
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -505,8 +545,8 @@ func _build_ui() -> void:
 
 	_gun_p = Sprite2D.new()
 	_gun_p.texture = TEX_WEAPONS
-	_gun_p.hframes = 11
-	_gun_p.vframes = 3
+	_gun_p.hframes = WeaponData.SELECTION_COLS
+	_gun_p.vframes = WeaponData.SELECTION_ROWS
 	_gun_p.position = Vector2(16, 0)
 	_gun_p.scale = Vector2(0.23, 0.23)
 	_weapon_pivot.add_child(_gun_p)
@@ -518,6 +558,7 @@ func _build_ui() -> void:
 
 	_overlay = Control.new()
 	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_overlay.z_index = 100
 	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	_overlay.draw.connect(_on_overlay_draw)
 	_overlay.gui_input.connect(_on_overlay_gui_input)
@@ -708,7 +749,7 @@ func _build_ui() -> void:
 	copy_kf_btn.text = "Copy"
 	copy_kf_btn.custom_minimum_size = Vector2(48, 26)
 	copy_kf_btn.pressed.connect(func():
-		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		var fkey := _get_edit_stance_prefix() + "@" + _selected_anim + "#f" + str(_manual_frame)
 		var src_dict: Dictionary = {}
 		if _per_agent_scope:
 			var ak := str(_selected_part_id)
@@ -734,7 +775,7 @@ func _build_ui() -> void:
 				_status_lbl.text = "Nothing copied! Click Copy first."
 				_status_lbl.modulate = Color(1.0, 0.65, 0.35)
 			return
-		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		var fkey := _get_edit_stance_prefix() + "@" + _selected_anim + "#f" + str(_manual_frame)
 		_push_undo()
 		if _per_agent_scope:
 			var ak := str(_selected_part_id)
@@ -758,7 +799,7 @@ func _build_ui() -> void:
 	del_kf_btn.text = "Del"
 	del_kf_btn.custom_minimum_size = Vector2(40, 26)
 	del_kf_btn.pressed.connect(func():
-		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		var fkey := _get_edit_stance_prefix() + "@" + _selected_anim + "#f" + str(_manual_frame)
 		_push_undo()
 		if _per_agent_scope:
 			var ak := str(_selected_part_id)
@@ -774,8 +815,16 @@ func _build_ui() -> void:
 	)
 	bot_hbox.add_child(del_kf_btn)
 
+	var copy_guns_btn := Button.new()
+	copy_guns_btn.text = "To Guns..."
+	copy_guns_btn.tooltip_text = "Copy & replace this gun's animation keyframes onto selected other guns (e.g. M4A1 -> AK47 + 2 others)"
+	copy_guns_btn.custom_minimum_size = Vector2(78, 26)
+	copy_guns_btn.pressed.connect(_open_copy_to_guns_dialog)
+	bot_hbox.add_child(copy_guns_btn)
+
 	_build_ui_setter_tab(main_vbox)
 	_build_range_editor_tab(main_vbox)
+	_build_coin_economy_tab(main_vbox)
 	_switch_editor_tab(0)
 
 
@@ -833,16 +882,181 @@ func _select_part(pname: String) -> void:
 	_overlay.queue_redraw()
 
 
+func _get_active_weapon_id() -> int:
+	if not _agent_mode and _selected_stance != "none" and _selected_stance != "throw_bomb":
+		return _preview_weapon_id
+	return -1
+
+
+func _get_edit_stance_prefix() -> String:
+	if _per_weapon_scope and not _agent_mode and _selected_stance != "none" and _selected_stance != "throw_bomb":
+		return "w" + str(_preview_weapon_id)
+	return _selected_stance
+
+
 func _get_target_stance_key() -> String:
+	var prefix := _get_edit_stance_prefix()
 	if _per_frame_scope:
-		return _selected_stance + "@" + _selected_anim + "#f" + str(_manual_frame)
+		return prefix + "@" + _selected_anim + "#f" + str(_manual_frame)
 	if _all_anims_scope:
-		return _selected_stance
-	return _selected_stance + "@" + _selected_anim
+		return prefix
+	return prefix + "@" + _selected_anim
 
 
 func _get_active_pose_dict() -> Dictionary:
-	return ModularCharacter.get_pose_override(_selected_part_id, _selected_stance, _selected_anim, _manual_frame)
+	return ModularCharacter.get_pose_override(_selected_part_id, _selected_stance, _selected_anim, _manual_frame, _get_active_weapon_id())
+
+
+func _open_copy_to_guns_dialog() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.title = "Copy Animation Keyframes to Guns"
+	dlg.ok_button_text = "Replace Selected Guns"
+	dlg.min_size = Vector2(420, 360)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 8)
+	dlg.add_child(vb)
+
+	var src_wd := WeaponData.get_weapon(_preview_weapon_id, 0, false)
+	var src_label := ("%d: %s" % [_preview_weapon_id, src_wd.display_name]) if _per_weapon_scope else _selected_stance
+	var info := Label.new()
+	info.text = "Source: %s  |  Current Anim: %s\nSelect which guns should receive these keyframes:" % [src_label, _selected_anim]
+	vb.add_child(info)
+
+	var all_anims_cb := CheckBox.new()
+	all_anims_cb.text = "Copy ALL animations (Idle, Run, Jetpack, Firing, Dead)"
+	all_anims_cb.button_pressed = false
+	vb.add_child(all_anims_cb)
+
+	var quick_hb := HBoxContainer.new()
+	quick_hb.add_theme_constant_override("separation", 6)
+	vb.add_child(quick_hb)
+
+	var gun_cbs: Array[CheckBox] = []
+	var btn_rifles := Button.new()
+	btn_rifles.text = "Rifles"
+	btn_rifles.pressed.connect(func():
+		for i in range(gun_cbs.size()):
+			if not gun_cbs[i].disabled:
+				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(i) == "rifle")
+	)
+	quick_hb.add_child(btn_rifles)
+
+	var btn_pistols := Button.new()
+	btn_pistols.text = "Pistols/SMGs"
+	btn_pistols.pressed.connect(func():
+		for i in range(gun_cbs.size()):
+			if not gun_cbs[i].disabled:
+				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(i) == "pistol")
+	)
+	quick_hb.add_child(btn_pistols)
+
+	var btn_all := Button.new()
+	btn_all.text = "All"
+	btn_all.pressed.connect(func():
+		for i in range(gun_cbs.size()):
+			if not gun_cbs[i].disabled:
+				gun_cbs[i].button_pressed = true
+	)
+	quick_hb.add_child(btn_all)
+
+	var btn_none := Button.new()
+	btn_none.text = "Clear"
+	btn_none.pressed.connect(func():
+		for i in range(gun_cbs.size()):
+			gun_cbs[i].button_pressed = false
+	)
+	quick_hb.add_child(btn_none)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 4)
+	vb.add_child(grid)
+
+	for w_idx in range(WeaponData.get_total_weapon_count()):
+		var wd := WeaponData.get_weapon(w_idx, 0, false)
+		var cb := CheckBox.new()
+		var is_src: bool = (_per_weapon_scope and w_idx == _preview_weapon_id)
+		cb.text = ("%d: %s (Source)" % [w_idx, wd.display_name]) if is_src else ("%d: %s" % [w_idx, wd.display_name])
+		cb.disabled = is_src
+		grid.add_child(cb)
+		gun_cbs.append(cb)
+
+	dlg.confirmed.connect(func():
+		var target_ids: Array[int] = []
+		for i in range(gun_cbs.size()):
+			if gun_cbs[i].button_pressed and not gun_cbs[i].disabled:
+				target_ids.append(i)
+		if target_ids.is_empty():
+			if is_instance_valid(_status_lbl):
+				_status_lbl.text = "No target guns selected."
+				_status_lbl.modulate = Color(1.0, 0.72, 0.35)
+			dlg.queue_free()
+			return
+
+		_push_undo()
+		var scope_dict: Dictionary
+		if _per_agent_scope:
+			var ak := str(_selected_part_id)
+			if not _pose_data["agents"].has(ak):
+				_pose_data["agents"][ak] = {}
+			scope_dict = _pose_data["agents"][ak]
+		else:
+			scope_dict = _pose_data["stances"]
+
+		var src_prefix := _get_edit_stance_prefix()
+		var fallback_prefix := _selected_stance
+		var anims_to_copy: Array[String] = []
+		if all_anims_cb.button_pressed:
+			anims_to_copy = ["idle", "run", "jetpack", "firing", "dead"]
+		else:
+			anims_to_copy = [_selected_anim]
+		var copied_names: Array[String] = []
+
+		for tw_id in target_ids:
+			var dst_prefix := "w" + str(tw_id)
+			var tw_wd := WeaponData.get_weapon(tw_id, 0, false)
+			copied_names.append(tw_wd.display_name)
+			if all_anims_cb.button_pressed:
+				var src_base: Variant = scope_dict.get(src_prefix, scope_dict.get(fallback_prefix, null))
+				if src_base is Dictionary and not (src_base as Dictionary).is_empty():
+					scope_dict[dst_prefix] = (src_base as Dictionary).duplicate(true)
+				else:
+					scope_dict.erase(dst_prefix)
+			for an in anims_to_copy:
+				var src_ak := src_prefix + "@" + an
+				var fb_ak := fallback_prefix + "@" + an
+				var dst_ak := dst_prefix + "@" + an
+				var src_anim_val: Variant = scope_dict.get(src_ak, scope_dict.get(fb_ak, null))
+				if src_anim_val is Dictionary and not (src_anim_val as Dictionary).is_empty():
+					scope_dict[dst_ak] = (src_anim_val as Dictionary).duplicate(true)
+				else:
+					scope_dict.erase(dst_ak)
+				for fi in range(8):
+					var src_fk := src_ak + "#f" + str(fi)
+					var fb_fk := fb_ak + "#f" + str(fi)
+					var dst_fk := dst_ak + "#f" + str(fi)
+					var src_fv: Variant = scope_dict.get(src_fk, scope_dict.get(fb_fk, null))
+					if src_fv is Dictionary and not (src_fv as Dictionary).is_empty():
+						scope_dict[dst_fk] = (src_fv as Dictionary).duplicate(true)
+					else:
+						scope_dict.erase(dst_fk)
+
+		ModularCharacter._pose_overrides = _pose_data.duplicate(true)
+		ModularCharacter._pose_overrides_loaded = true
+		_sync_spinboxes_from_pose()
+		_refresh_character_pose()
+		_refresh_keyframe_strip()
+		if is_instance_valid(_status_lbl):
+			var mode_str := "ALL anims" if all_anims_cb.button_pressed else _selected_anim
+			_status_lbl.text = "Copied %s to %d gun(s): %s" % [mode_str, copied_names.size(), ", ".join(copied_names)]
+			_status_lbl.modulate = Color(0.45, 1.0, 0.65)
+		dlg.queue_free()
+	)
+	dlg.canceled.connect(func(): dlg.queue_free())
+	add_child(dlg)
+	dlg.popup_centered()
 
 
 func _get_default_part_pose(pname: String) -> Dictionary:
@@ -1046,17 +1260,21 @@ func _refresh_keyframe_strip() -> void:
 	var ak := str(_selected_part_id)
 	var agent_dict: Dictionary = _pose_data.get("agents", {}).get(ak, {}) if _pose_data.get("agents", {}).get(ak) is Dictionary else {}
 	var stance_dict: Dictionary = _pose_data.get("stances", {}) if _pose_data.get("stances") is Dictionary else {}
+	var adef_strip: Dictionary = PREVIEW_ANIM_DEFS.get(_selected_anim, {"frames": [0]})
+	var anim_frames: Array = adef_strip.get("frames", [0])
+	var edit_prefix := _get_edit_stance_prefix()
 	for fi in range(mini(8, _kf_btns.size())):
 		var fb: Button = _kf_btns[fi]
-		var fkey := _selected_stance + "@" + _selected_anim + "#f" + str(fi)
+		var fkey := edit_prefix + "@" + _selected_anim + "#f" + str(fi)
 		var has_key: bool = (agent_dict.has(fkey) and not (agent_dict[fkey] as Dictionary).is_empty()) or (stance_dict.has(fkey) and not (stance_dict[fkey] as Dictionary).is_empty())
+		var in_anim: bool = anim_frames.has(fi)
 		fb.text = ("◆" + str(fi)) if has_key else str(fi)
 		if fi == _manual_frame:
 			fb.modulate = Color(1.0, 0.35, 0.35) if _per_frame_scope else Color(0.30, 0.95, 1.0)
 		elif has_key:
-			fb.modulate = Color(1.0, 0.85, 0.30)
+			fb.modulate = Color(1.0, 0.85, 0.30, 1.0 if in_anim else 0.50)
 		else:
-			fb.modulate = Color(0.82, 0.86, 0.92)
+			fb.modulate = Color(0.82, 0.86, 0.92, 1.0 if in_anim else 0.45)
 
 
 func _process(delta: float) -> void:
@@ -1066,8 +1284,8 @@ func _process(delta: float) -> void:
 	if _anim_playing:
 		_anim_timer += delta
 		var adef: Dictionary = PREVIEW_ANIM_DEFS.get(_selected_anim, {"frames": [0, 1], "fps": 3.5, "loop": true})
-		var frames: Array = [0, 1, 2, 3, 4, 5, 6, 7] if _per_frame_scope else adef.get("frames", [0])
-		var fps: float = 6.0 if _per_frame_scope else float(adef.get("fps", 4.0))
+		var frames: Array = adef.get("frames", [0])
+		var fps: float = float(adef.get("fps", 4.0))
 		var idx: int = int(_anim_timer * fps) % max(1, frames.size())
 		_manual_frame = int(frames[idx])
 		_refresh_character_pose()
@@ -1080,6 +1298,7 @@ func _refresh_character_pose() -> void:
 	_refresh_keyframe_strip()
 	var flip_h := not _facing_right
 	_modular.freeze_procedural_anim = true
+	_modular.current_weapon_id = _get_active_weapon_id()
 	_modular.set_sync_frame(_manual_frame, flip_h)
 	_modular._current_anim = _selected_anim
 
@@ -1145,7 +1364,11 @@ func _refresh_character_pose() -> void:
 		_gun_p.visible = true
 		_gun_p.position = Vector2(14.0 * dir, 0.0)
 		_gun_p.flip_h = flip_h
-		_gun_p.frame = _preview_weapon_id
+		var spec_p: Dictionary = WeaponData.get_weapon_sprite_spec(_preview_weapon_id, 0)
+		_gun_p.texture = spec_p["tex"] as Texture2D
+		_gun_p.hframes = int(spec_p["hframes"])
+		_gun_p.vframes = int(spec_p["vframes"])
+		_gun_p.frame = int(spec_p["frame"])
 
 
 func _get_part_screen_pos(pname: String) -> Vector2:
@@ -1280,6 +1503,8 @@ func _switch_editor_tab(tab_idx: int) -> void:
 		_ui_setter_root.visible = (tab_idx == 1)
 	if _range_mode_root != null:
 		_range_mode_root.visible = (tab_idx == 2)
+	if _coin_mode_root != null:
+		_coin_mode_root.visible = (tab_idx == 3)
 	if _tab_pose_btn != null:
 		_tab_pose_btn.set_pressed_no_signal(tab_idx == 0)
 		_tab_pose_btn.modulate = Color(0.45, 0.95, 1.0) if tab_idx == 0 else Color(0.75, 0.80, 0.88)
@@ -1289,6 +1514,11 @@ func _switch_editor_tab(tab_idx: int) -> void:
 	if _tab_range_btn != null:
 		_tab_range_btn.set_pressed_no_signal(tab_idx == 2)
 		_tab_range_btn.modulate = Color(1.0, 0.45, 0.42) if tab_idx == 2 else Color(0.75, 0.80, 0.88)
+	if _tab_coin_btn != null:
+		_tab_coin_btn.set_pressed_no_signal(tab_idx == 3)
+		_tab_coin_btn.modulate = Color(1.0, 0.86, 0.28) if tab_idx == 3 else Color(0.75, 0.80, 0.88)
+	if tab_idx == 3:
+		_sync_coin_economy_ui()
 	if tab_idx != 0:
 		_anim_playing = false
 		if _anim_play_btn != null:
@@ -1999,7 +2229,7 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	left_vb.add_theme_constant_override("separation", 5)
 	left_scroll.add_child(left_vb)
 
-	left_vb.add_child(_make_section_label("All Weapons (0..17)"))
+	left_vb.add_child(_make_section_label("All Weapons (0..23)"))
 	for wid in range(WeaponData.get_total_weapon_count()):
 		var wd := WeaponData.get_weapon(wid, 0, 0)
 		var btn := Button.new()
@@ -2361,3 +2591,385 @@ func _on_range_canvas_gui_input(event: InputEvent) -> void:
 				_weapon_ranges[str(_range_selected_wid)] = new_r
 				_sync_range_inspector()
 		_range_canvas.queue_redraw()
+
+
+# ==============================================================================
+# COIN ADJUSTMENT / ECONOMY TAB
+# ==============================================================================
+
+func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
+	_coin_mode_root = VBoxContainer.new()
+	_coin_mode_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_coin_mode_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_coin_mode_root.add_theme_constant_override("separation", 0)
+	_coin_mode_root.visible = false
+	main_vbox.add_child(_coin_mode_root)
+
+	# Top bar
+	var top_bar := PanelContainer.new()
+	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
+	_coin_mode_root.add_child(top_bar)
+
+	var top_h := HBoxContainer.new()
+	top_h.add_theme_constant_override("separation", 12)
+	top_bar.add_child(top_h)
+
+	var hdr := Label.new()
+	hdr.text = "COIN ECONOMY & SKIN / AGENT PRICE EDITOR"
+	hdr.add_theme_font_size_override("font_size", 16)
+	hdr.modulate = Color(1.0, 0.86, 0.30)
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_h.add_child(hdr)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset Defaults"
+	reset_btn.custom_minimum_size = Vector2(130, 32)
+	reset_btn.pressed.connect(func():
+		ProfileManager.reset_economy_defaults()
+		_sync_coin_economy_ui()
+		_coin_status_lbl.text = "Reset coin rewards & prices to defaults (click Save to write file)."
+		_coin_status_lbl.modulate = Color(1.0, 0.84, 0.35)
+	)
+	top_h.add_child(reset_btn)
+
+	var save_btn := Button.new()
+	save_btn.text = "SAVE COIN ECONOMY"
+	save_btn.custom_minimum_size = Vector2(180, 32)
+	save_btn.modulate = Color(0.42, 1.0, 0.62)
+	save_btn.pressed.connect(func():
+		var ok: bool = ProfileManager.save_economy_config(true)
+		_coin_status_lbl.text = "Saved assets/data/coin_economy.json!" if ok else "Failed to save coin_economy.json"
+		_coin_status_lbl.modulate = Color(0.40, 1.0, 0.58) if ok else Color(1.0, 0.42, 0.38)
+	)
+	top_h.add_child(save_btn)
+
+	# Body 3 columns: Left = Rewards & Agent Price | Mid = Gun List | Right = Per-Gun Skin Prices
+	var split := HBoxContainer.new()
+	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 0)
+	_coin_mode_root.add_child(split)
+
+	# LEFT COLUMN: Rewards + Agent Price + Dev Balance
+	var left_panel := PanelContainer.new()
+	left_panel.custom_minimum_size = Vector2(310, 0)
+	left_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.08, 0.11, 0.16), 14))
+	split.add_child(left_panel)
+
+	var lv := VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 10)
+	left_panel.add_child(lv)
+
+	var rw_hdr := _make_section_label("MATCH COIN REWARDS")
+	rw_hdr.modulate = Color(1.0, 0.86, 0.32)
+	lv.add_child(rw_hdr)
+
+	_coin_kill_spin = _add_coin_spin_row(lv, "Coins / Kill:", 0, 10000, 5)
+	_coin_kill_spin.value_changed.connect(func(v: float):
+		if _coin_syncing: return
+		ProfileManager.kill_reward = int(v)
+	)
+	_coin_treasure_spin = _add_coin_spin_row(lv, "Treasure Box:", 0, 10000, 5)
+	_coin_treasure_spin.value_changed.connect(func(v: float):
+		if _coin_syncing: return
+		ProfileManager.treasure_reward = int(v)
+	)
+	_coin_win_spin = _add_coin_spin_row(lv, "Match Win:", 0, 10000, 10)
+	_coin_win_spin.value_changed.connect(func(v: float):
+		if _coin_syncing: return
+		ProfileManager.win_reward = int(v)
+	)
+	_coin_match_spin = _add_coin_spin_row(lv, "Match Finish:", 0, 10000, 5)
+	_coin_match_spin.value_changed.connect(func(v: float):
+		if _coin_syncing: return
+		ProfileManager.match_reward = int(v)
+	)
+
+	lv.add_child(HSeparator.new())
+
+	var ag_hdr := _make_section_label("AGENT UNLOCK PRICE")
+	ag_hdr.modulate = Color(0.55, 0.86, 1.0)
+	lv.add_child(ag_hdr)
+
+	_coin_agent_spin = _add_coin_spin_row(lv, "Each Locked Agent:", 0, 100000, 100)
+	_coin_agent_spin.value_changed.connect(func(v: float):
+		if _coin_syncing: return
+		ProfileManager.agent_unlock_price = int(v)
+	)
+
+	var ag_note := Label.new()
+	ag_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ag_note.add_theme_font_size_override("font_size", 11)
+	ag_note.modulate = Color(0.72, 0.80, 0.90)
+	ag_note.text = "Starter agents are unlocked by default. All remaining agents share this coin price in normal modes (all agents are free in Practice Mode)."
+	lv.add_child(ag_note)
+
+	lv.add_child(HSeparator.new())
+
+	var bal_hdr := _make_section_label("YOUR TEST BALANCE")
+	bal_hdr.modulate = Color(0.45, 0.96, 0.62)
+	lv.add_child(bal_hdr)
+
+	_coin_bal_lbl = Label.new()
+	_coin_bal_lbl.add_theme_font_size_override("font_size", 15)
+	_coin_bal_lbl.modulate = Color(1.0, 0.86, 0.28)
+	lv.add_child(_coin_bal_lbl)
+
+	var bal_row := HBoxContainer.new()
+	bal_row.add_theme_constant_override("separation", 6)
+	lv.add_child(bal_row)
+
+	var add_1k := Button.new()
+	add_1k.text = "+1000"
+	add_1k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_1k.pressed.connect(func():
+		ProfileManager.add_coins(1000)
+		_sync_coin_economy_ui()
+	)
+	bal_row.add_child(add_1k)
+
+	var add_5k := Button.new()
+	add_5k.text = "+5000"
+	add_5k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_5k.pressed.connect(func():
+		ProfileManager.add_coins(5000)
+		_sync_coin_economy_ui()
+	)
+	bal_row.add_child(add_5k)
+
+	var rst_bal := Button.new()
+	rst_bal.text = "Set 500"
+	rst_bal.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rst_bal.pressed.connect(func():
+		ProfileManager.coins = 500
+		ProfileManager.save_profile()
+		ProfileManager.coins_changed.emit(ProfileManager.coins)
+		_sync_coin_economy_ui()
+	)
+	bal_row.add_child(rst_bal)
+
+	var sp_v := Control.new()
+	sp_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lv.add_child(sp_v)
+
+	_coin_status_lbl = Label.new()
+	_coin_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_coin_status_lbl.add_theme_font_size_override("font_size", 12)
+	_coin_status_lbl.modulate = Color(0.75, 0.85, 0.95)
+	_coin_status_lbl.text = "Adjust any reward or individual gun skin price, then click SAVE COIN ECONOMY."
+	lv.add_child(_coin_status_lbl)
+
+	# MIDDLE COLUMN: Gun Selector
+	var mid_panel := PanelContainer.new()
+	mid_panel.custom_minimum_size = Vector2(240, 0)
+	mid_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.06, 0.09, 0.14), 10))
+	split.add_child(mid_panel)
+
+	var mv := VBoxContainer.new()
+	mv.add_theme_constant_override("separation", 6)
+	mid_panel.add_child(mv)
+
+	var gun_hdr := _make_section_label("SELECT GUN")
+	gun_hdr.modulate = Color(0.55, 0.88, 1.0)
+	mv.add_child(gun_hdr)
+
+	var gun_scroll := ScrollContainer.new()
+	gun_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gun_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	mv.add_child(gun_scroll)
+
+	var gun_list := VBoxContainer.new()
+	gun_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gun_list.add_theme_constant_override("separation", 4)
+	gun_scroll.add_child(gun_list)
+
+	_coin_gun_btns.clear()
+	for wid in ProfileManager.SHOP_WEAPON_IDS:
+		var wd := WeaponData.get_weapon(wid, 0, 0)
+		var b := Button.new()
+		b.text = "%d: %s" % [wid, wd.display_name]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, 32)
+		b.pressed.connect(func(): _select_coin_gun(wid))
+		gun_list.add_child(b)
+		_coin_gun_btns[wid] = b
+
+	# RIGHT COLUMN: Individual Skin Prices for Selected Gun
+	var right_panel := PanelContainer.new()
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 14))
+	split.add_child(right_panel)
+
+	var rv := VBoxContainer.new()
+	rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rv.add_theme_constant_override("separation", 10)
+	right_panel.add_child(rv)
+
+	var gun_top := HBoxContainer.new()
+	gun_top.add_theme_constant_override("separation", 12)
+	rv.add_child(gun_top)
+
+	_coin_gun_preview = TextureRect.new()
+	_coin_gun_preview.custom_minimum_size = Vector2(140, 64)
+	_coin_gun_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_coin_gun_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	gun_top.add_child(_coin_gun_preview)
+
+	var gt_v := VBoxContainer.new()
+	gt_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gt_v.alignment = BoxContainer.ALIGNMENT_CENTER
+	gun_top.add_child(gt_v)
+
+	_coin_gun_title_lbl = Label.new()
+	_coin_gun_title_lbl.add_theme_font_size_override("font_size", 18)
+	_coin_gun_title_lbl.modulate = Color(1.0, 0.90, 0.36)
+	gt_v.add_child(_coin_gun_title_lbl)
+
+	var apply_all_btn := Button.new()
+	apply_all_btn.text = "Copy This Gun's Skin Prices To ALL Guns"
+	apply_all_btn.custom_minimum_size = Vector2(0, 30)
+	apply_all_btn.pressed.connect(func():
+		for sdef in ProfileManager.GUN_SKIN_CATALOG:
+			var skey: String = str(sdef["key"])
+			if skey == "default":
+				continue
+			var p: int = ProfileManager.get_gun_skin_price(_coin_selected_wid, skey)
+			for target_wid in ProfileManager.SHOP_WEAPON_IDS:
+				ProfileManager.set_gun_skin_price(target_wid, skey, p)
+		_coin_status_lbl.text = "Copied this gun's skin prices to all %d guns! Click SAVE to persist." % ProfileManager.SHOP_WEAPON_IDS.size()
+		_coin_status_lbl.modulate = Color(0.45, 0.96, 1.0)
+	)
+	gt_v.add_child(apply_all_btn)
+
+	rv.add_child(HSeparator.new())
+
+	var skin_scroll := ScrollContainer.new()
+	skin_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	skin_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	rv.add_child(skin_scroll)
+
+	_coin_skin_list_box = VBoxContainer.new()
+	_coin_skin_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_coin_skin_list_box.add_theme_constant_override("separation", 8)
+	skin_scroll.add_child(_coin_skin_list_box)
+
+	_sync_coin_economy_ui()
+
+
+func _add_coin_spin_row(parent: Control, label_txt: String, min_v: int, max_v: int, step_v: int) -> SpinBox:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	var lbl := Label.new()
+	lbl.text = label_txt
+	lbl.custom_minimum_size = Vector2(130, 0)
+	lbl.add_theme_font_size_override("font_size", 13)
+	row.add_child(lbl)
+	var sb := SpinBox.new()
+	sb.min_value = min_v
+	sb.max_value = max_v
+	sb.step = step_v
+	sb.rounded = true
+	sb.suffix = " coins"
+	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(sb)
+	return sb
+
+
+func _select_coin_gun(wid: int) -> void:
+	_coin_selected_wid = wid
+	_refresh_coin_skin_rows()
+
+
+func _sync_coin_economy_ui() -> void:
+	_coin_syncing = true
+	if is_instance_valid(_coin_kill_spin):
+		_coin_kill_spin.value = ProfileManager.kill_reward
+	if is_instance_valid(_coin_treasure_spin):
+		_coin_treasure_spin.value = ProfileManager.treasure_reward
+	if is_instance_valid(_coin_win_spin):
+		_coin_win_spin.value = ProfileManager.win_reward
+	if is_instance_valid(_coin_match_spin):
+		_coin_match_spin.value = ProfileManager.match_reward
+	if is_instance_valid(_coin_agent_spin):
+		_coin_agent_spin.value = ProfileManager.agent_unlock_price
+	if is_instance_valid(_coin_bal_lbl):
+		_coin_bal_lbl.text = "Current Balance: %d COINS" % ProfileManager.coins
+	_coin_syncing = false
+	_refresh_coin_skin_rows()
+
+
+func _refresh_coin_skin_rows() -> void:
+	if not is_instance_valid(_coin_skin_list_box):
+		return
+	var wid: int = _coin_selected_wid
+	var wd := WeaponData.get_weapon(wid, 0, 0)
+	if is_instance_valid(_coin_gun_title_lbl):
+		_coin_gun_title_lbl.text = "%s (ID %d) — Individual Skin Prices" % [wd.display_name, wid]
+	if is_instance_valid(_coin_gun_preview):
+		_coin_gun_preview.texture = WeaponData.get_weapon_atlas_texture(wid, 0)
+	for k in _coin_gun_btns:
+		var b: Button = _coin_gun_btns[k] as Button
+		if is_instance_valid(b):
+			b.modulate = Color(1.0, 0.86, 0.30) if int(k) == wid else Color(0.82, 0.86, 0.94)
+
+	for c in _coin_skin_list_box.get_children():
+		c.queue_free()
+	_coin_skin_spins.clear()
+
+	for sdef in ProfileManager.GUN_SKIN_CATALOG:
+		var skey: String = str(sdef["key"])
+		var sname: String = str(sdef["name"])
+		var badge: Color = sdef["badge"] as Color
+		var tint: Color = ProfileManager.get_gun_skin_tint(wid, skey)
+		var cur_price: int = ProfileManager.get_gun_skin_price(wid, skey)
+
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var csb := StyleBoxFlat.new()
+		csb.bg_color = Color(0.10, 0.14, 0.21, 0.95)
+		csb.border_color = badge
+		csb.set_border_width_all(1)
+		csb.set_corner_radius_all(8)
+		csb.set_content_margin_all(8)
+		card.add_theme_stylebox_override("panel", csb)
+		_coin_skin_list_box.add_child(card)
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		card.add_child(row)
+
+		var preview := TextureRect.new()
+		preview.custom_minimum_size = Vector2(86, 42)
+		preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview.texture = WeaponData.get_weapon_atlas_texture(wid, int(sdef.get("sheet_row", 0)))
+		preview.modulate = tint
+		row.add_child(preview)
+
+		var nl := Label.new()
+		nl.text = "%s (%s)" % [sname, skey]
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nl.add_theme_font_size_override("font_size", 14)
+		nl.modulate = badge.lightened(0.25)
+		row.add_child(nl)
+
+		var sb := SpinBox.new()
+		sb.min_value = 0
+		sb.max_value = 50000
+		sb.step = 25
+		sb.rounded = true
+		sb.suffix = " coins"
+		sb.custom_minimum_size = Vector2(150, 32)
+		sb.value = cur_price
+		if skey == "default":
+			sb.editable = false
+			sb.value = 0
+		else:
+			sb.value_changed.connect(func(v: float):
+				ProfileManager.set_gun_skin_price(wid, skey, int(v))
+			)
+		row.add_child(sb)
+		_coin_skin_spins[skey] = sb

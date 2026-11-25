@@ -1,7 +1,7 @@
 class_name SoldierPreview
 extends Node2D
 
-const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 
 var anim_mode: int = 0
 var shuffle_guns: bool = false
@@ -27,8 +27,8 @@ func _ready() -> void:
 
 	_gun_p = Sprite2D.new()
 	_gun_p.texture = TEX_WEAPONS
-	_gun_p.hframes = 11
-	_gun_p.vframes = 3
+	_gun_p.hframes = WeaponData.SELECTION_COLS
+	_gun_p.vframes = WeaponData.SELECTION_ROWS
 	_gun_p.position = Vector2(16, 0)
 	_gun_p.scale = Vector2(0.23, 0.23)
 	_weapon_pivot.add_child(_gun_p)
@@ -59,8 +59,11 @@ func _apply_preview_weapon(w_id: int) -> void:
 		_weapon_pivot.visible = false
 		return
 	_weapon_pivot.visible = true
-	var w_frame: int = ProfileManager.weapon_skin_id * 11 + w_id
-	_gun_p.frame = w_frame
+	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, ProfileManager.weapon_skin_id)
+	_gun_p.texture = spec["tex"] as Texture2D
+	_gun_p.hframes = int(spec["hframes"])
+	_gun_p.vframes = int(spec["vframes"])
+	_gun_p.frame = int(spec["frame"])
 
 
 func _process(delta: float) -> void:

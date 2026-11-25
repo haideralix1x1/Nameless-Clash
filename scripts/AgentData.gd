@@ -270,10 +270,10 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Turn invisible & invincible for 7s while still able to attack."
 		}
 	},
-	# 4: Rook Frost // Spec-Ops
+	# 4: White Frost // Spec-Ops
 	{
 		"id": 4,
-		"agent_name": "Rook Frost",
+		"agent_name": "White Frost",
 		"title": "Spec-Ops",
 		"role": "Tactical Breacher",
 		"accent": Color(0.45, 0.85, 1.0),
@@ -571,11 +571,11 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Emit an expanding blue time wave that stops time for all nearby enemies for 5s, freezing them even in mid-air."
 		}
 	},
-	# 11: Wraith // Spooky Ghost
+	# 11: Wraith // Undead
 	{
 		"id": 11,
 		"agent_name": "Wraith",
-		"title": "Spooky Ghost",
+		"title": "Undead",
 		"role": "Spectral Phantom",
 		"accent": Color(0.64, 0.94, 1.0),
 		"base_weapon": {
@@ -621,10 +621,10 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Drag a nearby enemy close and rip their soul for instant death."
 		}
 	},
-	# 12: Mummy // Ancient Mummy
+	# 12: Pharaoh // Ancient Mummy
 	{
 		"id": 12,
-		"agent_name": "Mummy",
+		"agent_name": "Pharaoh",
 		"title": "Ancient Mummy",
 		"role": "Tomb Guardian",
 		"accent": Color(0.95, 0.78, 0.32),
@@ -927,11 +927,11 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Launch a huge tornado forward that chases nearby enemies and kills caught foes in 1s."
 		}
 	},
-	# 18: Ignis // Magma Golem
+	# 18: Ignis // Magma
 	{
 		"id": 18,
 		"agent_name": "Ignis",
-		"title": "Magma Golem",
+		"title": "Magma",
 		"role": "Lava Colossus",
 		"accent": Color(1.0, 0.42, 0.14),
 		"base_weapon": {
@@ -977,20 +977,20 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Grab a nearby enemy close, lock them in a roaring fire, and burn them to death over 1.5s."
 		}
 	},
-	# 19: Prism // Crystal Golem
+	# 19: Stone // Rocky Golem
 	{
 		"id": 19,
-		"agent_name": "Prism",
-		"title": "Crystal Golem",
+		"agent_name": "Stone",
+		"title": "Rocky Golem",
 		"role": "Quartz Elemental",
 		"accent": Color(0.98, 0.44, 0.82),
 		"base_weapon": {
-			"name": "Quartz Geode Mace",
-			"style": "axe",
+			"name": "Boulder War Hammer",
+			"style": "stone_hammer",
 			"damage": 25,
 			"cooldown": 0.35,
 			"range": 106.0,
-			"color": Color(1.0, 0.58, 0.88),
+			"color": Color(0.68, 0.62, 0.54),
 			"ranged": false
 		},
 		"abilities": [
@@ -1229,11 +1229,11 @@ const AGENTS: Array[Dictionary] = [
 			"desc": "Rush to a nearby enemy and beat them down with rapid punches till death."
 		}
 	},
-	# 24: Bramble // Crimson Hare
+	# 24: Grimhare // Cursed Hare
 	{
 		"id": 24,
-		"agent_name": "Bramble",
-		"title": "Crimson Hare",
+		"agent_name": "Grimhare",
+		"title": "Cursed Hare",
 		"role": "Brawler Hare",
 		"accent": Color(0.88, 0.20, 0.28),
 		"base_weapon": {

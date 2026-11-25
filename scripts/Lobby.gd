@@ -1015,9 +1015,9 @@ func _refresh_agent_draft_ui() -> void:
 	for pid in locks.keys():
 		taken_by[int(locks[pid])] = int(pid)
 
-	if not my_locked and taken_by.has(_draft_selected_arch):
+	if not my_locked and (taken_by.has(_draft_selected_arch) or not ProfileManager.is_agent_unlocked(_draft_selected_arch, false)):
 		for i in range(AgentData.AGENTS.size()):
-			if not taken_by.has(i):
+			if not taken_by.has(i) and ProfileManager.is_agent_unlocked(i, false):
 				_draft_selected_arch = i
 				break
 
@@ -1054,12 +1054,35 @@ func _refresh_agent_draft_ui() -> void:
 				btn.text = "%s\n[TAKEN: %s]" % [str(ag["agent_name"]), owner_name]
 				_style_button(btn, Color(0.14, 0.14, 0.18, 0.70), Color(0.35, 0.38, 0.45))
 		else:
-			btn.disabled = my_locked
-			btn.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
-			if i == _draft_selected_arch and not my_locked:
-				_style_button(btn, Color(0.28, 0.22, 0.06, 0.98), Color(1.0, 0.84, 0.24))
+			var is_unl: bool = ProfileManager.is_agent_unlocked(i, false)
+			var lock_node: Node = btn.get_node_or_null("LockIcon")
+			if lock_node == null:
+				var lock_tr := TextureRect.new()
+				lock_tr.name = "LockIcon"
+				lock_tr.texture = load("res://assets/ui/icons/icon_lock.png") as Texture2D
+				lock_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				lock_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				lock_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				lock_tr.anchor_left = 1.0
+				lock_tr.anchor_right = 1.0
+				lock_tr.offset_left = -26.0
+				lock_tr.offset_top = 6.0
+				lock_tr.offset_right = -6.0
+				lock_tr.offset_bottom = 26.0
+				btn.add_child(lock_tr)
+				lock_node = lock_tr
+			(lock_node as Control).visible = not is_unl
+			if not is_unl:
+				btn.disabled = true
+				btn.text = "%s\n%d COINS" % [str(ag["agent_name"]), ProfileManager.get_agent_unlock_price()]
+				_style_button(btn, Color(0.09, 0.09, 0.12, 0.78), Color(0.42, 0.34, 0.22))
 			else:
-				_style_button(btn, Color(0.10, 0.15, 0.24, 0.95), Color(0.30, 0.48, 0.72))
+				btn.disabled = my_locked
+				btn.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+				if i == _draft_selected_arch and not my_locked:
+					_style_button(btn, Color(0.28, 0.22, 0.06, 0.98), Color(1.0, 0.84, 0.24))
+				else:
+					_style_button(btn, Color(0.10, 0.15, 0.24, 0.95), Color(0.30, 0.48, 0.72))
 
 	if my_locked:
 		var l_name: String = str(AgentData.get_agent(my_locked_arch)["agent_name"])

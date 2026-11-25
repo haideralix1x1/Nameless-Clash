@@ -2,7 +2,7 @@ extends Control
 
 const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
-const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 
 const TAB_NAMES: Array[String] = ["HEROES", "OUTFIT", "COLORS", "WEAPONS"]
 const GEAR_SPECS: Array[Dictionary] = [
@@ -384,7 +384,17 @@ func _build_heroes_tab(parent: VBoxContainer) -> Control:
 	scroll.add_child(grid)
 
 	_hero_cards.clear()
-	for i in range(AgentData.AGENTS.size()):
+	var ag_order: Array[int] = []
+	for k in range(AgentData.AGENTS.size()):
+		ag_order.append(k)
+	ag_order.sort_custom(func(a: int, b: int) -> bool:
+		var a_unl: bool = ProfileManager.is_agent_unlocked(a, false)
+		var b_unl: bool = ProfileManager.is_agent_unlocked(b, false)
+		if a_unl != b_unl:
+			return a_unl
+		return str(AgentData.AGENTS[a].get("agent_name", "")).to_lower() < str(AgentData.AGENTS[b].get("agent_name", "")).to_lower()
+	)
+	for i in ag_order:
 		var ag: Dictionary = AgentData.AGENTS[i]
 		var cb := Button.new()
 		cb.custom_minimum_size = Vector2(0, 64)
@@ -1018,16 +1028,50 @@ func _build_agent_pick_overlay() -> void:
 	grid.add_theme_constant_override("v_separation", 8)
 	scroll.add_child(grid)
 
-	for i in range(AgentData.AGENTS.size()):
+	var ag_order: Array[int] = []
+	for k in range(AgentData.AGENTS.size()):
+		ag_order.append(k)
+	ag_order.sort_custom(func(a: int, b: int) -> bool:
+		var a_unl: bool = ProfileManager.is_agent_unlocked(a, false)
+		var b_unl: bool = ProfileManager.is_agent_unlocked(b, false)
+		if a_unl != b_unl:
+			return a_unl
+		return str(AgentData.AGENTS[a].get("agent_name", "")).to_lower() < str(AgentData.AGENTS[b].get("agent_name", "")).to_lower()
+	)
+	for i in ag_order:
 		var ag: Dictionary = AgentData.AGENTS[i]
+		var is_unl: bool = ProfileManager.is_agent_unlocked(i, false)
+		var u_price: int = ProfileManager.get_agent_unlock_price()
 		var ab := Button.new()
 		ab.custom_minimum_size = Vector2(0, 56)
 		ab.clip_text = true
 		ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		ab.add_theme_font_size_override("font_size", 14)
-		ab.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
-		_style_button(ab, Color(0.10, 0.14, 0.22), Color(0.55, 0.40, 0.90), 8)
+		ab.text = ("%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]) if is_unl else ("%s\n%d COINS" % [str(ag["agent_name"]), u_price])
+		_style_button(ab, Color(0.10, 0.14, 0.22) if is_unl else Color(0.08, 0.08, 0.11), Color(0.55, 0.40, 0.90) if is_unl else Color(0.45, 0.36, 0.22), 8)
+		var lock_tr := TextureRect.new()
+		lock_tr.texture = load("res://assets/ui/icons/icon_lock.png") as Texture2D
+		lock_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		lock_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		lock_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lock_tr.anchor_left = 1.0
+		lock_tr.anchor_right = 1.0
+		lock_tr.offset_left = -28.0
+		lock_tr.offset_top = 6.0
+		lock_tr.offset_right = -6.0
+		lock_tr.offset_bottom = 28.0
+		lock_tr.visible = not is_unl
+		ab.add_child(lock_tr)
 		ab.pressed.connect(func():
+			if not ProfileManager.is_agent_unlocked(i, false):
+				if ProfileManager.buy_agent(i):
+					ab.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
+					lock_tr.visible = false
+					_style_button(ab, Color(0.10, 0.14, 0.22), Color(0.55, 0.40, 0.90), 8)
+				else:
+					note.text = "Locked! Need %d coins to unlock %s (you have %d)." % [ProfileManager.get_agent_unlock_price(), str(ag["agent_name"]), ProfileManager.coins]
+					note.modulate = Color(1.0, 0.48, 0.42)
+					return
 			ProfileManager.apply_archetype_preset(i, true)
 			NetworkManager.disconnect_network()
 			NetworkManager.test_mode_enabled = false

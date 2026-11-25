@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gniytr6m1wci"
-path="res://.godot/imported/rook_frost_blade.png-15b0f7984de12d7dbf8237c151bf36f4.ctex"
+uid="uid://d075jj5so5qfj"
+path="res://.godot/imported/weapons_selection_sheet.png-957f64a98c40199cf73b3f71dea7b43c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/weapons/rook_frost_blade.png"
-dest_files=["res://.godot/imported/rook_frost_blade.png-15b0f7984de12d7dbf8237c151bf36f4.ctex"]
+source_file="res://assets/sprites/weapons_selection_sheet.png"
+dest_files=["res://.godot/imported/weapons_selection_sheet.png-957f64a98c40199cf73b3f71dea7b43c.ctex"]
 
 [params]
 

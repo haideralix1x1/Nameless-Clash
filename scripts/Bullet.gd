@@ -3,10 +3,9 @@ extends Area2D
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const TEX_BULLET: Texture2D = preload("res://assets/sprites/bullet.png")
 const TEX_LASER: Texture2D = preload("res://assets/sprites/laser_trail.png")
-const TEX_RAVEN: Texture2D = preload("res://assets/sprites/characters/summons/raven_proj.png")
+const TEX_RAVEN: Texture2D = preload("res://assets/sprites/summons/raven_proj.png")
 const TEX_HEAVY_FORGE: Texture2D = preload("res://assets/sprites/vfx/ogre_falling_forge.png")
 const TEX_MUMMY_HEAD: Texture2D = preload("res://assets/sprites/modular/mummy_head.png")
-const TEX_AFERA_SPEAR: Texture2D = preload("res://assets/sprites/weapons/afera_tribal_spear.png")
 
 var velocity: Vector2 = Vector2.RIGHT * 1100.0
 var damage: int = 16
@@ -368,7 +367,7 @@ func _handle_collision(collider: Object, hit_pos: Vector2, hit_norm: Vector2 = V
 		if collider != null and collider.is_in_group("players") and int(collider.get("peer_id")) != shooter_peer_id:
 			if not (NetworkManager.is_team_mode() and int(collider.get("team_id")) == shooter_team):
 				if can_deal_damage and collider.has_method("apply_hit") and on_hit_effect_kind != "death_kiss":
-					collider.apply_hit(damage, shooter_peer_id, weapon_name, shooter_name, velocity.normalized() * 240.0)
+					collider.apply_hit(_compute_falloff_damage(), shooter_peer_id, weapon_name, shooter_name, velocity.normalized() * 240.0)
 		_trigger_explosion(hit_pos)
 		queue_free()
 		return
@@ -586,7 +585,7 @@ func _trigger_on_hit_effect(hit_pos: Vector2) -> void:
 
 func _compute_falloff_damage() -> int:
 	if close_lethal_dist > 0.0 and _distance_traveled <= close_lethal_dist:
-		return maxi(damage, 250)
+		return maxi(damage, 300)
 	if min_damage_ratio >= 0.999 or _distance_traveled <= damage_falloff_start:
 		return damage
 	var falloff_span: float = maxf(85.0, damage_falloff_start * 0.85)
@@ -683,6 +682,17 @@ func _draw() -> void:
 		return
 	draw_set_transform(Vector2.ZERO, _visual_spin, Vector2.ONE)
 	match visual_style:
+		"nade_round":
+			draw_circle(Vector2(-2.0, 0.0), 8.0, Color(0.08, 0.10, 0.12))
+			draw_rect(Rect2(-8.0, -5.0, 11.0, 10.0), Color(0.28, 0.34, 0.24))
+			draw_circle(Vector2(4.0, 0.0), 5.2, Color(1.0, 0.45, 0.12))
+			draw_circle(Vector2(5.5, -1.5), 2.0, Color(1.0, 0.88, 0.55))
+		"stun_bolt":
+			draw_line(Vector2(-12.0, 0.0), Vector2(12.0, 0.0), Color(0.18, 0.88, 1.0, 0.55), 8.0)
+			draw_polyline(PackedVector2Array([
+				Vector2(-12.0, 0.0), Vector2(-5.0, -4.5), Vector2(1.0, 4.0), Vector2(7.0, -3.5), Vector2(13.0, 0.0)
+			]), Color(0.65, 0.98, 1.0), 2.8)
+			draw_circle(Vector2(11.0, 0.0), 3.5, Color.WHITE)
 		"fireball":
 			var life_t: float = clampf(_age / maxf(max_lifetime, 0.01), 0.0, 1.0)
 			var bs: float = lerpf(1.25, 2.85, life_t)
@@ -810,7 +820,7 @@ func _draw() -> void:
 				Vector2(-5.0, -3.5), Vector2(14.0, 0.0), Vector2(-5.0, 3.5)
 			]), bullet_color)
 		"thrown_spear":
-			draw_texture_rect(TEX_AFERA_SPEAR, Rect2(-26.0, -4.5, 52.0, 9.0), false)
+			draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-26.0, -13.0, 52.0, 26.0), WeaponData.get_agent_weapon_region("afera_spear"))
 		"grapple_hook":
 			draw_circle(Vector2(-4.0, 0.0), 4.0, Color(0.55, 0.58, 0.65))
 			draw_polyline(PackedVector2Array([Vector2(-4.0, 0.0), Vector2(12.0, 0.0)]), Color(0.85, 0.88, 0.94), 3.0)

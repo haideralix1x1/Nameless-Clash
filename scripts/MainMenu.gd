@@ -9,6 +9,16 @@ var _credits_overlay: Control
 var _preview: SoldierPreview
 var _callsign_label: Label
 var _loadout_label: Label
+var _coin_pill_lbl: Label
+var _shop_overlay: Control
+var _shop_coin_lbl: Label
+var _shop_gun_preview: TextureRect
+var _shop_gun_title: Label
+var _shop_skin_grid: GridContainer
+var _shop_status_lbl: Label
+var _shop_gun_btns: Dictionary = {}
+var _shop_selected_weapon_id: int = 0
+var _shop_preview_skin_key: String = ""
 var _transitioning: bool = false
 var _diff_buttons: Array[Button] = []
 var _agent_select_overlay: Control
@@ -18,6 +28,7 @@ var _agent_kit_body: Label
 var _agent_preview_btns: Array[Button] = []
 var _agent_cards: Array[Button] = []
 var _agent_select_for_practice: bool = false
+var _agent_preview_idx: int = 0
 var _agent_play_btn: Button
 var _practice_agent_bot_row: HBoxContainer
 var _practice_agent_bot_opt: OptionButton
@@ -176,9 +187,50 @@ func _build_ui() -> void:
 	add_child(center)
 
 	_hub_container = VBoxContainer.new()
-	_hub_container.custom_minimum_size = Vector2(960, 540)
+	_hub_container.custom_minimum_size = Vector2(960, 560)
 	_hub_container.add_theme_constant_override("separation", 10)
 	center.add_child(_hub_container)
+
+	# Top Economy Bar: Live Coin Balance + Quick Gun Shop Access
+	var econ_bar := HBoxContainer.new()
+	econ_bar.add_theme_constant_override("separation", 12)
+	_hub_container.add_child(econ_bar)
+
+	var brand_lbl := Label.new()
+	brand_lbl.text = "NAMELESS CLASH"
+	brand_lbl.add_theme_font_size_override("font_size", 22)
+	brand_lbl.modulate = Color(1.0, 0.86, 0.28)
+	brand_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	econ_bar.add_child(brand_lbl)
+
+	var coin_pill := PanelContainer.new()
+	var cp_sb := StyleBoxFlat.new()
+	cp_sb.bg_color = Color(0.14, 0.12, 0.05, 0.96)
+	cp_sb.border_color = Color(1.0, 0.84, 0.24, 0.96)
+	cp_sb.set_border_width_all(2)
+	cp_sb.set_corner_radius_all(12)
+	cp_sb.set_content_margin_all(6)
+	cp_sb.content_margin_left = 14
+	cp_sb.content_margin_right = 14
+	coin_pill.add_theme_stylebox_override("panel", cp_sb)
+	econ_bar.add_child(coin_pill)
+
+	_coin_pill_lbl = Label.new()
+	_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+	_coin_pill_lbl.add_theme_font_size_override("font_size", 17)
+	_coin_pill_lbl.modulate = Color(1.0, 0.88, 0.30)
+	coin_pill.add_child(_coin_pill_lbl)
+	ProfileManager.coins_changed.connect(func(new_c: int):
+		if is_instance_valid(_coin_pill_lbl):
+			_coin_pill_lbl.text = "COINS: %d" % new_c
+		if is_instance_valid(_shop_coin_lbl):
+			_shop_coin_lbl.text = "COINS: %d" % new_c
+	)
+
+	var top_shop_btn := _make_arcade_button("GUN SKIN SHOP", Color(1.0, 0.82, 0.24), 40.0, 16, Color(0.24, 0.17, 0.05, 0.98))
+	top_shop_btn.custom_minimum_size = Vector2(170, 40)
+	top_shop_btn.pressed.connect(_open_gun_shop)
+	econ_bar.add_child(top_shop_btn)
 
 	# Main Split: Left (Your Soldier Showcase) + Right (Big Touch Battle Modes)
 	var split := HBoxContainer.new()
@@ -276,9 +328,19 @@ func _build_ui() -> void:
 	_update_loadout_label()
 	pv.add_child(_loadout_label)
 
-	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO & WEAPONS", Color(0.86, 0.62, 0.24), 56.0, 19, Color(0.18, 0.14, 0.10, 0.96))
+	var hero_btn_row := HBoxContainer.new()
+	hero_btn_row.add_theme_constant_override("separation", 8)
+	pv.add_child(hero_btn_row)
+
+	var edit_avatar_btn := _make_arcade_button("CUSTOMIZE HERO", Color(0.86, 0.62, 0.24), 52.0, 16, Color(0.18, 0.14, 0.10, 0.96))
+	edit_avatar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	edit_avatar_btn.pressed.connect(func(): _transition_to(NetworkManager.go_to_avatar_garage))
-	pv.add_child(edit_avatar_btn)
+	hero_btn_row.add_child(edit_avatar_btn)
+
+	var gun_shop_btn := _make_arcade_button("GUN SHOP", Color(1.0, 0.84, 0.26), 52.0, 16, Color(0.24, 0.18, 0.06, 0.96))
+	gun_shop_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gun_shop_btn.pressed.connect(_open_gun_shop)
+	hero_btn_row.add_child(gun_shop_btn)
 
 	# Right Card: Big Mobile Battle Mode Buttons
 	var nav_panel := PanelContainer.new()
@@ -376,6 +438,7 @@ func _build_ui() -> void:
 	_build_map_select_overlay()
 	_build_match_settings_overlay()
 	_build_local_mode_overlays()
+	_build_gun_shop_overlay()
 
 
 func _build_credits_overlay() -> void:
@@ -522,8 +585,28 @@ func _build_agent_select_overlay() -> void:
 	top_row.add_child(_agent_kit_title)
 
 	_agent_play_btn = _make_arcade_button("CONTINUE", Color(0.30, 0.92, 0.48), 42.0, 15, Color(0.09, 0.30, 0.16))
-	_agent_play_btn.custom_minimum_size = Vector2(190, 42)
+	_agent_play_btn.custom_minimum_size = Vector2(210, 42)
 	_agent_play_btn.pressed.connect(func():
+		if not _agent_select_for_practice and not ProfileManager.is_agent_unlocked(_agent_preview_idx, false):
+			if ProfileManager.buy_agent(_agent_preview_idx):
+				ProfileManager.apply_archetype_preset(_agent_preview_idx, true)
+				var sfx := AudioStreamPlayer.new()
+				sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
+				sfx.bus = &"SFX"
+				sfx.finished.connect(sfx.queue_free)
+				add_child(sfx)
+				sfx.play()
+				if is_instance_valid(_coin_pill_lbl):
+					_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+				if is_instance_valid(_preview):
+					_preview.refresh_from_profile()
+				_update_loadout_label()
+				_refresh_agent_select_ui()
+			return
+		if _agent_select_for_practice:
+			ProfileManager.apply_archetype_preset(_agent_preview_idx, false)
+		else:
+			ProfileManager.apply_archetype_preset(_agent_preview_idx, true)
 		_preview_saved_match_mode = -1
 		NetworkManager.disconnect_network()
 		NetworkManager.practice_shooting_range = false
@@ -659,6 +742,22 @@ func _build_agent_select_overlay() -> void:
 		cb.text = "  %s\n  (%s)" % [str(ag["agent_name"]), str(ag["title"])]
 		cb.set_meta("agent_idx", i)
 		cb.pressed.connect(_select_agent.bind(i))
+		var lock_tr := TextureRect.new()
+		lock_tr.name = "LockIcon"
+		lock_tr.texture = load("res://assets/ui/icons/icon_lock.png") as Texture2D
+		lock_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		lock_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		lock_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lock_tr.anchor_left = 1.0
+		lock_tr.anchor_right = 1.0
+		lock_tr.anchor_top = 0.0
+		lock_tr.anchor_bottom = 0.0
+		lock_tr.offset_left = -36.0
+		lock_tr.offset_top = 8.0
+		lock_tr.offset_right = -8.0
+		lock_tr.offset_bottom = 36.0
+		lock_tr.visible = false
+		cb.add_child(lock_tr)
 		grid.add_child(cb)
 		_agent_cards.append(cb)
 
@@ -672,19 +771,19 @@ const REWORKED_PART_PRIORITY: Array[int] = [
 
 func _get_sorted_agent_indices() -> Array[int]:
 	var total: int = mini(AgentData.AGENTS.size(), ProfileManager.ARCHETYPES.size())
-	var reworked: Array[int] = []
-	var others: Array[int] = []
-	for p_id in REWORKED_PART_PRIORITY:
-		for i in range(total):
-			if ProfileManager.get_archetype_part_id(i) == p_id and not reworked.has(i):
-				reworked.append(i)
+	var indices: Array[int] = []
 	for i in range(total):
-		if not reworked.has(i):
-			others.append(i)
-	var res: Array[int] = []
-	res.append_array(reworked)
-	res.append_array(others)
-	return res
+		indices.append(i)
+	indices.sort_custom(func(a: int, b: int) -> bool:
+		var a_unl: bool = ProfileManager.is_agent_unlocked(a, false)
+		var b_unl: bool = ProfileManager.is_agent_unlocked(b, false)
+		if a_unl != b_unl:
+			return a_unl
+		var a_name: String = str(AgentData.AGENTS[a].get("agent_name", "")).to_lower()
+		var b_name: String = str(AgentData.AGENTS[b].get("agent_name", "")).to_lower()
+		return a_name < b_name
+	)
+	return indices
 
 
 func _update_loadout_label() -> void:
@@ -698,7 +797,10 @@ func _update_loadout_label() -> void:
 
 
 func _cycle_main_agent(step: int) -> void:
-	var order: Array[int] = _get_sorted_agent_indices()
+	var order: Array[int] = []
+	for i in _get_sorted_agent_indices():
+		if ProfileManager.is_agent_unlocked(i, false):
+			order.append(i)
 	if order.is_empty():
 		return
 	var cur_pos: int = order.find(ProfileManager.archetype_id)
@@ -709,21 +811,28 @@ func _cycle_main_agent(step: int) -> void:
 
 
 func _select_agent(idx: int) -> void:
-	ProfileManager.apply_archetype_preset(idx, true)
-	if is_instance_valid(_preview):
-		_preview.refresh_from_profile()
-	_update_loadout_label()
+	_agent_preview_idx = clampi(idx, 0, AgentData.AGENTS.size() - 1)
+	if ProfileManager.is_agent_unlocked(_agent_preview_idx, false):
+		ProfileManager.apply_archetype_preset(_agent_preview_idx, true)
+		if is_instance_valid(_preview):
+			_preview.refresh_from_profile()
+		_update_loadout_label()
 	_refresh_agent_select_ui()
 
 
 func _refresh_agent_select_ui() -> void:
-	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	var idx: int = clampi(_agent_preview_idx, 0, AgentData.AGENTS.size() - 1)
 	var ag: Dictionary = AgentData.get_agent(idx)
 	var bw: Dictionary = ag["base_weapon"]
 	var abils: Array = ag["abilities"]
 	var ult: Dictionary = ag["ultimate"]
+	var is_sel_unlocked: bool = ProfileManager.is_agent_unlocked(idx, _agent_select_for_practice)
+	var unlock_price: int = ProfileManager.get_agent_unlock_price()
 	if is_instance_valid(_agent_kit_title):
-		_agent_kit_title.text = "Agent Clash  —  %s (%s)" % [str(ag["agent_name"]).to_upper(), str(ag["role"])]
+		var lock_tag: String = ""
+		if not ProfileManager.is_agent_unlocked(idx, false):
+			lock_tag = "  (FREE IN PRACTICE)" if _agent_select_for_practice else ("  (%d COINS)" % unlock_price)
+		_agent_kit_title.text = "Agent Clash  —  %s (%s)%s" % [str(ag["agent_name"]).to_upper(), str(ag["role"]), lock_tag]
 	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("set_agent"):
 		_agent_preview_arena.set_agent(idx)
 	if is_instance_valid(_agent_kit_body):
@@ -739,19 +848,60 @@ func _refresh_agent_select_ui() -> void:
 			btn.text = " ULT: %s" % str(ult["name"])
 		else:
 			btn.text = " %d: %s" % [si + 1, str(abils[si]["name"])]
+	if is_instance_valid(_agent_play_btn):
+		if _agent_select_for_practice:
+			_agent_play_btn.text = "START PRACTICE (AGENT)"
+			_agent_play_btn.disabled = false
+			_agent_play_btn.modulate = Color.WHITE
+		elif is_sel_unlocked:
+			_agent_play_btn.text = "CONTINUE"
+			_agent_play_btn.disabled = false
+			_agent_play_btn.modulate = Color.WHITE
+		else:
+			var can_afford: bool = ProfileManager.coins >= unlock_price
+			_agent_play_btn.text = "UNLOCK (%d COINS)" % unlock_price
+			_agent_play_btn.disabled = not can_afford
+			_agent_play_btn.modulate = Color(1.0, 0.88, 0.30) if can_afford else Color(0.60, 0.58, 0.64)
+	var sorted_order: Array[int] = _get_sorted_agent_indices()
+	var card_by_idx: Dictionary = {}
 	for card in _agent_cards:
 		var c_idx: int = int(card.get_meta("agent_idx")) if card.has_meta("agent_idx") else -1
+		if c_idx >= 0:
+			card_by_idx[c_idx] = card
+	for pos in range(sorted_order.size()):
+		var cid: int = sorted_order[pos]
+		if card_by_idx.has(cid):
+			var c_node: Button = card_by_idx[cid] as Button
+			if is_instance_valid(c_node) and c_node.get_parent() != null:
+				c_node.get_parent().move_child(c_node, pos)
+	for card in _agent_cards:
+		var c_idx: int = int(card.get_meta("agent_idx")) if card.has_meta("agent_idx") else -1
+		if c_idx < 0 or c_idx >= AgentData.AGENTS.size():
+			continue
+		var c_ag: Dictionary = AgentData.AGENTS[c_idx]
 		var is_sel: bool = (c_idx == idx)
+		var owned_perm: bool = ProfileManager.is_agent_unlocked(c_idx, false)
+		var playable_now: bool = ProfileManager.is_agent_unlocked(c_idx, _agent_select_for_practice)
+		if owned_perm:
+			card.text = "  %s\n  (%s)" % [str(c_ag["agent_name"]), str(c_ag["title"])]
+		elif _agent_select_for_practice:
+			card.text = "  %s\n  (FREE IN PRACTICE)" % str(c_ag["agent_name"])
+		else:
+			card.text = "  %s\n  %d COINS" % [str(c_ag["agent_name"]), unlock_price]
+		var lock_node: Node = card.get_node_or_null("LockIcon")
+		if lock_node is Control:
+			(lock_node as Control).visible = not playable_now
 		var ac: Color = ag["accent"] as Color
-		var bg_c: Color = Color(0.22, 0.14, 0.34) if is_sel else Color(0.10, 0.14, 0.22)
-		var bd_c: Color = ac if is_sel else Color(0.28, 0.42, 0.62)
+		var bg_c: Color = Color(0.22, 0.14, 0.34) if is_sel else (Color(0.10, 0.14, 0.22) if playable_now else Color(0.07, 0.08, 0.12))
+		var bd_c: Color = (Color(1.0, 0.84, 0.26) if (is_sel and not playable_now) else (ac if is_sel else (Color(0.28, 0.42, 0.62) if playable_now else Color(0.32, 0.26, 0.20))))
+		card.modulate = Color.WHITE if (playable_now or is_sel) else Color(0.72, 0.72, 0.78)
 		card.add_theme_stylebox_override("normal", _make_style(bg_c, bd_c, 10))
 		card.add_theme_stylebox_override("hover", _make_style(bg_c.lightened(0.14), bd_c.lightened(0.25), 10))
 		card.add_theme_stylebox_override("pressed", _make_style(bd_c.darkened(0.35), bd_c, 10))
 
 
 func _trigger_preview_ability(slot_i: int) -> void:
-	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	var idx: int = clampi(_agent_preview_idx, 0, AgentData.AGENTS.size() - 1)
 	var ab: Dictionary = AgentData.get_ability_slot(idx, slot_i)
 	if is_instance_valid(_agent_kit_body):
 		var prefix: String = "ULT" if slot_i == 3 else ("ABIL %d" % (slot_i + 1))
@@ -822,8 +972,10 @@ func _open_agent_select(for_practice: bool = false) -> void:
 	_preview_saved_match_mode = NetworkManager.match_mode
 	NetworkManager.match_mode = 2
 	_agent_select_for_practice = for_practice
-	if is_instance_valid(_agent_play_btn):
-		_agent_play_btn.text = "START PRACTICE (AGENT)" if for_practice else "CONTINUE"
+	_agent_preview_idx = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
+	if not for_practice and not ProfileManager.is_agent_unlocked(_agent_preview_idx, false):
+		_agent_preview_idx = 0
+		ProfileManager.apply_archetype_preset(0, false)
 	if is_instance_valid(_practice_agent_bot_row):
 		_practice_agent_bot_row.visible = for_practice
 	_sync_bot_agent_option_buttons()
@@ -2043,3 +2195,278 @@ func _refresh_local_join_list(servers: Array) -> void:
 			NetworkManager.join_game(ip)
 		)
 		_lj_list_box.add_child(btn)
+
+
+# --- COIN SYSTEM & GUN SKIN SHOP ---
+
+func _build_gun_shop_overlay() -> void:
+	_shop_overlay = ColorRect.new()
+	_shop_overlay.color = Color(0.02, 0.04, 0.08, 0.86)
+	_shop_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_shop_overlay.visible = false
+	add_child(_shop_overlay)
+
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_shop_overlay.add_child(cc)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(980, 560)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(18)
+	sb.set_content_margin_all(16)
+	card.add_theme_stylebox_override("panel", sb)
+	cc.add_child(card)
+
+	var root_v := VBoxContainer.new()
+	root_v.add_theme_constant_override("separation", 12)
+	card.add_child(root_v)
+
+	# Header Row
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 12)
+	root_v.add_child(hdr)
+
+	var title := Label.new()
+	title.text = "GUN SKIN SHOP  •  EARN COINS FROM KILLS (+25), TREASURE (+15) & WINS (+100)"
+	title.add_theme_font_size_override("font_size", 17)
+	title.modulate = Color(1.0, 0.86, 0.28)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr.add_child(title)
+
+	_shop_coin_lbl = Label.new()
+	_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+	_shop_coin_lbl.add_theme_font_size_override("font_size", 19)
+	_shop_coin_lbl.modulate = Color(1.0, 0.90, 0.30)
+	hdr.add_child(_shop_coin_lbl)
+
+	var close_btn := _make_arcade_button("CLOSE", Color(0.92, 0.34, 0.34), 38.0, 15, Color(0.26, 0.08, 0.10, 0.96))
+	close_btn.custom_minimum_size = Vector2(105, 38)
+	close_btn.pressed.connect(func():
+		_shop_overlay.visible = false
+		_hub_container.visible = true
+	)
+	hdr.add_child(close_btn)
+
+	# Body Split: Left Weapon List + Right Skin Preview & Cards
+	var body_h := HBoxContainer.new()
+	body_h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_h.add_theme_constant_override("separation", 14)
+	root_v.add_child(body_h)
+
+	var left_scroll := ScrollContainer.new()
+	left_scroll.custom_minimum_size = Vector2(265, 0)
+	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_h.add_child(left_scroll)
+
+	var left_vb := VBoxContainer.new()
+	left_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_vb.add_theme_constant_override("separation", 6)
+	left_scroll.add_child(left_vb)
+
+	_shop_gun_btns.clear()
+	for wid in ProfileManager.SHOP_WEAPON_IDS:
+		var wd := WeaponData.get_weapon(wid, 0, 0)
+		var gbtn := Button.new()
+		gbtn.custom_minimum_size = Vector2(0, 44)
+		gbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		gbtn.text = "  %s" % wd.display_name
+		gbtn.icon = WeaponData.get_weapon_atlas_texture(wid, 0)
+		gbtn.expand_icon = true
+		gbtn.add_theme_font_size_override("font_size", 15)
+		gbtn.pressed.connect(func(): _select_shop_weapon(wid))
+		left_vb.add_child(gbtn)
+		_shop_gun_btns[wid] = gbtn
+
+	var right_v := VBoxContainer.new()
+	right_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_v.add_theme_constant_override("separation", 10)
+	body_h.add_child(right_v)
+
+	# Preview Box
+	var prev_panel := PanelContainer.new()
+	prev_panel.custom_minimum_size = Vector2(0, 150)
+	var prev_sb := StyleBoxFlat.new()
+	prev_sb.bg_color = Color(0.08, 0.12, 0.20, 0.96)
+	prev_sb.border_color = Color(0.28, 0.56, 0.92, 0.85)
+	prev_sb.set_border_width_all(2)
+	prev_sb.set_corner_radius_all(12)
+	prev_sb.set_content_margin_all(10)
+	prev_panel.add_theme_stylebox_override("panel", prev_sb)
+	right_v.add_child(prev_panel)
+
+	var prev_vb := VBoxContainer.new()
+	prev_vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	prev_panel.add_child(prev_vb)
+
+	_shop_gun_title = Label.new()
+	_shop_gun_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shop_gun_title.add_theme_font_size_override("font_size", 17)
+	_shop_gun_title.modulate = Color(0.95, 0.97, 1.0)
+	prev_vb.add_child(_shop_gun_title)
+
+	_shop_gun_preview = TextureRect.new()
+	_shop_gun_preview.custom_minimum_size = Vector2(280, 100)
+	_shop_gun_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_shop_gun_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	prev_vb.add_child(_shop_gun_preview)
+
+	# Skin Cards Grid
+	var skin_scroll := ScrollContainer.new()
+	skin_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	skin_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right_v.add_child(skin_scroll)
+
+	_shop_skin_grid = GridContainer.new()
+	_shop_skin_grid.columns = 2
+	_shop_skin_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shop_skin_grid.add_theme_constant_override("h_separation", 10)
+	_shop_skin_grid.add_theme_constant_override("v_separation", 10)
+	skin_scroll.add_child(_shop_skin_grid)
+
+	_shop_status_lbl = Label.new()
+	_shop_status_lbl.text = "Select a weapon on the left and buy or equip skins!"
+	_shop_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shop_status_lbl.add_theme_font_size_override("font_size", 14)
+	_shop_status_lbl.modulate = Color(0.75, 0.86, 0.98)
+	right_v.add_child(_shop_status_lbl)
+
+
+func _open_gun_shop() -> void:
+	_hub_container.visible = false
+	_shop_overlay.visible = true
+	if is_instance_valid(_shop_coin_lbl):
+		_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+	_select_shop_weapon(_shop_selected_weapon_id)
+
+
+func _select_shop_weapon(wid: int) -> void:
+	_shop_selected_weapon_id = wid
+	_shop_preview_skin_key = ProfileManager.get_equipped_gun_skin(wid)
+	for k in _shop_gun_btns:
+		var b: Button = _shop_gun_btns[k] as Button
+		b.modulate = Color(1.0, 0.88, 0.34) if int(k) == wid else Color(0.84, 0.88, 0.96)
+	_refresh_shop_skins()
+
+
+func _refresh_shop_skins() -> void:
+	if not is_instance_valid(_shop_skin_grid):
+		return
+	var wid: int = _shop_selected_weapon_id
+	var wd := WeaponData.get_weapon(wid, 0, 0)
+	var eq_key: String = ProfileManager.get_equipped_gun_skin(wid)
+	var prev_key: String = _shop_preview_skin_key if not _shop_preview_skin_key.is_empty() else eq_key
+	var prev_def: Dictionary = ProfileManager.get_gun_skin_def(prev_key)
+	var state_tag: String = "Equipped" if prev_key == eq_key else "Preview"
+	_shop_gun_title.text = "%s  —  %s: %s" % [wd.display_name, state_tag, str(prev_def["name"])]
+	_shop_gun_preview.texture = WeaponData.get_weapon_atlas_texture(wid, int(prev_def.get("sheet_row", 0)))
+	_shop_gun_preview.modulate = ProfileManager.get_gun_skin_tint(wid, prev_key)
+	if is_instance_valid(_shop_coin_lbl):
+		_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+	if is_instance_valid(_coin_pill_lbl):
+		_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+
+	for c in _shop_skin_grid.get_children():
+		c.queue_free()
+
+	for sdef in ProfileManager.GUN_SKIN_CATALOG:
+		var skey: String = str(sdef["key"])
+		var sname: String = str(sdef["name"])
+		var price: int = ProfileManager.get_gun_skin_price(wid, skey)
+		var tint: Color = ProfileManager.get_gun_skin_tint(wid, skey)
+		var badge: Color = sdef["badge"] as Color
+		var owned: bool = ProfileManager.owns_gun_skin(wid, skey)
+		var equipped: bool = (eq_key == skey)
+		var is_previewed: bool = (prev_key == skey)
+
+		var scard := PanelContainer.new()
+		scard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scard.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var csb := StyleBoxFlat.new()
+		csb.bg_color = Color(0.10, 0.22, 0.16, 0.98) if equipped else (Color(0.18, 0.24, 0.36, 0.98) if is_previewed else Color(0.11, 0.16, 0.25, 0.96))
+		csb.border_color = Color(0.32, 0.96, 0.52) if equipped else (Color(1.0, 0.90, 0.36) if is_previewed else badge)
+		csb.set_border_width_all(3 if is_previewed else 2)
+		csb.set_corner_radius_all(10)
+		csb.set_content_margin_all(10)
+		scard.add_theme_stylebox_override("panel", csb)
+		scard.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+				_shop_preview_skin_key = skey
+				_refresh_shop_skins()
+		)
+		_shop_skin_grid.add_child(scard)
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
+		scard.add_child(row)
+
+		var icon_tr := TextureRect.new()
+		icon_tr.custom_minimum_size = Vector2(78, 40)
+		icon_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_tr.mouse_filter = Control.MOUSE_FILTER_PASS
+		icon_tr.texture = WeaponData.get_weapon_atlas_texture(wid, int(sdef.get("sheet_row", 0)))
+		icon_tr.modulate = tint
+		row.add_child(icon_tr)
+
+		var info_v := VBoxContainer.new()
+		info_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info_v.alignment = BoxContainer.ALIGNMENT_CENTER
+		info_v.mouse_filter = Control.MOUSE_FILTER_PASS
+		row.add_child(info_v)
+
+		var nl := Label.new()
+		nl.text = sname
+		nl.add_theme_font_size_override("font_size", 14)
+		nl.modulate = badge.lightened(0.25)
+		nl.mouse_filter = Control.MOUSE_FILTER_PASS
+		info_v.add_child(nl)
+
+		var pl := Label.new()
+		pl.text = "EQUIPPED" if equipped else ("OWNED" if owned else ("%d COINS" % price))
+		pl.add_theme_font_size_override("font_size", 12)
+		pl.modulate = Color(0.35, 0.96, 0.55) if equipped else (Color(0.75, 0.85, 0.96) if owned else Color(1.0, 0.84, 0.28))
+		pl.mouse_filter = Control.MOUSE_FILTER_PASS
+		info_v.add_child(pl)
+
+		var act_btn := Button.new()
+		act_btn.custom_minimum_size = Vector2(86, 36)
+		act_btn.focus_mode = Control.FOCUS_NONE
+		if equipped:
+			act_btn.text = "ACTIVE"
+			act_btn.disabled = true
+		elif owned:
+			act_btn.text = "EQUIP"
+			act_btn.pressed.connect(func():
+				_shop_preview_skin_key = skey
+				ProfileManager.equip_gun_skin(wid, skey)
+				_shop_status_lbl.text = "Equipped %s on %s!" % [sname, wd.display_name]
+				_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
+				_refresh_shop_skins()
+			)
+		else:
+			act_btn.text = "BUY"
+			act_btn.disabled = ProfileManager.coins < price
+			act_btn.modulate = Color(1.0, 0.86, 0.28) if ProfileManager.coins >= price else Color(0.55, 0.58, 0.65)
+			act_btn.pressed.connect(func():
+				if ProfileManager.buy_gun_skin(wid, skey):
+					_shop_preview_skin_key = skey
+					_shop_status_lbl.text = "Purchased & equipped %s for %d coins!" % [sname, price]
+					_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
+					var sfx := AudioStreamPlayer.new()
+					sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
+					sfx.bus = &"SFX"
+					sfx.finished.connect(sfx.queue_free)
+					add_child(sfx)
+					sfx.play()
+					_refresh_shop_skins()
+				else:
+					_shop_status_lbl.text = "Not enough coins! Need %d coins." % price
+					_shop_status_lbl.modulate = Color(1.0, 0.42, 0.35)
+			)
+		row.add_child(act_btn)

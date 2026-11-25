@@ -13,13 +13,13 @@
 	"1": {
 		"bullet_range": 950.0,
 		"bullet_speed": 1500.0,
-		"damage": 18.0,
-		"fire_interval": 0.1,
+		"damage": 19.0,
+		"fire_interval": 0.18,
 		"mag_size": 30.0,
 		"pellet_count": 1.0,
-		"recoil_impulse": 35.0,
-		"reload_time": 1.4,
-		"spread_deg": 2.0
+		"recoil_impulse": 28.0,
+		"reload_time": 1.35,
+		"spread_deg": 1.5
 	},
 	"10": {
 		"bullet_range": 2600.0,
@@ -112,10 +112,10 @@
 	"2": {
 		"bullet_range": 1150.0,
 		"bullet_speed": 1700.0,
-		"damage": 34.0,
-		"fire_interval": 0.18,
-		"mag_size": 20.0,
-		"pellet_count": 1.0,
+		"damage": 34,
+		"fire_interval": 0.1,
+		"mag_size": 20,
+		"pellet_count": 1,
 		"recoil_impulse": 80.0,
 		"reload_time": 1.7,
 		"spread_deg": 1.8
@@ -134,10 +134,10 @@
 	"4": {
 		"bullet_range": 450.0,
 		"bullet_speed": 2200.0,
-		"damage": 12,
+		"damage": 12.0,
 		"fire_interval": 0.05,
-		"mag_size": 25,
-		"pellet_count": 1,
+		"mag_size": 25.0,
+		"pellet_count": 1.0,
 		"recoil_impulse": 15.0,
 		"reload_time": 1.1,
 		"spread_deg": 3.4

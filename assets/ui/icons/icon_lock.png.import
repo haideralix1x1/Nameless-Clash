@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sb3kfc1dv7gy"
-path="res://.godot/imported/inferno_flame_2.png-32360ec2cb6654b7bccbf22e918d9a74.ctex"
+uid="uid://ddix1jqw43osp"
+path="res://.godot/imported/icon_lock.png-517a200669185f1ee40b4c28b7702ccc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/vfx/inferno_flame_2.png"
-dest_files=["res://.godot/imported/inferno_flame_2.png-32360ec2cb6654b7bccbf22e918d9a74.ctex"]
+source_file="res://assets/ui/icons/icon_lock.png"
+dest_files=["res://.godot/imported/icon_lock.png-517a200669185f1ee40b4c28b7702ccc.ctex"]
 
 [params]
 

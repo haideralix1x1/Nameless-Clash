@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 2
 code_name = "scarh"
-display_name = "SCAR-H"
+display_name = "SCAR-L"
 category = "Assault Rifle"
 description = "Heavy-hitting 7.62 NATO battle rifle with devastating per-shot damage."
 damage = 34

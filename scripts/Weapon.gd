@@ -8,9 +8,14 @@ extends Resource
 @export var description: String = ""
 @export var damage: int = 24
 @export var fire_interval: float = 0.135
+@export var burst_count: int = 1
+@export var burst_interval: float = 0.058
 @export var mag_size: int = 30
+@export var initial_reserve: int = -1
 @export var reload_time: float = 1.5
 @export var single_shell_reload: bool = false
+@export var gravity_scale: float = 0.0
+@export var is_suppressed: bool = false
 @export var recoil_impulse: float = 55.0
 @export var vertical_recoil_bias: float = 0.035
 @export var bullet_speed: float = 1280.0
@@ -23,6 +28,70 @@ const WEAPON_RANGES_PATH: String = "res://assets/data/weapon_ranges.json"
 const USER_WEAPON_RANGES_PATH: String = "user://weapon_ranges.json"
 const WEAPON_STATS_PATH: String = "res://assets/data/weapon_stats.json"
 const USER_WEAPON_STATS_PATH: String = "user://weapon_stats.json"
+const TEX_SELECTION_SHEET: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
+const TEX_FLOOR_SHEET: Texture2D = preload("res://assets/sprites/weapons_floor_sheet.png")
+const TEX_AGENT_SHEET: Texture2D = preload("res://assets/sprites/weapons_agent_sheet.png")
+const SELECTION_COLS: int = 16
+const SELECTION_ROWS: int = 10
+const FLOOR_COLS: int = 6
+const AGENT_COLS: int = 10
+
+const SELECTION_COL_BY_ID: Dictionary = {
+	0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10,
+	12: 10, 14: 2,
+	18: 11, 19: 12, 20: 13, 21: 14, 23: 15
+}
+const FLOOR_COL_BY_ID: Dictionary = {
+	11: 0, 13: 1, 15: 2, 16: 3, 17: 4, 22: 5
+}
+const AGENT_COL_BY_STYLE: Dictionary = {
+	"scythe": 0,
+	"magma_hammer": 1,
+	"bow": 2,
+	"orc_axe": 3,
+	"boxing_glove": 4,
+	"yagami_katana": 5,
+	"rook_frost_blade": 6,
+	"afera_spear": 7,
+	"bruski_revolver": 8,
+	"stone_hammer": 9
+}
+
+
+static func get_weapon_sprite_spec(weapon_id: int, skin_id: int = 0) -> Dictionary:
+	if FLOOR_COL_BY_ID.has(weapon_id):
+		var fc: int = int(FLOOR_COL_BY_ID[weapon_id])
+		return {
+			"tex": TEX_FLOOR_SHEET,
+			"hframes": FLOOR_COLS,
+			"vframes": 1,
+			"frame": fc,
+			"region": Rect2(fc * 256.0, 0.0, 256.0, 128.0)
+		}
+	var sc: int = int(SELECTION_COL_BY_ID.get(weapon_id, clampi(weapon_id, 0, SELECTION_COLS - 1)))
+	var row: int = clampi(skin_id, 0, SELECTION_ROWS - 1)
+	return {
+		"tex": TEX_SELECTION_SHEET,
+		"hframes": SELECTION_COLS,
+		"vframes": SELECTION_ROWS,
+		"frame": row * SELECTION_COLS + sc,
+		"region": Rect2(sc * 256.0, row * 128.0, 256.0, 128.0)
+	}
+
+
+static func get_weapon_atlas_texture(weapon_id: int, skin_id: int = 0) -> AtlasTexture:
+	var spec: Dictionary = get_weapon_sprite_spec(weapon_id, skin_id)
+	var at := AtlasTexture.new()
+	at.atlas = spec["tex"] as Texture2D
+	at.region = spec["region"] as Rect2
+	return at
+
+
+static func get_agent_weapon_region(style_name: String) -> Rect2:
+	var col: int = int(AGENT_COL_BY_STYLE.get(style_name, -1))
+	if col < 0:
+		return Rect2()
+	return Rect2(col * 256.0, 0.0, 256.0, 128.0)
 static var _range_cache_loaded: bool = false
 static var _range_cache: Dictionary = {}
 static var _stats_cache_loaded: bool = false
@@ -68,16 +137,26 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"secondary": 9,
 		"bombs": 3,
 		"bomb_type": "frag",
-		"desc": "AK47 + Deagle + 3 Frag Bombs",
+		"shield_tier": "medium",
+		"shield_hp": 50,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "AK47 + Deagle + 3 Frag • Med Shield & Helmet",
 		"accent": "green"
 	},
 	{
-		"name": "Tactical Carbine",
+		"name": "Tactical Burst",
 		"primary": 1,
-		"secondary": 3,
+		"secondary": 20,
 		"bombs": 3,
 		"bomb_type": "time",
-		"desc": "M4A1 + SMG + 3 Time Bombs",
+		"shield_tier": "light",
+		"shield_hp": 35,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "M16A4 (4-Burst) + Suppressed Pistol + 3 Time • Light Shield / Med Helmet",
 		"accent": "blue"
 	},
 	{
@@ -86,16 +165,26 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"secondary": 4,
 		"bombs": 3,
 		"bomb_type": "cluster",
-		"desc": "SCAR-H + Uzi + 3 Cluster Bombs",
+		"shield_tier": "medium",
+		"shield_hp": 50,
+		"helmet_tier": "light",
+		"helmet_hp": 20,
+		"helmet_reduce": 0.15,
+		"desc": "SCAR-L + Uzi + 3 Cluster • Med Shield / Light Helmet",
 		"accent": "orange"
 	},
 	{
 		"name": "Breacher CQB",
-		"primary": 5,
-		"secondary": 6,
+		"primary": 21,
+		"secondary": 3,
 		"bombs": 3,
 		"bomb_type": "sticky",
-		"desc": "Shotgun + Pump Shotgun + 3 Sticky Bombs",
+		"shield_tier": "heavy",
+		"shield_hp": 80,
+		"helmet_tier": "heavy",
+		"helmet_hp": 50,
+		"helmet_reduce": 0.35,
+		"desc": "Black Shotgun + SMG + 3 Sticky • Heavy Shield & Helmet",
 		"accent": "purple"
 	},
 	{
@@ -104,7 +193,12 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"secondary": 8,
 		"bombs": 3,
 		"bomb_type": "mine",
-		"desc": "Sniper + Auto Sniper + 3 Mine Bombs",
+		"shield_tier": "light",
+		"shield_hp": 25,
+		"helmet_tier": "light",
+		"helmet_hp": 20,
+		"helmet_reduce": 0.15,
+		"desc": "Sniper + Auto Sniper + 3 Mine • Light Shield & Helmet",
 		"accent": "sky"
 	},
 	{
@@ -113,8 +207,41 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"secondary": 9,
 		"bombs": 4,
 		"bomb_type": "cluster",
-		"desc": "Bazooka + Deagle + 4 Cluster Bombs",
+		"shield_tier": "heavy",
+		"shield_hp": 70,
+		"helmet_tier": "light",
+		"helmet_hp": 20,
+		"helmet_reduce": 0.15,
+		"desc": "Bazooka + Deagle + 4 Cluster • Heavy Shield / Light Helmet",
 		"accent": "red"
+	},
+	{
+		"name": "Tactical Disruptor",
+		"primary": 18,
+		"secondary": 19,
+		"bombs": 2,
+		"bomb_type": "frag",
+		"shield_tier": "medium",
+		"shield_hp": 50,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "Nade Gun (3/3) + Stun Gun (4s) + 2 Frag • Med Shield & Helmet",
+		"accent": "sky"
+	},
+	{
+		"name": "M416 Commando",
+		"primary": 23,
+		"secondary": 20,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"shield_tier": "light",
+		"shield_hp": 35,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "M416 + Suppressed Pistol + 3 Frag • Light Shield / Med Helmet",
+		"accent": "blue"
 	}
 ]
 
@@ -159,9 +286,9 @@ static func get_allowed_weapon_ids() -> Array[int]:
 static func sanitize_weapon_id(weapon_id: int) -> int:
 	if weapon_id == 14:
 		return 11
-	if weapon_id >= 11 and weapon_id <= 17:
+	if weapon_id >= 11 and weapon_id <= 23:
 		var nm: Node = _get_network_manager()
-		if weapon_id == 12 and nm != null and not bool(nm.get("allow_explosives")):
+		if (weapon_id == 12 or weapon_id == 18) and nm != null and not bool(nm.get("allow_explosives")):
 			return 11
 		return weapon_id
 	var idx: int = wrapi(weapon_id, 0, RESOURCE_PATHS.size())
@@ -208,10 +335,11 @@ static func get_effective_preset(preset_idx: int) -> Dictionary:
 
 static func get_builtin_default_ranges() -> Dictionary:
 	return {
-		"0": 860.0, "1": 900.0, "2": 960.0, "3": 560.0, "4": 500.0,
+		"0": 860.0, "1": 940.0, "2": 960.0, "3": 560.0, "4": 500.0,
 		"5": 340.0, "6": 360.0, "7": 1500.0, "8": 1350.0, "9": 620.0,
 		"10": 1100.0, "11": 280.0, "12": 1250.0, "13": 1050.0,
 		"14": 820.0, "15": 950.0, "16": 750.0, "17": 860.0,
+		"18": 820.0, "19": 580.0, "20": 680.0, "21": 380.0, "22": 920.0, "23": 950.0,
 	}
 
 
@@ -261,12 +389,12 @@ static func reload_weapon_stats() -> void:
 
 
 static func get_total_weapon_count() -> int:
-	return 18
+	return 24
 
 
 static func get_base_weapon(weapon_id: int) -> WeaponData:
 	var ranges: Dictionary = get_builtin_default_ranges()
-	if weapon_id >= 11 and weapon_id <= 17:
+	if weapon_id >= 11 and weapon_id <= 23:
 		var sw: WeaponData = _get_special_weapon(weapon_id)
 		sw.bullet_range = float(ranges.get(str(weapon_id), sw.bullet_range if sw.bullet_range > 0.0 else 800.0))
 		return sw
@@ -295,7 +423,7 @@ static func _apply_stat_overrides(w: WeaponData, key: String, ranges: Dictionary
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
 	var ranges: Dictionary = load_weapon_ranges_dict()
 	var stats: Dictionary = load_weapon_stats_dict()
-	if weapon_id >= 11 and weapon_id <= 17:
+	if weapon_id >= 11 and weapon_id <= 23:
 		var sw: WeaponData = _get_special_weapon(weapon_id)
 		_apply_stat_overrides(sw, str(weapon_id), ranges, stats)
 		return sw
@@ -309,13 +437,13 @@ static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> W
 			# Suppressor attachment: tighter spread, smaller muzzle flash, quieter tone
 			w.spread_deg *= 0.72
 			w.muzzle_flash_scale = 0.35
-			w.display_name = "M4A1 (Suppressed)"
+			w.display_name = "M16A4 (Suppressed)"
 		elif rail_mod == 2:
 			# Tactical Scope attachment: extended zoom & precision
 			w.scope_zoom = 0.90
 			w.spread_deg *= 0.65
 			w.bullet_range += 120.0
-			w.display_name = "M4A1 (Scoped)"
+			w.display_name = "M16A4 (Scoped)"
 
 	if skin_id == 2:
 		w.bullet_color = Color(0.15, 0.96, 1.0) if (w.id % 2 == 0) else Color(1.0, 0.32, 0.85)
@@ -463,4 +591,122 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.bullet_color = Color(1.0, 0.86, 0.30)
 			w.sound_path = "res://assets/audio/shoot_ak47.wav"
 			w.sprite_frame = 2
+		18:
+			w.code_name = "nade_gun"
+			w.display_name = "Nade Gun"
+			w.category = "Explosive"
+			w.description = "Tactical grenade launcher carrying 3/3 lobbed explosive grenades."
+			w.damage = 68
+			w.fire_interval = 0.72
+			w.mag_size = 3
+			w.initial_reserve = -1
+			w.reload_time = 1.85
+			w.recoil_impulse = 110.0
+			w.bullet_speed = 680.0
+			w.spread_deg = 2.0
+			w.gravity_scale = 0.65
+			w.is_explosive = true
+			w.explosion_radius = 128.0
+			w.muzzle_flash_scale = 1.25
+			w.max_zoom_level = 3
+			w.bullet_color = Color(1.0, 0.50, 0.16)
+			w.custom_visual_style = "nade_round"
+			w.custom_lifetime = 2.2
+			w.sound_path = "res://assets/audio/shoot_rpg.wav"
+			w.sprite_frame = 10
+		19:
+			w.code_name = "stun_gun"
+			w.display_name = "Stun Gun"
+			w.category = "Tactical"
+			w.description = "Electric taser pistol that stuns hit players for 4 seconds."
+			w.damage = 12
+			w.stun_duration = 4.0
+			w.fire_interval = 0.65
+			w.mag_size = 6
+			w.reload_time = 1.35
+			w.recoil_impulse = 20.0
+			w.bullet_speed = 1180.0
+			w.spread_deg = 1.2
+			w.max_zoom_level = 2
+			w.bullet_color = Color(0.24, 0.94, 1.0)
+			w.custom_visual_style = "stun_bolt"
+			w.custom_lifetime = 0.9
+			w.sound_path = "res://assets/audio/pickup.wav"
+			w.sprite_frame = 9
+		20:
+			w.code_name = "suppressed_pistol"
+			w.display_name = "Suppressed Pistol"
+			w.category = "Pistol"
+			w.description = "Stealth silenced tactical pistol with tight precision and low recoil."
+			w.damage = 22
+			w.fire_interval = 0.17
+			w.mag_size = 15
+			w.reload_time = 1.15
+			w.recoil_impulse = 18.0
+			w.bullet_speed = 1360.0
+			w.spread_deg = 1.0
+			w.max_zoom_level = 2
+			w.is_suppressed = true
+			w.muzzle_flash_scale = 0.22
+			w.bullet_color = Color(0.85, 0.94, 1.0)
+			w.sound_path = "res://assets/audio/shoot_m4a1.wav"
+			w.sprite_frame = 9
+		21:
+			w.code_name = "black_shotgun"
+			w.display_name = "Black Shotgun"
+			w.category = "Shotgun"
+			w.description = "Matte-black 8-round combat shotgun with full-mag reload and half per-shot damage of Pump Shotgun."
+			w.damage = 11
+			w.pellet_count = 8
+			w.fire_interval = 0.52
+			w.mag_size = 8
+			w.reload_time = 1.65
+			w.single_shell_reload = false
+			w.recoil_impulse = 92.0
+			w.bullet_speed = 1180.0
+			w.spread_deg = 8.8
+			w.max_zoom_level = 2
+			w.muzzle_flash_scale = 1.15
+			w.bullet_color = Color(1.0, 0.76, 0.24)
+			w.sound_path = "res://assets/audio/shoot_shotgun.wav"
+			w.sprite_frame = 6
+		22:
+			w.code_name = "groza"
+			w.display_name = "OTs-14 Groza"
+			w.category = "Special"
+			w.description = "Treasure Box exclusive! Uzi fire rate + AK47 damage with low recoil."
+			w.damage = 28
+			w.fire_interval = 0.068
+			w.mag_size = 30
+			w.initial_reserve = 120
+			w.reload_time = 1.45
+			w.recoil_impulse = 22.0
+			w.vertical_recoil_bias = 0.012
+			w.bullet_speed = 1420.0
+			w.spread_deg = 1.8
+			w.max_zoom_level = 4
+			w.move_speed_multiplier = 1.02
+			w.bullet_color = Color(1.0, 0.72, 0.22)
+			w.sound_path = "res://assets/audio/shoot_ak47.wav"
+			w.sprite_frame = 0
+		23:
+			w.code_name = "m416"
+			w.display_name = "M416"
+			w.category = "Assault Rifle"
+			w.description = "PUBG-style versatile full-auto 5.56 assault rifle with fast fire rate and ultra-stable recoil."
+			w.damage = 21
+			w.fire_interval = 0.086
+			w.mag_size = 30
+			w.initial_reserve = -1
+			w.reload_time = 1.35
+			w.recoil_impulse = 24.0
+			w.vertical_recoil_bias = 0.012
+			w.bullet_speed = 1440.0
+			w.spread_deg = 1.5
+			w.max_zoom_level = 4
+			w.move_speed_multiplier = 1.02
+			w.muzzle_flash_scale = 0.92
+			w.bullet_color = Color(1.0, 0.88, 0.36)
+			w.sound_path = "res://assets/audio/shoot_m4a1.wav"
+			w.sprite_frame = 1
 	return w

@@ -1013,6 +1013,10 @@ func _apply_match_end(winner_text: String, rankings: Array) -> void:
 	match_in_progress = false
 	match_time_left = 0.0
 	match_timer_updated.emit(0.0)
+	if not is_test_mode():
+		var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
+		var local_won: bool = (not rankings.is_empty()) and int((rankings[0] as Dictionary).get("id", -1)) == my_id
+		ProfileManager.add_coins(ProfileManager.get_win_reward() if local_won else ProfileManager.get_match_reward())
 	match_ended.emit(winner_text, rankings)
 
 

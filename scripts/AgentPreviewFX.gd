@@ -52,7 +52,7 @@ func trigger(kind: String, col: Color, rig: Node2D) -> void:
 		"raven_swarm":
 			_tex = load("res://assets/sprites/summons/raven.png")
 		"dual_shotguns":
-			_tex = load("res://assets/sprites/weapons_sheet.png")
+			_tex = load("res://assets/sprites/weapons_selection_sheet.png")
 	queue_redraw()
 
 

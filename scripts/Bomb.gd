@@ -151,7 +151,7 @@ func _physics_process(delta: float) -> void:
 		query.collide_with_bodies = true
 
 		var hit: Dictionary = space_state.intersect_ray(query)
-		if not hit.is_empty():
+		if not hit.is_empty() and not (_age < 0.06 and velocity.dot(hit["normal"] as Vector2) >= 0.0):
 			var hit_pos: Vector2 = hit["position"]
 			var normal: Vector2 = hit["normal"]
 			var collider: Object = hit["collider"]

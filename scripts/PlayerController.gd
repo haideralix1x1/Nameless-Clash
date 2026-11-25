@@ -73,6 +73,7 @@ var gear_color: Color = Color.WHITE
 @export var primary_weapon_id: int = 0
 @export var secondary_weapon_id: int = 9
 @export var weapon_skin_id: int = 0
+var equipped_gun_skins: Dictionary = {}
 @export var m4a1_rail_mod: int = 0
 @export var is_dead: bool = false
 @export var anim_frame: int = 0
@@ -99,6 +100,8 @@ var pointer_over_ui: bool = false
 
 var _weapon: WeaponData = WeaponData.get_weapon(0, 0, 0)
 var _fire_cooldown: float = 0.0
+var _burst_shots_left: int = 0
+var _burst_shot_timer: float = 0.0
 var _reload_timer: float = 0.0
 var _damage_by_attacker: Dictionary = {}
 var _primary_reserve_ammo: int = -1
@@ -122,6 +125,11 @@ var _bot_aim_error: float = 0.0
 var _bot_weapon_pickup_cd: float = 0.0
 var _bot_loot_focus_timer: float = 0.0
 var _bot_loot_origin: Vector2 = Vector2.ZERO
+var _bot_nav_mode: int = 0 # 0=normal, 1=climb_over, 2=detour_back
+var _bot_nav_timer: float = 0.0
+var _bot_nav_dir_x: float = 1.0
+var _bot_stuck_timer: float = 0.0
+var _bot_last_pos: Vector2 = Vector2.ZERO
 var _spawn_points: Array[Vector2] = []
 var _net_sync_accum: float = 0.0
 var _ability_recharge_timer: float = 0.0
@@ -235,13 +243,20 @@ var dual_shotgun_shots: int = 0
 var _dual_shotgun_accum: float = 0.0
 var _dual_shotgun_spr_1: Sprite2D = null
 var _dual_shotgun_spr_2: Sprite2D = null
-const TEX_WEAPONS_SHEET: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
+const TEX_WEAPONS_SHEET: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 var auto_mg_timer: float = 0.0
 var _auto_mg_accum: float = 0.0
 var electric_laser_timer: float = 0.0
 var _electric_laser_accum: float = 0.0
 var personal_shield_hp: int = 0
 var personal_shield_timer: float = 0.0
+var preset_shield_hp: int = 0
+var preset_shield_max: int = 0
+var preset_shield_tier: String = ""
+var preset_helmet_hp: int = 0
+var preset_helmet_max: int = 0
+var preset_helmet_tier: String = ""
+var preset_helmet_reduce: float = 0.0
 var slippery_timer: float = 0.0
 var earth_shake_timer: float = 0.0
 var poison_dot_timer: float = 0.0
@@ -471,6 +486,8 @@ func collect_ult_point() -> void:
 func _on_kill_scored(killer_id: int, victim_id: int) -> void:
 	if killer_id != peer_id or victim_id == peer_id:
 		return
+	if is_local_human:
+		ProfileManager.add_coins(ProfileManager.get_kill_reward())
 	if _is_agent_logic_active():
 		if not _has_locked_ability_or_ult():
 			ability_kill_progress = 0
@@ -918,6 +935,17 @@ func _process_alive(delta: float) -> void:
 				thrown_by_rook_frost = false
 			return
 
+	if not _is_agent_logic_active() and stun_timer > 0.0:
+		stun_timer = maxf(0.0, stun_timer - delta)
+	if not NetworkManager.is_agent_clash_mode() and _burst_shots_left > 0:
+		_burst_shot_timer -= act_delta
+		if _burst_shot_timer <= 0.0:
+			if not is_dead and not is_reloading and current_ammo > 0 and stun_timer <= 0.0:
+				_burst_shots_left -= 1
+				_burst_shot_timer = _weapon.burst_interval
+				_fire_weapon(true)
+			else:
+				_burst_shots_left = 0
 	if not NetworkManager.is_agent_clash_mode() and is_reloading:
 		_reload_timer -= act_delta
 		if _reload_timer <= 0.0:
@@ -951,7 +979,7 @@ func _process_alive(delta: float) -> void:
 	var want_jet: bool = false
 	var want_fire: bool = false
 
-	var is_stunned: bool = _is_agent_logic_active() and (stun_timer > 0.0 or freeze_timer > 0.0 or control_lock_timer > 0.0)
+	var is_stunned: bool = (stun_timer > 0.0) or (_is_agent_logic_active() and (freeze_timer > 0.0 or control_lock_timer > 0.0))
 
 	if is_bot:
 		var bot_cmd: Dictionary = _compute_bot_input(delta)
@@ -1215,12 +1243,12 @@ func _update_crouch_collider(crouching: bool) -> void:
 	if cap == null:
 		return
 	if crouching:
-		cap.height = 32.0
-		_collision_shape.position.y = 11.0
+		cap.height = 64.0
+		_collision_shape.position.y = -1.0
 		_weapon_pivot.position.y = 9.0
 	else:
-		cap.height = 48.0
-		_collision_shape.position.y = 3.0
+		cap.height = 84.0
+		_collision_shape.position.y = -11.0
 		_weapon_pivot.position.y = 6.0
 
 
@@ -1228,12 +1256,21 @@ func get_current_weapon() -> WeaponData:
 	return _weapon
 
 
-func _fire_weapon() -> void:
-	_fire_cooldown = _weapon.fire_interval
-	if is_bot:
-		var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
-		var fire_delay_mult: float = 1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0)
-		_fire_cooldown *= fire_delay_mult
+func _fire_weapon(is_burst_followup: bool = false) -> void:
+	if not is_burst_followup:
+		_fire_cooldown = _weapon.fire_interval
+		if is_bot:
+			var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+			var fire_delay_mult: float = 1.85 if bot_diff == 0 else (1.35 if bot_diff == 1 else 1.0)
+			_fire_cooldown *= fire_delay_mult
+		if _weapon.burst_count > 1:
+			_burst_shots_left = mini(_weapon.burst_count - 1, maxi(0, current_ammo - 1))
+			_burst_shot_timer = _weapon.burst_interval
+			_fire_cooldown = _weapon.burst_interval * float(_burst_shots_left) + _weapon.fire_interval
+			if is_bot:
+				var bot_diff_b: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+				var b_mult: float = 1.85 if bot_diff_b == 0 else (1.35 if bot_diff_b == 1 else 1.0)
+				_fire_cooldown = _weapon.burst_interval * float(_burst_shots_left) + _weapon.fire_interval * b_mult
 
 	var shots_to_fire: int = 1
 	current_ammo = maxi(0, current_ammo - shots_to_fire)
@@ -1291,10 +1328,16 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
 
+	var active_skin_key: String = ProfileManager.get_equipped_gun_skin(w.id) if is_local_human else str(equipped_gun_skins.get(str(w.id), "default"))
+	var active_skin_def: Dictionary = ProfileManager.get_gun_skin_def(active_skin_key)
+	var active_bullet_col: Color = (active_skin_def.get("bullet", w.bullet_color) as Color) if active_skin_key != "default" else w.bullet_color
+	var active_flash_col: Color = active_bullet_col.lightened(0.22) if active_skin_key != "default" else Color.WHITE
+
 	var deal_damage: bool = _is_controlled_locally()
 	if bubble_trap_timer > 0.0:
 		if deal_damage:
 			damage_bubble(maxi(10, w.damage))
+		_muzzle_flash.modulate = active_flash_col
 		_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
 		_muzzle_flash.visible = w.muzzle_flash_scale > 0.05
 		_flash_timer = 0.055
@@ -1302,52 +1345,62 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 		return
 	var spread_rad: float = deg_to_rad(w.spread_deg)
 
-	for m_pos in muzzles:
-		for _p in range(w.pellet_count):
-			var b := BULLET_SCENE.instantiate()
+	if w.id == 18:
+		for m_pos in muzzles:
 			var shot_angle: float = base_angle + rng.randf_range(-spread_rad, spread_rad)
-			b.global_position = m_pos
-			b.velocity = Vector2.from_angle(shot_angle) * w.bullet_speed
-			b.damage = w.damage
-			b.shooter_peer_id = peer_id
-			b.shooter_team = team_id
-			b.shooter_name = player_name
-			b.shooter_rid = get_rid()
-			b.weapon_name = w.display_name
-			b.bullet_color = w.bullet_color
-			b.is_laser = w.is_laser
-			b.is_explosive = w.is_explosive
-			b.explosion_radius = w.explosion_radius
-			b.damage_falloff_start = w.damage_falloff_start
-			b.min_damage_ratio = w.min_damage_ratio
-			b.can_deal_damage = deal_damage
-			b.is_homing = w.is_homing
-			b.stun_duration = w.stun_duration
-			if w.custom_visual_style != "bullet":
-				b.visual_style = w.custom_visual_style
-			elif w.is_explosive:
-				b.visual_style = "rocket"
-			if w.pellet_count > 1:
-				# Shotguns deal strong burst at close-to-mid range (~315 px) and instant kill at close range
-				b.max_lifetime = 0.34
-				b.knockback_mult = 1.5 / float(w.pellet_count)
-				if w.id == 5 or w.id == 6:
+			_spawn_bomb_instance(m_pos, shot_angle, "frag", w.bullet_speed, w.damage, w.explosion_radius, Color(0.28, 0.92, 0.42), w.display_name, deal_damage)
+	else:
+		for m_pos in muzzles:
+			for _p in range(w.pellet_count):
+				var b := BULLET_SCENE.instantiate()
+				var shot_angle: float = base_angle + rng.randf_range(-spread_rad, spread_rad)
+				b.global_position = m_pos
+				b.velocity = Vector2.from_angle(shot_angle) * w.bullet_speed
+				b.damage = w.damage
+				b.shooter_peer_id = peer_id
+				b.shooter_team = team_id
+				b.shooter_name = player_name
+				b.shooter_rid = get_rid()
+				b.weapon_name = w.display_name
+				b.bullet_color = active_bullet_col
+				b.is_laser = w.is_laser
+				b.is_explosive = w.is_explosive
+				b.explosion_radius = w.explosion_radius
+				b.damage_falloff_start = w.damage_falloff_start
+				b.min_damage_ratio = w.min_damage_ratio
+				b.can_deal_damage = deal_damage
+				b.is_homing = w.is_homing
+				b.stun_duration = w.stun_duration
+				b.gravity_mult = w.gravity_scale
+				if w.custom_visual_style != "bullet":
+					b.visual_style = w.custom_visual_style
+				elif w.is_explosive:
+					b.visual_style = "rocket"
+				if w.pellet_count > 1:
+					# Shotguns deal strong burst at close-to-mid range (~315 px) and instant kill at close range
+					b.max_lifetime = 0.34
+					b.knockback_mult = 1.5 / float(w.pellet_count)
+					if w.id == 5 or w.id == 6 or w.id == 21:
+						b.close_lethal_dist = 135.0
+				else:
+					b.max_lifetime = w.custom_lifetime
+				if w.bullet_range > 0.0:
+					b.max_range = w.bullet_range
+					b.max_lifetime = maxf(b.max_lifetime, (w.bullet_range / maxf(100.0, b.velocity.length())) + 0.25)
+				if w.id == 7 or w.id == 8:
+					b.pierce_players = true
 					b.close_lethal_dist = 135.0
-			else:
-				b.max_lifetime = w.custom_lifetime
-			if w.bullet_range > 0.0:
-				b.max_range = w.bullet_range
-				b.max_lifetime = maxf(b.max_lifetime, (w.bullet_range / maxf(100.0, b.velocity.length())) + 0.25)
-			if w.id == 7 or w.id == 8:
-				b.pierce_players = true
-			if w.id == 15:
-				b.boomerang_owner = self
-				b.on_hit_effect_kind = "hook_gun"
-			elif w.id == 16:
-				b.on_hit_effect_kind = "bubble_trap"
-				b.radius_scale = 1.65
-			parent_node.add_child(b)
+				elif w.id == 10 or w.id == 12:
+					b.close_lethal_dist = 150.0
+				if w.id == 15:
+					b.boomerang_owner = self
+					b.on_hit_effect_kind = "hook_gun"
+				elif w.id == 16:
+					b.on_hit_effect_kind = "bubble_trap"
+					b.radius_scale = 1.65
+				parent_node.add_child(b)
 
+	_muzzle_flash.modulate = active_flash_col
 	_muzzle_flash.scale = Vector2(0.8, 0.8) * w.muzzle_flash_scale
 	_muzzle_flash.visible = w.muzzle_flash_scale > 0.05
 	_flash_timer = 0.055
@@ -1356,7 +1409,7 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 	if w.has_backblast and SettingsManager.particle_intensity > 0.05:
 		_rpg_backblast.restart()
 
-	var is_suppressed: bool = w.has_accessory_rail and rail_mod == 1
+	var is_suppressed: bool = w.is_suppressed or (w.has_accessory_rail and rail_mod == 1)
 	var vol_offset: float = -10.0 if is_suppressed else -4.0
 	var pitch_override: float = 1.32 if is_suppressed else 0.0
 	_play_local_sfx(w.sound_path, vol_offset, pitch_override)
@@ -1466,17 +1519,28 @@ func apply_gun_preset(preset_idx: int) -> void:
 	_equipped_primary_id = primary_weapon_id
 	_original_secondary_id = secondary_weapon_id
 	_active_slot = 0
-	_primary_reserve_ammo = -1
-	_secondary_reserve_ammo = -1
+	var pri_w: WeaponData = WeaponData.get_weapon(primary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	var sec_w: WeaponData = WeaponData.get_weapon(secondary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	_primary_reserve_ammo = pri_w.initial_reserve
+	_secondary_reserve_ammo = sec_w.initial_reserve
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
+	_burst_shots_left = 0
 	bomb_type = str(preset.get("bomb_type", "frag"))
 	max_bombs = int(preset.get("bombs", 3))
 	bomb_count = max_bombs
 	bomb_inventory.clear()
 	if max_bombs > 0:
 		bomb_inventory[bomb_type] = max_bombs
+	preset_shield_tier = str(preset.get("shield_tier", "light"))
+	preset_shield_max = int(preset.get("shield_hp", 0))
+	preset_shield_hp = preset_shield_max
+	preset_helmet_tier = str(preset.get("helmet_tier", "light"))
+	preset_helmet_max = int(preset.get("helmet_hp", 0))
+	preset_helmet_hp = preset_helmet_max
+	preset_helmet_reduce = float(preset.get("helmet_reduce", 0.0))
 	set_weapon(primary_weapon_id)
+	queue_redraw()
 	if is_local_human:
 		bombs_changed.emit(bomb_count, bomb_type)
 
@@ -1502,10 +1566,13 @@ func assign_random_loadout() -> void:
 	_equipped_primary_id = primary_weapon_id
 	_original_secondary_id = secondary_weapon_id
 	_active_slot = 0
-	_primary_reserve_ammo = -1
-	_secondary_reserve_ammo = -1
+	var pri_w: WeaponData = WeaponData.get_weapon(primary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	var sec_w: WeaponData = WeaponData.get_weapon(secondary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+	_primary_reserve_ammo = pri_w.initial_reserve
+	_secondary_reserve_ammo = sec_w.initial_reserve
 	_primary_saved_ammo = -1
 	_secondary_saved_ammo = -1
+	_burst_shots_left = 0
 	bomb_type = str(BOMB_TYPES[randi() % BOMB_TYPES.size()]) if not BOMB_TYPES.is_empty() else "frag"
 	max_bombs = 3 if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
@@ -1694,11 +1761,6 @@ func cycle_zoom() -> void:
 		zoom_changed.emit(current_zoom_level, max_z)
 
 
-const TEX_FLAMETHROWER: Texture2D = preload("res://assets/sprites/weapons/flamethrower.png")
-const TEX_HOOK_GUN: Texture2D = preload("res://assets/sprites/weapons/hook_gun.png")
-const TEX_BUBBLE_GUN: Texture2D = preload("res://assets/sprites/weapons/bubble_gun.png")
-const TEX_MACHINE_GUN: Texture2D = preload("res://assets/sprites/weapons/machine_gun.png")
-const TEX_PLASMA_CANNON: Texture2D = preload("res://assets/sprites/weapons/plasma_cannon.png")
 var _weapons_sheet_tex: Texture2D = null
 var _weapons_base_scale: Vector2 = Vector2.ONE
 
@@ -1724,70 +1786,33 @@ func _apply_weapon_visuals() -> void:
 	_primary_weapon.visible = true
 	if _agent_weapon_node != null:
 		_agent_weapon_node.visible = false
-	var w: WeaponData = WeaponData.get_weapon(current_weapon_id, weapon_skin_id, m4a1_rail_mod)
 	if _weapon_pivot != null:
 		_weapon_pivot.scale = Vector2(1.16, 1.16)
-	if current_weapon_id == 11:
-		_primary_weapon.texture = TEX_FLAMETHROWER
-		_primary_weapon.hframes = 1
-		_primary_weapon.vframes = 1
-		_primary_weapon.frame = 0
-		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.165, 0.165)
-		_secondary_weapon.visible = false
-		_sync_muzzle_positions(aim_angle)
-		return
-	if current_weapon_id == 15:
-		_primary_weapon.texture = TEX_HOOK_GUN
-		_primary_weapon.hframes = 1
-		_primary_weapon.vframes = 1
-		_primary_weapon.frame = 0
-		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.24, 0.24)
-		_secondary_weapon.visible = false
-		_sync_muzzle_positions(aim_angle)
-		return
-	if current_weapon_id == 16:
-		_primary_weapon.texture = TEX_BUBBLE_GUN
-		_primary_weapon.hframes = 1
-		_primary_weapon.vframes = 1
-		_primary_weapon.frame = 0
-		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.24, 0.24)
-		_secondary_weapon.visible = false
-		_sync_muzzle_positions(aim_angle)
-		return
-	if current_weapon_id == 17:
-		_primary_weapon.texture = TEX_MACHINE_GUN
-		_primary_weapon.hframes = 1
-		_primary_weapon.vframes = 1
-		_primary_weapon.frame = 0
-		_primary_weapon.position = Vector2(18, 0)
-		_primary_weapon.scale = Vector2(0.27, 0.27)
-		_secondary_weapon.visible = false
-		_sync_muzzle_positions(aim_angle)
-		return
-	if current_weapon_id == 13:
-		_primary_weapon.texture = TEX_PLASMA_CANNON
-		_primary_weapon.hframes = 1
-		_primary_weapon.vframes = 1
-		_primary_weapon.frame = 0
-		_primary_weapon.position = Vector2(16, 0)
-		_primary_weapon.scale = Vector2(0.24, 0.24)
-		_secondary_weapon.visible = false
-		_sync_muzzle_positions(aim_angle)
-		return
-	if _weapons_sheet_tex != null and _primary_weapon.texture != _weapons_sheet_tex:
-		_primary_weapon.texture = _weapons_sheet_tex
-		_primary_weapon.hframes = 11
-		_primary_weapon.vframes = 3
-	_primary_weapon.position = Vector2(16, 0)
-	_primary_weapon.scale = Vector2(0.24, 0.24)
+	var skin_key: String = ProfileManager.get_equipped_gun_skin(current_weapon_id) if is_local_human else str(equipped_gun_skins.get(str(current_weapon_id), "default"))
+	var skin_def: Dictionary = ProfileManager.get_gun_skin_def(skin_key)
+	var skin_row: int = int(skin_def.get("sheet_row", weapon_skin_id))
+	var skin_tint: Color = ProfileManager.get_gun_skin_tint(current_weapon_id, skin_key)
+	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(current_weapon_id, skin_row)
+	_primary_weapon.texture = spec["tex"] as Texture2D
+	_primary_weapon.hframes = int(spec["hframes"])
+	_primary_weapon.vframes = int(spec["vframes"])
+	_primary_weapon.frame = int(spec["frame"])
+	_primary_weapon.modulate = skin_tint
+	_primary_weapon.position = Vector2(18, 0) if current_weapon_id == 17 else Vector2(16, 0)
+	match current_weapon_id:
+		11: _primary_weapon.scale = Vector2(0.24, 0.24)
+		17: _primary_weapon.scale = Vector2(0.27, 0.27)
+		19: _primary_weapon.scale = Vector2(0.20, 0.20)
+		20: _primary_weapon.scale = Vector2(0.21, 0.21)
+		21: _primary_weapon.scale = Vector2(0.26, 0.26)
+		22, 23: _primary_weapon.scale = Vector2(0.25, 0.25)
+		_: _primary_weapon.scale = Vector2(0.24, 0.24)
+	_secondary_weapon.texture = spec["tex"] as Texture2D
+	_secondary_weapon.hframes = int(spec["hframes"])
+	_secondary_weapon.vframes = int(spec["vframes"])
+	_secondary_weapon.frame = int(spec["frame"])
 	_secondary_weapon.position = Vector2(12, 4)
 	_secondary_weapon.scale = Vector2(0.225, 0.225)
-	var sheet_frame: int = clampi(weapon_skin_id, 0, 2) * 11 + w.sprite_frame
-	_primary_weapon.frame = sheet_frame
-	_secondary_weapon.frame = sheet_frame
 	_secondary_weapon.visible = false
 	_sync_muzzle_positions(aim_angle)
 
@@ -1799,6 +1824,12 @@ static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) 
 		15: return Vector2(42.4, -4.7) # Hook Gun
 		16: return Vector2(37.6, -1.7) # Bubble Gun
 		17: return Vector2(49.5, -5.1) # Machine Gun
+		18: return Vector2(42.0, -3.5) # Nade Gun
+		19: return Vector2(34.0, -4.0) # Stun Gun
+		20: return Vector2(38.5, -4.5) # Suppressed Pistol
+		21: return Vector2(46.0, -3.0) # Black Shotgun
+		22: return Vector2(44.5, -2.5) # OTs-14 Groza
+		23: return Vector2(45.0, -2.5) # M416
 	var f: int = sprite_frame if sprite_frame >= 0 else clampi(weapon_id, 0, 10)
 	match f % 11:
 		0: return Vector2(44.1, -5.2) # AK-47
@@ -2012,6 +2043,31 @@ func _receive_damage_local(dmg: int, attacker_id: int, weapon_name: String, atta
 				return
 		if damage_reduction_timer > 0.0:
 			dmg = maxi(1, int(round(float(dmg) * 0.5)))
+	else:
+		# Point-blank lethal hits (Shotgun, Sniper, Bazooka/Rocket <= close range) shatter armor & kill
+		if dmg >= 250:
+			preset_helmet_hp = 0
+			preset_shield_hp = 0
+			queue_redraw()
+		elif weapon_name != "Flamethrower":
+			# Preset Helmet & Shield armor mitigation in Gun Mode (Flamethrower burns directly through HP)
+			if preset_helmet_hp > 0 and preset_helmet_reduce > 0.0:
+				var mitigated: int = maxi(1, int(round(float(dmg) * preset_helmet_reduce)))
+				var h_used: int = mini(preset_helmet_hp, mitigated)
+				preset_helmet_hp -= h_used
+				dmg = maxi(1, dmg - h_used)
+				queue_redraw()
+			if preset_shield_hp > 0:
+				var s_abs: int = mini(preset_shield_hp, dmg)
+				preset_shield_hp -= s_abs
+				dmg -= s_abs
+				queue_redraw()
+				if dmg <= 0:
+					_hit_flash_timer = 0.08
+					_play_local_sfx("res://assets/audio/hit.wav", -5.0, 1.45)
+					if SettingsManager.damage_display:
+						_spawn_damage_popup(s_abs)
+					return
 	_hit_flash_timer = 0.12
 	_play_local_sfx("res://assets/audio/hit.wav", -3.0)
 	if SettingsManager.enhanced_visuals:
@@ -2252,11 +2308,17 @@ func _respawn_self() -> void:
 		bomb_inventory.clear()
 		if bomb_count > 0:
 			bomb_inventory[bomb_type] = bomb_count
-		_primary_reserve_ammo = -1
-		_secondary_reserve_ammo = -1
+		var pri_rw: WeaponData = WeaponData.get_weapon(primary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+		var sec_rw: WeaponData = WeaponData.get_weapon(secondary_weapon_id, weapon_skin_id, m4a1_rail_mod)
+		_primary_reserve_ammo = pri_rw.initial_reserve
+		_secondary_reserve_ammo = sec_rw.initial_reserve
 		_primary_saved_ammo = -1
 		_secondary_saved_ammo = -1
+		_burst_shots_left = 0
 		current_ammo = _weapon.mag_size
+		if not _is_agent_logic_active():
+			preset_shield_hp = preset_shield_max
+			preset_helmet_hp = preset_helmet_max
 	spawn_invuln_timer = SPAWN_INVULN_SEC
 
 	if NetworkManager.is_network_active():
@@ -2402,7 +2464,9 @@ func _update_visual_state(delta: float) -> void:
 				_modular_rig._current_anim = "agent_attack"
 			elif _modular_rig._current_anim == "idle":
 				_modular_rig._current_anim = "agent_idle"
-		var full_ov: Dictionary = ModularCharacter.get_pose_override(_modular_rig._current_part_id, active_stance, _modular_rig._current_anim)
+		_modular_rig.current_weapon_id = -1 if (is_dead or NetworkManager.is_agent_clash_mode() or _bomb_throw_timer > 0.0) else current_weapon_id
+		var active_fr: int = _modular_rig._manual_frame if _modular_rig._manual_sync_mode else (_modular_rig._get_sheet_frame_for_anim(_modular_rig._current_anim, _modular_rig._anim_legs.frame) if _modular_rig._anim_legs != null else 0)
+		var full_ov: Dictionary = ModularCharacter.get_pose_override(_modular_rig._current_part_id, active_stance, _modular_rig._current_anim, active_fr, _modular_rig.current_weapon_id)
 		w_ov = full_ov.get("weapon", {})
 	var swing_offset: float = 0.0
 	var is_boxing_glove: bool = (_agent_weapon_node != null and str(_agent_weapon_node.get("weapon_style")) == "boxing_glove")
@@ -2485,14 +2549,14 @@ func _apply_team_visuals() -> void:
 func _update_overhead_ui() -> void:
 	_overhead_ui.visible = (not is_dead) and (invis_timer <= 0.0 or is_local_human)
 	var ag_active: bool = _is_agent_logic_active()
-	_name_label.visible = SettingsManager.show_callsigns or (ag_active and (stun_timer > 0.0 or ability_lock_timer > 0.0 or carried_by_peer_id != 0 or thrown_flight_timer > 0.0))
+	_name_label.visible = SettingsManager.show_callsigns or stun_timer > 0.0 or (ag_active and (ability_lock_timer > 0.0 or carried_by_peer_id != 0 or thrown_flight_timer > 0.0))
 	if ag_active and carried_by_peer_id != 0:
 		_name_label.text = "GRABBED!"
 		_name_label.modulate = Color(1.0, 0.65, 0.22)
 	elif ag_active and thrown_flight_timer > 0.0:
 		_name_label.text = "THROWN!"
 		_name_label.modulate = Color(1.0, 0.42, 0.22)
-	elif ag_active and stun_timer > 0.0:
+	elif stun_timer > 0.0:
 		_name_label.text = "STUNNED %.1fs" % stun_timer
 		_name_label.modulate = Color(0.45, 0.95, 1.0)
 	elif ag_active and time_stop_timer > 0.0:
@@ -2517,6 +2581,11 @@ func _update_overhead_ui() -> void:
 	else:
 		_name_label.text = player_name
 		_apply_team_visuals()
+	if is_instance_valid(_name_label):
+		var has_armor_bars: bool = (not is_dead) and (not _is_agent_logic_active()) and (preset_shield_hp > 0 or preset_helmet_hp > 0)
+		var name_y_shift: float = -15.0 if has_armor_bars else 0.0
+		_name_label.offset_top = -22.0 + name_y_shift
+		_name_label.offset_bottom = -2.0 + name_y_shift
 	var ratio: float = clampf(float(health) / float(max_health), 0.0, 1.0)
 	_health_fill.size.x = 44.0 * ratio
 	if ratio > 0.5:
@@ -2748,8 +2817,87 @@ func _compute_bot_input(delta: float) -> Dictionary:
 			elif to_obj.y < -22.0 and is_on_floor() and obj_dist < 160.0:
 				want_jump = true
 
-	if is_on_wall() and is_on_floor():
-		want_jump = true
+	# Smart wall / ceiling obstacle avoidance: climb up over walls or back up & drop around dead-ends
+	var nav_space: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
+	if _bot_nav_timer > 0.0:
+		_bot_nav_timer = maxf(0.0, _bot_nav_timer - delta)
+		if _bot_nav_timer <= 0.0:
+			_bot_nav_mode = 0
+
+	var moved_dist: float = global_position.distance_to(_bot_last_pos)
+	_bot_last_pos = global_position
+	if absf(move_x) > 0.1 and moved_dist < 1.2:
+		_bot_stuck_timer += delta
+	else:
+		_bot_stuck_timer = maxf(0.0, _bot_stuck_timer - delta * 2.0)
+
+	var desired_dir_x: float = signf(move_x)
+	var wall_ahead: bool = false
+	if desired_dir_x != 0.0:
+		var fwd_ray := PhysicsRayQueryParameters2D.create(
+			global_position + Vector2(0.0, -4.0),
+			global_position + Vector2(desired_dir_x * 46.0, -4.0),
+			1
+		)
+		wall_ahead = is_on_wall() or (not nav_space.intersect_ray(fwd_ray).is_empty())
+
+	if (wall_ahead or _bot_stuck_timer > 0.45) and _bot_nav_mode == 0 and desired_dir_x != 0.0:
+		_bot_stuck_timer = 0.0
+		# Probe whether flying UP clears the wall, or if a ceiling/tall wall blocks us
+		var up_ray := PhysicsRayQueryParameters2D.create(
+			global_position,
+			global_position + Vector2(0.0, -135.0),
+			1
+		)
+		var up_clear: bool = nav_space.intersect_ray(up_ray).is_empty()
+		var over_ray := PhysicsRayQueryParameters2D.create(
+			global_position + Vector2(0.0, -110.0),
+			global_position + Vector2(desired_dir_x * 80.0, -110.0),
+			1
+		)
+		var over_clear: bool = nav_space.intersect_ray(over_ray).is_empty()
+		if up_clear and over_clear and jetpack_fuel > 18.0:
+			_bot_nav_mode = 1 # Climb up and over
+			_bot_nav_timer = 0.72
+			_bot_nav_dir_x = desired_dir_x
+		else:
+			# Wall goes all the way up or low fuel: reverse away to find an open shaft / drop-down
+			_bot_nav_mode = 2
+			_bot_nav_timer = 1.25
+			_bot_nav_dir_x = -desired_dir_x
+			_bot_strafe_dir = _bot_nav_dir_x
+
+	if _bot_nav_mode == 1:
+		# Fly up cleanly; once past wall top, push forward over it
+		var chest_ray := PhysicsRayQueryParameters2D.create(
+			global_position + Vector2(0.0, -4.0),
+			global_position + Vector2(_bot_nav_dir_x * 44.0, -4.0),
+			1
+		)
+		var still_blocked: bool = not nav_space.intersect_ray(chest_ray).is_empty()
+		if is_on_ceiling() or jetpack_fuel <= 8.0:
+			# Hit ceiling while climbing: switch to detour back & down
+			_bot_nav_mode = 2
+			_bot_nav_timer = 1.25
+			_bot_nav_dir_x = -_bot_nav_dir_x
+			_bot_strafe_dir = _bot_nav_dir_x
+		else:
+			want_jet = true
+			if is_on_floor():
+				want_jump = true
+			# Ease slightly off the wall while rising so we don't snag, then cross once clear
+			move_x = (-_bot_nav_dir_x * 0.25) if still_blocked else _bot_nav_dir_x
+			if not still_blocked:
+				_bot_nav_timer = minf(_bot_nav_timer, 0.20)
+	elif _bot_nav_mode == 2:
+		# Move away from the dead-end wall to find an open path up or down
+		move_x = _bot_nav_dir_x
+		want_jet = false
+		if is_on_wall():
+			if is_on_floor():
+				want_jump = true
+			elif jetpack_fuel > 25.0:
+				want_jet = true
 
 	return {
 		"move_x": move_x,
@@ -2764,7 +2912,7 @@ func _compute_bot_input(delta: float) -> Dictionary:
 # --- AGENT CLASH MODE ABILITIES, STUN, THROWABLES & BARRIERS ---
 
 func apply_stun(duration: float, attacker_id: int = 0) -> void:
-	if not _is_agent_logic_active() or is_dead or duration <= 0.0:
+	if is_dead or duration <= 0.0:
 		return
 	if attacker_id != 0 and attacker_id == peer_id:
 		return
@@ -2791,8 +2939,11 @@ func _apply_stun_local(duration: float, attacker_id: int = 0) -> void:
 	_flurry_timer = 0.0
 	_flurry_target = null
 	_release_grab_state()
+	_burst_shots_left = 0
 	stun_timer = maxf(stun_timer, duration)
 	is_jetpacking = false
+	velocity.x *= 0.2
+	_spawn_rising_particles(global_position, Color(0.28, 0.94, 1.0), false, 8)
 	if is_local_human:
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
 
@@ -3965,7 +4116,7 @@ func _apply_status_local(effect_name: String, dur: float, _extra: float = 0.0) -
 			_cryo_shatter_accum = 0.0
 			_cryo_attacker_id = int(_extra)
 			var att := _find_player_by_peer_id(_cryo_attacker_id)
-			_cryo_attacker_name = str(att.get("player_name")) if att != null else "Rook Frost"
+			_cryo_attacker_name = str(att.get("player_name")) if att != null else "White Frost"
 
 
 func _tick_agent_buffs_and_dots(delta: float) -> void:
@@ -4315,8 +4466,8 @@ func _update_dual_shotgun_visuals(show: bool) -> void:
 			if spr == null:
 				spr = Sprite2D.new()
 				spr.texture = TEX_WEAPONS_SHEET
-				spr.hframes = 11
-				spr.vframes = 3
+				spr.hframes = WeaponData.SELECTION_COLS
+				spr.vframes = WeaponData.SELECTION_ROWS
 				spr.frame = 5 # Shotgun sprite
 				spr.scale = Vector2(0.28, 0.28)
 				spr.z_index = 6 if idx == 0 else 4
@@ -4951,7 +5102,7 @@ func _throw_player_local(victim_pid: int, origin: Vector2, angle: float) -> void
 	victim.set("thrown_by_peer_id", peer_id)
 	victim.set("thrown_by_name", player_name)
 	victim.set("thrown_by_team", team_id)
-	victim.set("thrown_by_rook_frost", str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "Rook Frost")
+	victim.set("thrown_by_rook_frost", str(AgentData.get_agent(archetype_id).get("agent_name", "")) == "White Frost")
 	victim.set("thrown_flight_timer", 0.70)
 	victim.set("_thrown_flight_elapsed", 0.0)
 	victim.set("stun_timer", maxf(float(victim.get("stun_timer")), 0.75))
@@ -5195,9 +5346,9 @@ func _spawn_vfx_burst(pos: Vector2, radius: float, col: Color, custom_splash: bo
 
 
 func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
-	var pivot_pos: Vector2 = _weapon_pivot.global_position if is_instance_valid(_weapon_pivot) else global_position
+	var body_origin: Vector2 = global_position + Vector2(0.0, -4.0)
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var ray := PhysicsRayQueryParameters2D.create(pivot_pos, muzzle_pos, 3)
+	var ray := PhysicsRayQueryParameters2D.create(body_origin, muzzle_pos, 3)
 	var excl: Array[RID] = [get_rid()]
 	for p in get_tree().get_nodes_in_group("players"):
 		if not is_instance_valid(p) or p == self or not (p is CollisionObject2D):
@@ -5207,14 +5358,14 @@ func _get_safe_muzzle_pos(muzzle_pos: Vector2) -> Vector2:
 	ray.exclude = excl
 	ray.collide_with_areas = false
 	ray.collide_with_bodies = true
-	ray.hit_from_inside = true
+	ray.hit_from_inside = false
 	var hit: Dictionary = space_state.intersect_ray(ray)
 	if not hit.is_empty():
 		var col: Object = hit.get("collider")
 		if col != null and col.is_in_group("players"):
-			return pivot_pos
+			return body_origin
 		var n: Vector2 = hit["normal"]
-		return (hit["position"] as Vector2) + n * 2.0
+		return (hit["position"] as Vector2) + n * 6.0
 	return muzzle_pos
 
 
@@ -5285,6 +5436,47 @@ func _draw() -> void:
 			draw_line(Vector2.ZERO, to_local(_hook_pull_target), Color(0.88, 0.72, 0.32), 3.5)
 			draw_circle(to_local(_hook_pull_target), 7.0, Color(0.95, 0.82, 0.38))
 		return
+	if not is_dead and (preset_shield_hp > 0 or preset_helmet_hp > 0):
+		var bar_w: float = 42.0
+		var bx: float = -18.0
+		var ink_c := Color(0.05, 0.07, 0.11, 0.94)
+		# Sleek Shield bar with mini shield crest icon + segmented ticks + top gloss
+		if preset_shield_hp > 0 and preset_shield_max > 0:
+			var sy: float = -85.0
+			var sr: float = clampf(float(preset_shield_hp) / float(preset_shield_max), 0.0, 1.0)
+			var s_col: Color = Color(1.0, 0.56, 0.20, 0.98) if preset_shield_tier == "heavy" else (Color(0.24, 0.86, 1.0, 0.98) if preset_shield_tier == "medium" else Color(0.62, 0.90, 1.0, 0.98))
+			# Mini shield crest badge on left
+			var crest := PackedVector2Array([
+				Vector2(bx - 8.5, sy - 0.5), Vector2(bx - 2.5, sy - 0.5),
+				Vector2(bx - 2.5, sy + 2.8), Vector2(bx - 5.5, sy + 5.2), Vector2(bx - 8.5, sy + 2.8)
+			])
+			draw_colored_polygon(crest, s_col)
+			draw_polyline(crest, ink_c, 1.2)
+			# Casing + fill + specular highlight + segment dividers
+			draw_rect(Rect2(bx - 1.0, sy - 1.0, bar_w + 2.0, 6.5), ink_c)
+			draw_rect(Rect2(bx, sy, bar_w, 4.5), Color(0.10, 0.14, 0.22, 0.90))
+			var fill_w: float = bar_w * sr
+			draw_rect(Rect2(bx, sy, fill_w, 4.5), s_col)
+			draw_rect(Rect2(bx, sy, fill_w, 1.6), s_col.lightened(0.45))
+			var segs: int = maxi(1, int(ceil(float(preset_shield_max) / 25.0)))
+			for si in range(1, segs):
+				var sx: float = bx + (bar_w * float(si) / float(segs))
+				draw_line(Vector2(sx, sy), Vector2(sx, sy + 4.5), ink_c, 1.1)
+		# Sleek Helmet bar with mini helmet dome icon + glossy metallic finish
+		if preset_helmet_hp > 0 and preset_helmet_max > 0:
+			var hy: float = -92.0 if preset_shield_hp > 0 else -85.0
+			var hr: float = clampf(float(preset_helmet_hp) / float(preset_helmet_max), 0.0, 1.0)
+			var h_col: Color = Color(1.0, 0.48, 0.18, 0.98) if preset_helmet_tier == "heavy" else (Color(1.0, 0.84, 0.26, 0.98) if preset_helmet_tier == "medium" else Color(0.76, 0.86, 0.96, 0.98))
+			# Mini helmet dome badge on left
+			draw_circle(Vector2(bx - 5.5, hy + 2.5), 3.2, h_col)
+			draw_rect(Rect2(bx - 8.8, hy + 2.6, 6.6, 1.8), ink_c)
+			draw_arc(Vector2(bx - 5.5, hy + 2.5), 3.3, PI, TAU, 10, ink_c, 1.1)
+			# Casing + fill + specular highlight
+			draw_rect(Rect2(bx - 1.0, hy - 1.0, bar_w + 2.0, 6.0), ink_c)
+			draw_rect(Rect2(bx, hy, bar_w, 4.0), Color(0.12, 0.11, 0.16, 0.90))
+			var hfill_w: float = bar_w * hr
+			draw_rect(Rect2(bx, hy, hfill_w, 4.0), h_col)
+			draw_rect(Rect2(bx, hy, hfill_w, 1.4), h_col.lightened(0.45))
 	if not is_local_human or is_dead or not SettingsManager.sight_laser:
 		return
 	if _muzzle_primary == null or not is_instance_valid(_muzzle_primary):
@@ -5293,7 +5485,14 @@ func _draw() -> void:
 	var start_world: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
 	var end_world: Vector2 = start_world + Vector2.from_angle(aim_angle) * laser_len
 	var space_state: PhysicsDirectSpaceState2D = get_world_2d().direct_space_state
-	var ray := PhysicsRayQueryParameters2D.create(start_world, end_world, 1)
+	var ray := PhysicsRayQueryParameters2D.create(start_world, end_world, 3)
+	var laser_excl: Array[RID] = [get_rid()]
+	for p in get_tree().get_nodes_in_group("players"):
+		if not is_instance_valid(p) or p == self or not (p is CollisionObject2D):
+			continue
+		if (p.has_method("is_alive") and not p.is_alive()) or (NetworkManager.is_team_mode() and int(p.get("team_id")) == team_id):
+			laser_excl.append((p as CollisionObject2D).get_rid())
+	ray.exclude = laser_excl
 	ray.collide_with_areas = false
 	ray.collide_with_bodies = true
 	var hit: Dictionary = space_state.intersect_ray(ray)
@@ -5468,16 +5667,6 @@ class BloodPuff extends Node2D:
 
 
 class AgentWeaponVisual extends Node2D:
-	const TEX_REAPER_SCYTHE: Texture2D = preload("res://assets/sprites/weapons/reaper_scythe.png")
-	const TEX_MAGMA_HAMMER: Texture2D = preload("res://assets/sprites/weapons/magma_hammer.png")
-	const TEX_RAVEN_BOW: Texture2D = preload("res://assets/sprites/weapons/raven_shadow_bow.png")
-	const TEX_ORC_SKULL_CRUSHER: Texture2D = preload("res://assets/sprites/weapons/orc_skull_crusher.png")
-	const TEX_JACKSON_GLOVE: Texture2D = preload("res://assets/sprites/weapons/jackson_boxing_glove.png")
-	const TEX_YAGAMI_KATANA: Texture2D = preload("res://assets/sprites/weapons/yagami_katana.png")
-	const TEX_ROOK_FROST_BLADE: Texture2D = preload("res://assets/sprites/weapons/rook_frost_blade.png")
-	const TEX_AFERA_SPEAR: Texture2D = preload("res://assets/sprites/weapons/afera_tribal_spear.png")
-	const TEX_BRUSKI_REVOLVER: Texture2D = preload("res://assets/sprites/weapons/bruski_revolver.png")
-	const TEX_WEAPONS_SHEET_VIS: Texture2D = preload("res://assets/sprites/weapons_sheet.png")
 	var weapon_style: String = "sword"
 	var weapon_color: Color = Color(0.85, 0.90, 0.98)
 	var _flame_t: float = 0.0
@@ -5490,32 +5679,31 @@ class AgentWeaponVisual extends Node2D:
 	func _draw() -> void:
 		match weapon_style:
 			"deagle":
-				var ws: Vector2 = TEX_WEAPONS_SHEET_VIS.get_size()
-				var fw: float = ws.x / 11.0
-				var fh: float = ws.y / 3.0
-				draw_texture_rect_region(TEX_WEAPONS_SHEET_VIS, Rect2(-6.0, -14.0, 56.0, 28.0), Rect2(9.0 * fw, 0.0, fw, fh))
+				draw_texture_rect_region(WeaponData.TEX_SELECTION_SHEET, Rect2(-6.0, -14.0, 56.0, 28.0), Rect2(9.0 * 256.0, 0.0, 256.0, 128.0))
 			"bruski_revolver":
-				draw_texture_rect(TEX_BRUSKI_REVOLVER, Rect2(-4.0, -11.0, 38.0, 22.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-6.0, -14.0, 44.0, 22.0), WeaponData.get_agent_weapon_region("bruski_revolver"))
 			"afera_spear":
 				draw_set_transform(Vector2(10.0, 2.0), -0.18, Vector2.ONE)
-				draw_texture_rect(TEX_AFERA_SPEAR, Rect2(-22.0, -5.5, 76.0, 11.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-22.0, -19.0, 76.0, 38.0), WeaponData.get_agent_weapon_region("afera_spear"))
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"rook_frost_blade":
 				draw_set_transform(Vector2(14.0, 4.0), -0.40, Vector2.ONE)
-				draw_texture_rect(TEX_ROOK_FROST_BLADE, Rect2(-6.0, -10.0, 48.0, 20.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-6.0, -12.0, 48.0, 24.0), WeaponData.get_agent_weapon_region("rook_frost_blade"))
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"yagami_katana":
 				draw_set_transform(Vector2(14.0, 4.0), -0.45, Vector2.ONE)
-				draw_texture_rect(TEX_YAGAMI_KATANA, Rect2(-6.0, -7.0, 52.0, 14.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-6.0, -13.0, 52.0, 26.0), WeaponData.get_agent_weapon_region("yagami_katana"))
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"boxing_glove":
-				draw_texture_rect(TEX_JACKSON_GLOVE, Rect2(2.0, -16.0, 32.0, 32.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-14.0, -16.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("boxing_glove"))
 			"greatsword":
 				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
 				draw_line(Vector2(10, -8), Vector2(10, 8), Color(0.95, 0.78, 0.28), 4.0)
 			"orc_axe":
-				draw_texture_rect(TEX_ORC_SKULL_CRUSHER, Rect2(-6.0, -17.0, 52.0, 34.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-10.0, -17.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("orc_axe"))
+			"stone_hammer":
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-12.0, -15.5, 62.0, 31.0), WeaponData.get_agent_weapon_region("stone_hammer"))
 			"axe":
 				var ink_a := Color(0.06, 0.05, 0.09)
 				draw_line(Vector2(2, 0), Vector2(38, 0), ink_a, 7.5)
@@ -5524,14 +5712,14 @@ class AgentWeaponVisual extends Node2D:
 				draw_colored_polygon(PackedVector2Array([Vector2(24, -12), Vector2(38, -8), Vector2(38, 10), Vector2(24, 11)]), weapon_color)
 				draw_colored_polygon(PackedVector2Array([Vector2(33, -7), Vector2(38, -8), Vector2(38, 10), Vector2(33, 9)]), weapon_color.lightened(0.35))
 			"bow":
-				draw_texture_rect(TEX_RAVEN_BOW, Rect2(2.0, -24.0, 32.0, 48.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-30.0, -24.0, 96.0, 48.0), WeaponData.get_agent_weapon_region("bow"))
 			"scythe":
-				draw_texture_rect(TEX_REAPER_SCYTHE, Rect2(-12.0, -9.0, 56.0, 32.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-16.0, -12.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("scythe"))
 			"spear":
 				draw_line(Vector2(0, 0), Vector2(38, 0), Color(0.65, 0.45, 0.22), 3.5)
 				draw_colored_polygon(PackedVector2Array([Vector2(36, -5), Vector2(50, 0), Vector2(36, 5)]), weapon_color)
 			"magma_hammer":
-				draw_texture_rect(TEX_MAGMA_HAMMER, Rect2(-12.0, -14.0, 56.0, 32.0), false)
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-14.0, -15.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("magma_hammer"))
 				var h_center := Vector2(31.0, 1.0)
 				for fi in range(5):
 					var ang: float = -1.7 + float(fi) * 0.85
@@ -5948,7 +6136,6 @@ class SpearImpaleVfx extends Node2D:
 
 
 class BoxingFistVfx extends Node2D:
-	const TEX_GLOVE: Texture2D = preload("res://assets/sprites/weapons/jackson_boxing_glove.png")
 	var start_pos: Vector2 = Vector2.ZERO
 	var end_pos: Vector2 = Vector2.ZERO
 	var fist_angle: float = 0.0
@@ -5976,7 +6163,7 @@ class BoxingFistVfx extends Node2D:
 	func _draw() -> void:
 		var a: float = clampf(1.0 - maxf(0.0, (_age - slam_time) / _hold_fade), 0.0, 1.0)
 		draw_circle(Vector2(2.0, 0.0), 26.0, Color(0.28, 0.62, 1.0, 0.24 * a))
-		draw_texture_rect(TEX_GLOVE, Rect2(-26.0, -26.0, 52.0, 52.0), false, Color(1.0, 1.0, 1.0, a))
+		draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-52.0, -26.0, 104.0, 52.0), WeaponData.get_agent_weapon_region("boxing_glove"), Color(1.0, 1.0, 1.0, a))
 
 
 func _spawn_prism_mirror(dur: float, col: Color) -> void:
