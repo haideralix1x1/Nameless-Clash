@@ -28,7 +28,7 @@ const GUN_SKIN_CATALOG: Array[Dictionary] = [
 	{"key": "gold",          "name": "24K Royal Gold",   "price": 850, "sheet_row": 9, "tint": Color(1.0, 0.86, 0.34), "bullet": Color(1.0, 0.88, 0.24), "badge": Color(1.0, 0.84, 0.24)}
 ]
 # Weapons whose columns in weapons_selection_sheet.png contain dedicated custom art for all 10 skin rows (no extra tint needed)
-const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4]
+const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6]
 const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 19, 20, 21, 23, 22]
 
 const PROFILE_PATH: String = "user://player_profile.cfg"
