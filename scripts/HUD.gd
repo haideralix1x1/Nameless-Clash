@@ -328,7 +328,7 @@ func _sync_mode_hud_visibility() -> void:
 	if is_instance_valid(_btn_reload):
 		_btn_reload.visible = not is_agent
 	if is_instance_valid(_btn_switch):
-		_btn_switch.visible = false
+		_btn_switch.visible = not is_agent
 	if is_instance_valid(_btn_bomb):
 		_btn_bomb.visible = (not is_agent) and NetworkManager.allow_explosives
 	if is_instance_valid(_btn_presets):

@@ -539,6 +539,127 @@ func _ready() -> void:
 	apply_archetype_preset(0, false)
 	load_profile()
 	load_career_leaderboards()
+	_setup_global_touch_scrolling()
+
+
+var _tracked_scrolls: Array[ScrollContainer] = []
+var _drag_scroll_target: ScrollContainer = null
+var _drag_scroll_touch_idx: int = -1
+var _drag_scroll_start_pos: Vector2 = Vector2.ZERO
+var _drag_scroll_last_pos: Vector2 = Vector2.ZERO
+var _drag_scroll_accum: Vector2 = Vector2.ZERO
+var _drag_scroll_active: bool = false
+
+
+func _setup_global_touch_scrolling() -> void:
+	var tree: SceneTree = get_tree()
+	if tree != null and not tree.node_added.is_connected(_on_tree_node_added):
+		tree.node_added.connect(_on_tree_node_added)
+
+
+func _on_tree_node_added(node: Node) -> void:
+	if node is ScrollContainer:
+		var sc := node as ScrollContainer
+		if not _tracked_scrolls.has(sc):
+			_tracked_scrolls.append(sc)
+		if sc.mouse_filter == Control.MOUSE_FILTER_STOP:
+			sc.mouse_filter = Control.MOUSE_FILTER_PASS
+		for ch in sc.get_children():
+			_propagate_touch_scroll_pass(ch)
+		return
+	if node is Control:
+		var p: Node = node.get_parent()
+		var depth: int = 0
+		while p != null and depth < 12:
+			if p is ScrollContainer:
+				_apply_touch_scroll_pass(node as Control)
+				return
+			p = p.get_parent()
+			depth += 1
+
+
+func _propagate_touch_scroll_pass(n: Node) -> void:
+	if n is Control:
+		_apply_touch_scroll_pass(n as Control)
+	for ch in n.get_children():
+		_propagate_touch_scroll_pass(ch)
+
+
+func _apply_touch_scroll_pass(c: Control) -> void:
+	if c is ScrollBar or c is Slider or c is LineEdit or c is TextEdit or c is SpinBox or c is OptionButton:
+		return
+	if c.mouse_filter == Control.MOUSE_FILTER_STOP:
+		c.mouse_filter = Control.MOUSE_FILTER_PASS
+
+
+func _find_scrollable_at(pos: Vector2) -> ScrollContainer:
+	var best: ScrollContainer = null
+	var i: int = _tracked_scrolls.size() - 1
+	while i >= 0:
+		var sc: ScrollContainer = _tracked_scrolls[i]
+		if not is_instance_valid(sc):
+			_tracked_scrolls.remove_at(i)
+			i -= 1
+			continue
+		if sc.is_visible_in_tree() and sc.get_global_rect().has_point(pos):
+			var vbar: VScrollBar = sc.get_v_scroll_bar()
+			var hbar: HScrollBar = sc.get_h_scroll_bar()
+			var can_v: bool = (sc.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED) and vbar != null and vbar.max_value > vbar.page + 1.0
+			var can_h: bool = (sc.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED) and hbar != null and hbar.max_value > hbar.page + 1.0
+			if can_v or can_h:
+				best = sc
+				break
+		i -= 1
+	return best
+
+
+func _input(event: InputEvent) -> void:
+	if _drag_scroll_active and (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == InputEvent.DEVICE_ID_EMULATION:
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventScreenTouch:
+		var te := event as InputEventScreenTouch
+		if te.pressed:
+			var hovered: Control = get_viewport().gui_get_hovered_control()
+			if hovered is Slider or hovered is ScrollBar:
+				return
+			var sc: ScrollContainer = _find_scrollable_at(te.position)
+			if sc != null:
+				_drag_scroll_target = sc
+				_drag_scroll_touch_idx = te.index
+				_drag_scroll_start_pos = te.position
+				_drag_scroll_last_pos = te.position
+				_drag_scroll_accum = Vector2.ZERO
+				_drag_scroll_active = false
+		elif te.index == _drag_scroll_touch_idx:
+			var was_dragging: bool = _drag_scroll_active
+			_drag_scroll_target = null
+			_drag_scroll_touch_idx = -1
+			_drag_scroll_active = false
+			_drag_scroll_accum = Vector2.ZERO
+			if was_dragging:
+				get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag:
+		var de := event as InputEventScreenDrag
+		if de.index == _drag_scroll_touch_idx and is_instance_valid(_drag_scroll_target):
+			if not _drag_scroll_active:
+				if de.position.distance_to(_drag_scroll_start_pos) < 10.0:
+					return
+				_drag_scroll_active = true
+				_drag_scroll_last_pos = _drag_scroll_start_pos
+				_drag_scroll_accum = Vector2.ZERO
+				get_viewport().gui_release_focus()
+			_drag_scroll_accum += de.position - _drag_scroll_last_pos
+			_drag_scroll_last_pos = de.position
+			var dx: int = int(_drag_scroll_accum.x)
+			var dy: int = int(_drag_scroll_accum.y)
+			if dx != 0 and _drag_scroll_target.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+				_drag_scroll_target.scroll_horizontal -= dx
+				_drag_scroll_accum.x -= float(dx)
+			if dy != 0 and _drag_scroll_target.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+				_drag_scroll_target.scroll_vertical -= dy
+				_drag_scroll_accum.y -= float(dy)
+			get_viewport().set_input_as_handled()
 
 
 func _default_name() -> String:
