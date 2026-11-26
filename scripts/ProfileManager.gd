@@ -18,8 +18,8 @@ const PREMIUM_CRATE_PRICE: int = 2000
 const PREMIUM_SKIN_PRICE_THRESHOLD: int = 5000
 
 const COIN_SHOP_PACKS: Array[Dictionary] = [
-	{"sku": "coins_pack_starter", "name": "Pouch of NCC",      "coins": 1200,   "bonus_coins": 0,     "price_usd": "$0.99",  "tag": "STARTER",    "tier": 0, "accent": Color(0.42, 0.84, 1.0)},
-	{"sku": "coins_pack_handful", "name": "Stack of NCC",      "coins": 3000,   "bonus_coins": 500,   "price_usd": "$2.99",  "tag": "+500 BONUS", "tier": 1, "accent": Color(0.36, 0.96, 0.58)},
+	{"sku": "coins_pack_starter", "name": "Pouch of NC",       "coins": 1200,   "bonus_coins": 0,     "price_usd": "$0.99",  "tag": "STARTER",    "tier": 0, "accent": Color(0.42, 0.84, 1.0)},
+	{"sku": "coins_pack_handful", "name": "Stack of NC",       "coins": 3000,   "bonus_coins": 500,   "price_usd": "$2.99",  "tag": "+500 BONUS", "tier": 1, "accent": Color(0.36, 0.96, 0.58)},
 	{"sku": "coins_pack_chest",   "name": "Tactical Chest",    "coins": 6500,   "bonus_coins": 1500,  "price_usd": "$4.99",  "tag": "POPULAR",    "tier": 2, "accent": Color(1.0, 0.84, 0.24)},
 	{"sku": "coins_pack_vault",   "name": "Warlord Vault",     "coins": 15000,  "bonus_coins": 5000,  "price_usd": "$9.99",  "tag": "+33% BONUS", "tier": 3, "accent": Color(0.98, 0.58, 0.22)},
 	{"sku": "coins_pack_royal",   "name": "Champion Hoard",    "coins": 35000,  "bonus_coins": 15000, "price_usd": "$19.99", "tag": "HOT DEAL",   "tier": 4, "accent": Color(0.84, 0.46, 1.0)},
@@ -1306,7 +1306,7 @@ static func get_coin_pack_by_sku(sku: String) -> Dictionary:
 func purchase_coin_pack(sku: String) -> Dictionary:
 	var pack: Dictionary = get_coin_pack_by_sku(sku)
 	if pack.is_empty():
-		return {"ok": false, "error": "Unknown NCC pack."}
+		return {"ok": false, "error": "Unknown NC pack."}
 	var base_c: int = maxi(0, int(pack.get("coins", 0)))
 	var bonus_c: int = maxi(0, int(pack.get("bonus_coins", 0)))
 	var total_c: int = base_c + bonus_c
@@ -1314,7 +1314,7 @@ func purchase_coin_pack(sku: String) -> Dictionary:
 	return {
 		"ok": true,
 		"sku": sku,
-		"name": str(pack.get("name", "NCC Pack")),
+		"name": str(pack.get("name", "NC Pack")),
 		"base_coins": base_c,
 		"bonus_coins": bonus_c,
 		"total_coins": total_c,
@@ -1588,7 +1588,7 @@ func open_crate(is_premium_crate: bool, use_free_daily: bool = false) -> Diction
 	else:
 		var cost: int = PREMIUM_CRATE_PRICE if is_premium_crate else STANDARD_CRATE_PRICE
 		if not spend_coins(cost):
-			return {"ok": false, "error": "Not enough NCC! Need %s NCC." % format_coins(cost)}
+			return {"ok": false, "error": "Not enough NC! Need %s NC." % format_coins(cost)}
 
 	var coins_after_spend: int = coins
 	var res: Dictionary = _roll_single_crate_reward(is_premium_crate)
@@ -1601,7 +1601,7 @@ func open_crates_batch(is_premium_crate: bool, count: int = 10) -> Dictionary:
 	var unit_cost: int = PREMIUM_CRATE_PRICE if is_premium_crate else STANDARD_CRATE_PRICE
 	var total_cost: int = unit_cost * n
 	if not spend_coins(total_cost):
-		return {"ok": false, "error": "Not enough NCC! Need %s NCC." % format_coins(total_cost)}
+		return {"ok": false, "error": "Not enough NC! Need %s NC." % format_coins(total_cost)}
 	var coins_after_spend: int = coins
 	var items: Array = []
 	for _i in range(n):
@@ -1701,8 +1701,8 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 			"is_duplicate": false,
 			"coins_won": bonus,
 			"item_value": bonus,
-			"label": "2x NCC! (+%s)" % format_coins(bonus),
-			"short_label": "2x NCC!",
+			"label": "2x NC! (+%s)" % format_coins(bonus),
+			"short_label": "2x NC!",
 			"color": Color(0.28, 1.0, 0.58)
 		}
 
@@ -1802,8 +1802,8 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 			"is_duplicate": true,
 			"coins_won": ag_refund,
 			"item_value": get_agent_unlock_price(),
-			"label": "All Agents Owned (+%s NCC)" % format_coins(ag_refund),
-			"short_label": "+%s NCC" % format_coins(ag_refund),
+			"label": "All Agents Owned (+%s NC)" % format_coins(ag_refund),
+			"short_label": "+%s NC" % format_coins(ag_refund),
 			"color": Color(0.86, 0.48, 1.0)
 		}
 
@@ -1885,8 +1885,8 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 		"is_duplicate": false,
 		"coins_won": won,
 		"item_value": won,
-		"label": "+%d NCC" % won,
-		"short_label": "+%s NCC" % format_coins(won),
+		"label": "+%d NC" % won,
+		"short_label": "+%s NC" % format_coins(won),
 		"color": Color(1.0, 0.88, 0.34)
 	}
 

@@ -43,6 +43,31 @@
 			"crimson_royal": true,
 			"gold": true,
 			"magma": true
+		},
+		"1": {
+			"biohazard": true,
+			"crimson_royal": true,
+			"magma": true
+		},
+		"2": {
+			"crimson_royal": true,
+			"gold": true,
+			"magma": true,
+			"nebula": true
+		},
+		"3": {
+			"gold": true,
+			"magma": true
+		},
+		"4": {
+			"gold": true
+		},
+		"5": {
+			"biohazard": true,
+			"crimson_royal": true,
+			"gold": true,
+			"magma": true,
+			"nebula": true
 		}
 	},
 	"treasure_reward": 15,

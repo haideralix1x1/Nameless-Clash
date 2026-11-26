@@ -291,7 +291,7 @@ func _build_ui() -> void:
 
 	var coin_plus_btn := _make_arcade_button("+", Color(0.36, 0.98, 0.56), 24.0, 15, Color(0.08, 0.32, 0.16, 0.98))
 	coin_plus_btn.custom_minimum_size = Vector2(26, 24)
-	coin_plus_btn.tooltip_text = "Open NCC Shop"
+	coin_plus_btn.tooltip_text = "Open NC Shop"
 	coin_plus_btn.pressed.connect(func(): _open_coin_shop())
 	coin_pill_hb.add_child(coin_plus_btn)
 
@@ -309,7 +309,7 @@ func _build_ui() -> void:
 			_coin_shop_coin_lbl.text = c_str
 	)
 
-	_coin_shop_top_btn = _make_arcade_button("NCC SHOP", Color(0.38, 0.98, 0.58), 40.0, 14, Color(0.08, 0.28, 0.14, 0.98))
+	_coin_shop_top_btn = _make_arcade_button("NC SHOP", Color(0.38, 0.98, 0.58), 40.0, 14, Color(0.08, 0.28, 0.14, 0.98))
 	_coin_shop_top_btn.icon = _get_coin_icon()
 	_coin_shop_top_btn.expand_icon = true
 	_coin_shop_top_btn.add_theme_constant_override("icon_max_width", 18)
@@ -943,7 +943,7 @@ func _refresh_agent_select_ui() -> void:
 	if is_instance_valid(_agent_kit_title):
 		var lock_tag: String = ""
 		if not ProfileManager.is_agent_unlocked(idx, false):
-			lock_tag = "  (FREE IN PRACTICE)" if _agent_select_for_practice else ("  (%s NCC)" % ProfileManager.format_coins(unlock_price))
+			lock_tag = "  (FREE IN PRACTICE)" if _agent_select_for_practice else ("  (%s NC)" % ProfileManager.format_coins(unlock_price))
 		_agent_kit_title.text = "Agent Clash  —  %s (%s)%s" % [str(ag["agent_name"]).to_upper(), str(ag["role"]), lock_tag]
 	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("set_agent"):
 		_agent_preview_arena.set_agent(idx)
@@ -971,7 +971,7 @@ func _refresh_agent_select_ui() -> void:
 			_agent_play_btn.modulate = Color.WHITE
 		else:
 			var can_afford: bool = ProfileManager.coins >= unlock_price
-			_agent_play_btn.text = "UNLOCK (%s NCC)" % ProfileManager.format_coins(unlock_price)
+			_agent_play_btn.text = "UNLOCK (%s NC)" % ProfileManager.format_coins(unlock_price)
 			_agent_play_btn.disabled = not can_afford
 			_agent_play_btn.modulate = Color(1.0, 0.88, 0.30) if can_afford else Color(0.60, 0.58, 0.64)
 	var sorted_order: Array[int] = _get_sorted_agent_indices()
@@ -999,7 +999,7 @@ func _refresh_agent_select_ui() -> void:
 		elif _agent_select_for_practice:
 			card.text = "  %s\n  (FREE IN PRACTICE)" % str(c_ag["agent_name"])
 		else:
-			card.text = "  %s\n  %s NCC" % [str(c_ag["agent_name"]), ProfileManager.format_coins(unlock_price)]
+			card.text = "  %s\n  %s NC" % [str(c_ag["agent_name"]), ProfileManager.format_coins(unlock_price)]
 		var lock_node: Node = card.get_node_or_null("LockIcon")
 		if lock_node is Control:
 			(lock_node as Control).visible = not playable_now
@@ -2353,7 +2353,7 @@ func _build_gun_shop_overlay() -> void:
 
 	_shop_coin_lbl = _add_coin_icon_label(hdr, ProfileManager.format_coins(ProfileManager.coins), 22, 19, Color(1.0, 0.90, 0.30), false)
 
-	var shop_get_coins := _make_arcade_button("+ NCC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
+	var shop_get_coins := _make_arcade_button("+ NC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
 	shop_get_coins.custom_minimum_size = Vector2(88, 34)
 	shop_get_coins.pressed.connect(func(): _open_coin_shop(_shop_overlay))
 	hdr.add_child(shop_get_coins)
@@ -2702,7 +2702,7 @@ func _refresh_shop_skins() -> void:
 			act_btn.pressed.connect(func():
 				if ProfileManager.buy_gun_skin(wid, skey):
 					_shop_preview_skin_key = skey
-					_shop_status_lbl.text = "Purchased & equipped %s for %s NCC!" % [sname, ProfileManager.format_coins(price)]
+					_shop_status_lbl.text = "Purchased & equipped %s for %s NC!" % [sname, ProfileManager.format_coins(price)]
 					_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
 					var sfx := AudioStreamPlayer.new()
 					sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
@@ -2712,7 +2712,7 @@ func _refresh_shop_skins() -> void:
 					sfx.play()
 					_refresh_shop_skins()
 				else:
-					_shop_status_lbl.text = "Not enough NCC! Need %s NCC." % ProfileManager.format_coins(price)
+					_shop_status_lbl.text = "Not enough NC! Need %s NC." % ProfileManager.format_coins(price)
 					_shop_status_lbl.modulate = Color(1.0, 0.42, 0.35)
 			)
 		row.add_child(act_btn)
@@ -2778,7 +2778,7 @@ func _build_crate_overlay() -> void:
 
 	_crate_coin_lbl = _add_coin_icon_label(hdr, ProfileManager.format_coins(ProfileManager.coins), 22, 19, Color(1.0, 0.90, 0.30), false)
 
-	var crate_get_coins := _make_arcade_button("+ NCC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
+	var crate_get_coins := _make_arcade_button("+ NC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
 	crate_get_coins.custom_minimum_size = Vector2(88, 34)
 	crate_get_coins.pressed.connect(func(): _open_coin_shop(_crate_overlay))
 	hdr.add_child(crate_get_coins)
@@ -2810,7 +2810,7 @@ func _build_crate_overlay() -> void:
 	daily_panel.add_child(dh)
 
 	var dl := Label.new()
-	dl.text = "DAILY LOGIN BONUS  •  Collect +100 FREE NCC every day!"
+	dl.text = "DAILY LOGIN BONUS  •  Collect +100 FREE NC every day!"
 	dl.add_theme_font_size_override("font_size", 16)
 	dl.modulate = Color(0.76, 1.0, 0.82)
 	dl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2819,7 +2819,7 @@ func _build_crate_overlay() -> void:
 	_daily_claim_btn = _make_arcade_button("COLLECT +100", Color(0.35, 0.98, 0.54), 38.0, 15, Color(0.10, 0.34, 0.18, 0.98))
 	_daily_claim_btn.icon = _get_coin_icon()
 	_daily_claim_btn.expand_icon = true
-	_daily_claim_btn.add_theme_constant_override("icon_max_width", 20)
+	_daily_claim_btn.add_theme_constant_override("icon_max_width", 18)
 	_daily_claim_btn.custom_minimum_size = Vector2(215, 38)
 	_daily_claim_btn.pressed.connect(func():
 		if ProfileManager.claim_daily_bonus():
@@ -2827,7 +2827,7 @@ func _build_crate_overlay() -> void:
 			var act_ui: Dictionary = _crate_premium_ui if _crate_active_is_premium else _crate_supply_ui
 			var sl: Label = act_ui.get("status_lbl") as Label
 			if is_instance_valid(sl):
-				sl.text = "Collected +100 Daily Bonus NCC!"
+				sl.text = "Collected +100 Daily Bonus NC!"
 				sl.modulate = Color(0.45, 1.0, 0.62)
 			_refresh_crate_ui()
 	)
@@ -2899,7 +2899,7 @@ func _build_crate_screen_page(is_premium: bool, host: Control) -> Dictionary:
 	banner_row.add_child(title_lbl)
 
 	var tag_lbl := Label.new()
-	tag_lbl.text = "SKINS  •  AGENTS  •  JACKPOT NCC" if is_premium else "GUN SKINS  •  NCC  •  MYSTERY DROPS"
+	tag_lbl.text = "SKINS  •  AGENTS  •  JACKPOT NC" if is_premium else "GUN SKINS  •  NC  •  MYSTERY DROPS"
 	tag_lbl.add_theme_font_size_override("font_size", 13)
 	tag_lbl.modulate = Color(0.95, 0.86, 0.62) if is_premium else Color(0.72, 0.90, 1.0)
 	banner_row.add_child(tag_lbl)
@@ -3157,7 +3157,7 @@ func _add_coin_icon_label(parent: Control, initial_text: String, icon_sz: int = 
 
 	var tr := TextureRect.new()
 	tr.texture = _get_coin_icon()
-	tr.custom_minimum_size = Vector2(icon_sz, icon_sz)
+	tr.custom_minimum_size = Vector2(int(round(float(icon_sz) * 0.78)), int(round(float(icon_sz) * 1.24)))
 	tr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -3219,7 +3219,7 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 	var border_c: Color = Color(0.92, 0.78, 0.32)
 	var bg_c: Color = Color(0.10, 0.13, 0.20, 0.98)
 	var bw: int = 2
-	var tag_txt: String = "NCC"
+	var tag_txt: String = "NC"
 
 	if kind == "premium_skin":
 		border_c = Color(1.0, 0.80, 0.16)
@@ -3235,7 +3235,7 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 		border_c = Color(0.28, 1.0, 0.56)
 		bg_c = Color(0.06, 0.22, 0.14, 0.98)
 		bw = 4
-		tag_txt = "★ 2x NCC! ★"
+		tag_txt = "★ 2x NC! ★"
 	elif kind == "dummy_gear":
 		border_c = Color(0.98, 0.56, 0.92)
 		bg_c = Color(0.20, 0.08, 0.24, 0.98)
@@ -3344,7 +3344,7 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 		var cw: int = int(item.get("coins_won", 200))
 		_add_coin_icon_label(vb, "+%s" % ProfileManager.format_coins(cw), 30 if large else 20, 32 if large else 22, Color(1.0, 0.88, 0.30), true)
 		var lbl := Label.new()
-		lbl.text = "NCC"
+		lbl.text = "NC"
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.add_theme_font_size_override("font_size", 13 if large else 10)
 		lbl.modulate = Color(0.92, 0.95, 1.0)
@@ -3379,7 +3379,7 @@ func _populate_converted_coins_card(card: PanelContainer, item: Dictionary, larg
 	_add_coin_icon_label(vb, "+%s" % ProfileManager.format_coins(refund_c), 40 if large else 28, 32 if large else 22, Color(1.0, 0.92, 0.36), true)
 
 	var sub_lbl := Label.new()
-	sub_lbl.text = "CONVERTED TO NCC (50%)"
+	sub_lbl.text = "CONVERTED TO NC (50%)"
 	sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub_lbl.add_theme_font_size_override("font_size", 12 if large else 10)
 	sub_lbl.modulate = Color(0.45, 1.0, 0.65)
@@ -4029,10 +4029,10 @@ func _run_batch_auto_reveal(cards: Array[PanelContainer], items: Array, start_co
 		var total_c: int = 0
 		for raw_c in items:
 			total_c += int((raw_c as Dictionary).get("coins_won", 0))
-		_crate_reveal_sub.text = "Total NCC Gained: +%s NCC" % ProfileManager.format_coins(total_c)
+		_crate_reveal_sub.text = "Total NC Gained: +%s NC" % ProfileManager.format_coins(total_c)
 		_crate_reveal_sub.modulate = Color(0.55, 1.0, 0.72)
 		if is_instance_valid(sl):
-			sl.text = "10x Supply Bonus: +%s NCC" % ProfileManager.format_coins(total_c)
+			sl.text = "10x Supply Bonus: +%s NC" % ProfileManager.format_coins(total_c)
 			sl.modulate = Color(0.55, 1.0, 0.72)
 
 	_refresh_crate_ui()
@@ -4076,7 +4076,7 @@ func _show_big_win_spotlight(big_wins: Array) -> void:
 	elif k == "premium_skin":
 		_crate_bigwin_title.text = "★ LEGENDARY PREMIUM SKIN! ★"
 	elif k == "double_coins":
-		_crate_bigwin_title.text = "★ 2x NCC JACKPOT! ★"
+		_crate_bigwin_title.text = "★ 2x NC JACKPOT! ★"
 	elif k == "dummy_gear":
 		_crate_bigwin_title.text = "★ NEW COSMETIC UNLOCKED! ★"
 	else:
@@ -4119,7 +4119,7 @@ func _show_big_win_spotlight(big_wins: Array) -> void:
 				_populate_converted_coins_card(c, bw_item, use_large)
 				_play_ui_pickup_sfx(1.18, 2.0)
 				if big_wins.size() == 1 and is_instance_valid(_crate_bigwin_title):
-					_crate_bigwin_title.text = "★ DUPLICATE → NCC! ★"
+					_crate_bigwin_title.text = "★ DUPLICATE → NC! ★"
 					_crate_bigwin_title.modulate = Color(1.0, 0.86, 0.24)
 			)
 			conv_tw.tween_property(c, "scale", Vector2(1.10, 1.10), 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -4416,14 +4416,14 @@ func _build_coin_shop_overlay() -> void:
 
 	var hdr_icon := TextureRect.new()
 	hdr_icon.texture = _get_coin_icon()
-	hdr_icon.custom_minimum_size = Vector2(28, 28)
+	hdr_icon.custom_minimum_size = Vector2(22, 34)
 	hdr_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hdr_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	hdr_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	hdr.add_child(hdr_icon)
 
 	var title := Label.new()
-	title.text = "NCC SHOP"
+	title.text = "NC SHOP"
 	title.add_theme_font_size_override("font_size", 22)
 	title.modulate = Color(1.0, 0.88, 0.30)
 	hdr.add_child(title)
@@ -4443,7 +4443,7 @@ func _build_coin_shop_overlay() -> void:
 	hdr.add_child(store_pill)
 
 	var sp_lbl := Label.new()
-	sp_lbl.text = "NAMELESS CLASH CASH  •  PLAY STORE PREVIEW"
+	sp_lbl.text = "NAMELESS CLASH CASH (NC)  •  PLAY STORE PREVIEW"
 	sp_lbl.add_theme_font_size_override("font_size", 11)
 	sp_lbl.modulate = Color(0.56, 1.0, 0.72)
 	store_pill.add_child(sp_lbl)
@@ -4556,7 +4556,7 @@ func _build_coin_shop_overlay() -> void:
 		sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sub_lbl.add_theme_font_size_override("font_size", 11)
 		if bonus_c > 0:
-			sub_lbl.text = "%s + %s BONUS NCC" % [ProfileManager.format_coins(base_c), ProfileManager.format_coins(bonus_c)]
+			sub_lbl.text = "%s + %s BONUS NC" % [ProfileManager.format_coins(base_c), ProfileManager.format_coins(bonus_c)]
 			sub_lbl.modulate = Color(0.52, 1.0, 0.68)
 		else:
 			sub_lbl.text = "INSTANT DELIVERY"
@@ -4569,7 +4569,7 @@ func _build_coin_shop_overlay() -> void:
 		vb.add_child(buy_btn)
 
 	var foot := Label.new()
-	foot.text = "Play Store Preview Mode — No real payment API connected yet. Purchases grant Nameless Clash Cash (NCC) immediately for testing."
+	foot.text = "Play Store Preview Mode — No real payment API connected yet. Purchases grant Nameless Clash Cash (NC) immediately for testing."
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	foot.add_theme_font_size_override("font_size", 12)
 	foot.modulate = Color(0.68, 0.78, 0.92)
@@ -4581,7 +4581,7 @@ func _draw_coin_pack_graphic(ctrl: Control, tier: int, accent: Color) -> void:
 	var h: float = ctrl.size.y
 	if w <= 4.0 or h <= 4.0:
 		return
-	var center := Vector2(w * 0.5, h * 0.54)
+	var center := Vector2(w * 0.5, h * 0.53)
 	var r: float = minf(w, h) * 0.42
 	ctrl.draw_circle(center, r, Color(accent.r, accent.g, accent.b, 0.14))
 	ctrl.draw_circle(center, r * 0.65, Color(accent.r, accent.g, accent.b, 0.22))
@@ -4590,26 +4590,77 @@ func _draw_coin_pack_graphic(ctrl: Control, tier: int, accent: Color) -> void:
 	if coin_tex == null:
 		return
 
-	var offsets: Array = []
+	var tex_sz: Vector2 = coin_tex.get_size()
+	var aspect: float = (tex_sz.x / tex_sz.y) if tex_sz.y > 0.0 else 0.60
+	var scale_f: float = clampf(h / 74.0, 0.85, 1.35)
+
+	# Each entry is Vector4(offset_x, offset_y, bill_height, rotation_radians)
+	var bills: Array = []
 	match tier:
 		0:
-			offsets = [Vector3(-12.0, 4.0, 30.0), Vector3(10.0, -2.0, 36.0)]
+			bills = [
+				Vector4(-10.0, 2.0, 48.0, -0.18),
+				Vector4(10.0, -2.0, 52.0, 0.14)
+			]
 		1:
-			offsets = [Vector3(-22.0, 8.0, 28.0), Vector3(22.0, 8.0, 28.0), Vector3(0.0, -4.0, 36.0)]
+			bills = [
+				Vector4(-22.0, 5.0, 46.0, -0.28),
+				Vector4(22.0, 5.0, 46.0, 0.28),
+				Vector4(0.0, -3.0, 54.0, 0.0)
+			]
 		2:
-			offsets = [Vector3(-26.0, 10.0, 26.0), Vector3(26.0, 10.0, 26.0), Vector3(-12.0, 0.0, 32.0), Vector3(12.0, 0.0, 32.0), Vector3(0.0, -10.0, 36.0)]
+			bills = [
+				Vector4(-32.0, 8.0, 44.0, -0.36),
+				Vector4(32.0, 8.0, 44.0, 0.36),
+				Vector4(-16.0, 2.0, 48.0, -0.16),
+				Vector4(16.0, 2.0, 48.0, 0.16),
+				Vector4(0.0, -5.0, 56.0, 0.0)
+			]
 		3:
-			offsets = [Vector3(-34.0, 12.0, 24.0), Vector3(34.0, 12.0, 24.0), Vector3(-16.0, 10.0, 28.0), Vector3(16.0, 10.0, 28.0), Vector3(-14.0, -4.0, 32.0), Vector3(14.0, -4.0, 32.0), Vector3(0.0, -12.0, 36.0)]
+			bills = [
+				Vector4(-42.0, 10.0, 42.0, -0.44),
+				Vector4(42.0, 10.0, 42.0, 0.44),
+				Vector4(-26.0, 6.0, 46.0, -0.28),
+				Vector4(26.0, 6.0, 46.0, 0.28),
+				Vector4(-13.0, 0.0, 50.0, -0.12),
+				Vector4(13.0, 0.0, 50.0, 0.12),
+				Vector4(0.0, -6.0, 58.0, 0.0)
+			]
 		4:
-			offsets = [Vector3(-42.0, 12.0, 24.0), Vector3(42.0, 12.0, 24.0), Vector3(-22.0, 12.0, 26.0), Vector3(22.0, 12.0, 26.0), Vector3(0.0, 10.0, 30.0), Vector3(-20.0, -2.0, 30.0), Vector3(20.0, -2.0, 30.0), Vector3(0.0, -10.0, 38.0)]
+			bills = [
+				Vector4(-46.0, 10.0, 42.0, -0.46),
+				Vector4(46.0, 10.0, 42.0, 0.46),
+				Vector4(-20.0, 8.0, 46.0, -0.20),
+				Vector4(20.0, 8.0, 46.0, 0.20),
+				Vector4(-32.0, 0.0, 48.0, -0.30),
+				Vector4(32.0, 0.0, 48.0, 0.30),
+				Vector4(-11.0, -3.0, 52.0, -0.10),
+				Vector4(11.0, -3.0, 52.0, 0.10),
+				Vector4(0.0, -7.0, 58.0, 0.0)
+			]
 		_:
-			offsets = [Vector3(-48.0, 14.0, 24.0), Vector3(48.0, 14.0, 24.0), Vector3(-26.0, 12.0, 28.0), Vector3(26.0, 12.0, 28.0), Vector3(0.0, 12.0, 30.0), Vector3(-32.0, -2.0, 28.0), Vector3(32.0, -2.0, 28.0), Vector3(-14.0, -6.0, 32.0), Vector3(14.0, -6.0, 32.0), Vector3(0.0, -14.0, 40.0)]
+			bills = [
+				Vector4(-54.0, 12.0, 40.0, -0.52),
+				Vector4(54.0, 12.0, 40.0, 0.52),
+				Vector4(-34.0, 9.0, 44.0, -0.34),
+				Vector4(34.0, 9.0, 44.0, 0.34),
+				Vector4(0.0, 8.0, 48.0, 0.0),
+				Vector4(-40.0, 1.0, 46.0, -0.38),
+				Vector4(40.0, 1.0, 46.0, 0.38),
+				Vector4(-18.0, -2.0, 52.0, -0.16),
+				Vector4(18.0, -2.0, 52.0, 0.16),
+				Vector4(-8.0, -5.0, 56.0, -0.06),
+				Vector4(6.0, -7.0, 60.0, 0.05)
+			]
 
-	for raw_v in offsets:
-		var v: Vector3 = raw_v as Vector3
-		var sz: float = v.z * clampf(h / 74.0, 0.85, 1.35)
-		var pos := center + Vector2(v.x, v.y) - Vector2(sz * 0.5, sz * 0.5)
-		ctrl.draw_texture_rect(coin_tex, Rect2(pos, Vector2(sz, sz)), false)
+	for raw_v in bills:
+		var v: Vector4 = raw_v as Vector4
+		var bh: float = v.z * scale_f
+		var bw: float = bh * aspect
+		var bill_pos: Vector2 = center + Vector2(v.x * scale_f, v.y * scale_f)
+		ctrl.draw_set_transform(bill_pos, v.w)
+		ctrl.draw_texture_rect(coin_tex, Rect2(Vector2(-bw * 0.5, -bh * 0.5), Vector2(bw, bh)), false)
+	ctrl.draw_set_transform(Vector2.ZERO, 0.0)
 
 	var spark_pts: Array = [Vector2(-r * 0.85, -r * 0.55), Vector2(r * 0.85, -r * 0.45), Vector2(0.0, -r * 0.92)]
 	for raw_sp in spark_pts:
@@ -4694,7 +4745,7 @@ func _show_coin_purchase_popup(receipt: Dictionary) -> void:
 	_coin_purchase_body.add_child(title)
 
 	var pname_lbl := Label.new()
-	pname_lbl.text = str(receipt.get("name", "NCC Pack")).to_upper()
+	pname_lbl.text = str(receipt.get("name", "NC Pack")).to_upper()
 	pname_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pname_lbl.add_theme_font_size_override("font_size", 16)
 	pname_lbl.modulate = accent.lightened(0.20)
@@ -4710,13 +4761,13 @@ func _show_coin_purchase_popup(receipt: Dictionary) -> void:
 	var total_c: int = int(receipt.get("total_coins", 0))
 	var base_c: int = int(receipt.get("base_coins", 0))
 	var bonus_c: int = int(receipt.get("bonus_coins", 0))
-	var big_c_lbl: Label = _add_coin_icon_label(_coin_purchase_body, "+%s NCC" % ProfileManager.format_coins(total_c), 34, 28, Color(1.0, 0.90, 0.32), true)
+	var big_c_lbl: Label = _add_coin_icon_label(_coin_purchase_body, "+%s NC" % ProfileManager.format_coins(total_c), 34, 28, Color(1.0, 0.90, 0.32), true)
 	big_c_lbl.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.02, 0.95))
 	big_c_lbl.add_theme_constant_override("outline_size", 2)
 
 	if bonus_c > 0:
 		var bonus_lbl := Label.new()
-		bonus_lbl.text = "Includes %s Base + %s Bonus NCC!" % [ProfileManager.format_coins(base_c), ProfileManager.format_coins(bonus_c)]
+		bonus_lbl.text = "Includes %s Base + %s Bonus NC!" % [ProfileManager.format_coins(base_c), ProfileManager.format_coins(bonus_c)]
 		bonus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		bonus_lbl.add_theme_font_size_override("font_size", 13)
 		bonus_lbl.modulate = Color(0.55, 1.0, 0.72)

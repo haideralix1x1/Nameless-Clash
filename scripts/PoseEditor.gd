@@ -349,7 +349,7 @@ func _build_ui() -> void:
 	tab_hbox.add_child(_tab_range_btn)
 
 	_tab_coin_btn = Button.new()
-	_tab_coin_btn.text = "NCC Adjustment"
+	_tab_coin_btn.text = "NC Adjustment"
 	_tab_coin_btn.toggle_mode = true
 	_tab_coin_btn.custom_minimum_size = Vector2(138, 30)
 	_tab_coin_btn.pressed.connect(func(): _switch_editor_tab(3))
@@ -370,14 +370,14 @@ func _build_ui() -> void:
 	reset_player_btn.text = "Reset Player Data"
 	reset_player_btn.custom_minimum_size = Vector2(158, 30)
 	reset_player_btn.modulate = Color(1.0, 0.48, 0.44)
-	reset_player_btn.tooltip_text = "Wipe all current player NCC, skins, cosmetics, unlocked agents, badges & achievements back to a fresh profile"
+	reset_player_btn.tooltip_text = "Wipe all current player NC, skins, cosmetics, unlocked agents, badges & achievements back to a fresh profile"
 	reset_player_btn.pressed.connect(_prompt_reset_player_data)
 	tab_hbox.add_child(reset_player_btn)
 
 	_reset_player_dlg = ConfirmationDialog.new()
 	_reset_player_dlg.title = "Reset Full Player Data?"
 	_reset_player_dlg.ok_button_text = "RESET ALL PLAYER DATA"
-	_reset_player_dlg.dialog_text = "This wipes ALL data of the current player profile back to defaults:\n- NCC reset to 500\n- All unlocked agents, gun skins & cosmetics cleared\n- Daily bonus, free crate & crate limit states cleared\n- All NEW badges & achievement progress cleared\n\nEditor configs (poses, weapon stats, crate tables, NCC economy, achievement rewards) are NOT affected."
+	_reset_player_dlg.dialog_text = "This wipes ALL data of the current player profile back to defaults:\n- NC reset to 500\n- All unlocked agents, gun skins & cosmetics cleared\n- Daily bonus, free crate & crate limit states cleared\n- All NEW badges & achievement progress cleared\n\nEditor configs (poses, weapon stats, crate tables, NC economy, achievement rewards) are NOT affected."
 	_reset_player_dlg.confirmed.connect(_on_confirm_reset_player_data)
 	add_child(_reset_player_dlg)
 
@@ -2929,7 +2929,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	top_bar.add_child(top_h)
 
 	var hdr := Label.new()
-	hdr.text = "NCC ECONOMY & SKIN / AGENT PRICE EDITOR"
+	hdr.text = "NC ECONOMY & SKIN / AGENT PRICE EDITOR"
 	hdr.add_theme_font_size_override("font_size", 16)
 	hdr.modulate = Color(1.0, 0.86, 0.30)
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2941,13 +2941,13 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	reset_btn.pressed.connect(func():
 		ProfileManager.reset_economy_defaults()
 		_sync_coin_economy_ui()
-		_coin_status_lbl.text = "Reset NCC rewards & prices to defaults (click Save to write file)."
+		_coin_status_lbl.text = "Reset NC rewards & prices to defaults (click Save to write file)."
 		_coin_status_lbl.modulate = Color(1.0, 0.84, 0.35)
 	)
 	top_h.add_child(reset_btn)
 
 	var save_btn := Button.new()
-	save_btn.text = "SAVE NCC ECONOMY"
+	save_btn.text = "SAVE NC ECONOMY"
 	save_btn.custom_minimum_size = Vector2(180, 32)
 	save_btn.modulate = Color(0.42, 1.0, 0.62)
 	save_btn.pressed.connect(func():
@@ -2974,11 +2974,11 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	lv.add_theme_constant_override("separation", 10)
 	left_panel.add_child(lv)
 
-	var rw_hdr := _make_section_label("MATCH NCC REWARDS")
+	var rw_hdr := _make_section_label("MATCH NC REWARDS")
 	rw_hdr.modulate = Color(1.0, 0.86, 0.32)
 	lv.add_child(rw_hdr)
 
-	_coin_kill_spin = _add_coin_spin_row(lv, "NCC / Kill:", 0, 10000, 5)
+	_coin_kill_spin = _add_coin_spin_row(lv, "NC / Kill:", 0, 10000, 5)
 	_coin_kill_spin.value_changed.connect(func(v: float):
 		if _coin_syncing: return
 		ProfileManager.kill_reward = int(v)
@@ -3015,7 +3015,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	ag_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ag_note.add_theme_font_size_override("font_size", 11)
 	ag_note.modulate = Color(0.72, 0.80, 0.90)
-	ag_note.text = "Starter agents are unlocked by default. All remaining agents share this NCC price in normal modes (all agents are free in Practice Mode)."
+	ag_note.text = "Starter agents are unlocked by default. All remaining agents share this NC price in normal modes (all agents are free in Practice Mode)."
 	lv.add_child(ag_note)
 
 	lv.add_child(HSeparator.new())
@@ -3127,7 +3127,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	_coin_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_coin_status_lbl.add_theme_font_size_override("font_size", 12)
 	_coin_status_lbl.modulate = Color(0.75, 0.85, 0.95)
-	_coin_status_lbl.text = "Adjust any reward or individual gun skin price, then click SAVE NCC ECONOMY."
+	_coin_status_lbl.text = "Adjust any reward or individual gun skin price, then click SAVE NC ECONOMY."
 	lv.add_child(_coin_status_lbl)
 
 	# MIDDLE COLUMN: Gun Selector
@@ -3243,7 +3243,7 @@ func _add_coin_spin_row(parent: Control, label_txt: String, min_v: int, max_v: i
 	sb.max_value = max_v
 	sb.step = step_v
 	sb.rounded = true
-	sb.suffix = " NCC"
+	sb.suffix = " NC"
 	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sb)
 	return sb
@@ -3267,7 +3267,7 @@ func _sync_coin_economy_ui() -> void:
 	if is_instance_valid(_coin_agent_spin):
 		_coin_agent_spin.value = ProfileManager.agent_unlock_price
 	if is_instance_valid(_coin_bal_lbl):
-		_coin_bal_lbl.text = "Current Balance: %s NCC" % ProfileManager.format_coins(ProfileManager.coins)
+		_coin_bal_lbl.text = "Current Balance: %s NC" % ProfileManager.format_coins(ProfileManager.coins)
 	_coin_syncing = false
 	_refresh_coin_skin_rows()
 
@@ -3346,7 +3346,7 @@ func _refresh_coin_skin_rows() -> void:
 		sb.max_value = 50000
 		sb.step = 25
 		sb.rounded = true
-		sb.suffix = " NCC"
+		sb.suffix = " NC"
 		sb.custom_minimum_size = Vector2(150, 32)
 		sb.value = cur_price
 		if skey == "default":
@@ -3478,7 +3478,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 
 	ar_vb.add_child(HSeparator.new())
 
-	_ac_ach_coins_spin = _add_coin_spin_row(ar_vb, "NCC Reward:", 0, 100000, 50)
+	_ac_ach_coins_spin = _add_coin_spin_row(ar_vb, "NC Reward:", 0, 100000, 50)
 	_ac_ach_coins_spin.value_changed.connect(func(v: float):
 		if _ac_syncing: return
 		var d: Dictionary = _get_selected_ac_def()
@@ -3505,7 +3505,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	sk_row.add_child(sk_lbl)
 
 	_ac_ach_weapon_opt = OptionButton.new()
-	_ac_ach_weapon_opt.add_item("None (NCC Only)", -1)
+	_ac_ach_weapon_opt.add_item("None (NC Only)", -1)
 	for wid in ProfileManager.SHOP_WEAPON_IDS:
 		if not ProfileManager.NO_SKIN_WEAPONS.has(wid):
 			_ac_ach_weapon_opt.add_item("%d: %s" % [wid, WeaponData.get_weapon(wid, 0, 0).display_name], wid)
@@ -3546,7 +3546,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	ar_vb.add_child(rst_ach_btn)
 
 	_ac_ach_status_lbl = Label.new()
-	_ac_ach_status_lbl.text = "Select any of the 100 achievements on the left to edit its NCC reward, target, or exclusive rare skin."
+	_ac_ach_status_lbl.text = "Select any of the 100 achievements on the left to edit its NC reward, target, or exclusive rare skin."
 	_ac_ach_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_ac_ach_status_lbl.modulate = Color(0.75, 0.85, 0.95)
 	ar_vb.add_child(_ac_ach_status_lbl)
@@ -3574,7 +3574,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_vb.add_child(cr_sel_row)
 
 	_ac_crate_std_btn = Button.new()
-	_ac_crate_std_btn.text = "Supply Crate (1,000 NCC / 1 Free Daily)"
+	_ac_crate_std_btn.text = "Supply Crate (1,000 NC / 1 Free Daily)"
 	_ac_crate_std_btn.toggle_mode = true
 	_ac_crate_std_btn.custom_minimum_size = Vector2(280, 34)
 	_ac_crate_std_btn.pressed.connect(func():
@@ -3584,7 +3584,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_sel_row.add_child(_ac_crate_std_btn)
 
 	_ac_crate_prem_btn = Button.new()
-	_ac_crate_prem_btn.text = "Premium Crate (2,000 NCC)"
+	_ac_crate_prem_btn.text = "Premium Crate (2,000 NC)"
 	_ac_crate_prem_btn.toggle_mode = true
 	_ac_crate_prem_btn.custom_minimum_size = Vector2(240, 34)
 	_ac_crate_prem_btn.pressed.connect(func():
@@ -3616,11 +3616,11 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_vb.add_child(add_row)
 
 	_ac_add_type_opt = OptionButton.new()
-	_ac_add_type_opt.add_item("NCC Drop", 0)
+	_ac_add_type_opt.add_item("NC Drop", 0)
 	_ac_add_type_opt.add_item("Random Premium Skin (5000+)", 1)
 	_ac_add_type_opt.add_item("Random Basic Skin", 2)
 	_ac_add_type_opt.add_item("Specific Gun Skin", 3)
-	_ac_add_type_opt.add_item("2x NCC (Double Balance)", 4)
+	_ac_add_type_opt.add_item("2x NC (Double Balance)", 4)
 	_ac_add_type_opt.add_item("Random Locked Agent Unlock", 5)
 	_ac_add_type_opt.add_item("Random Character Accessory / Cosmetic", 6)
 	_ac_add_type_opt.item_selected.connect(func(_i: int): _sync_ac_add_controls())
@@ -3631,7 +3631,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	_ac_add_coins_spin.max_value = 50000
 	_ac_add_coins_spin.step = 50
 	_ac_add_coins_spin.value = 300
-	_ac_add_coins_spin.suffix = " NCC"
+	_ac_add_coins_spin.suffix = " NC"
 	_ac_add_coins_spin.custom_minimum_size = Vector2(130, 30)
 	add_row.add_child(_ac_add_coins_spin)
 
@@ -3843,7 +3843,7 @@ func _refresh_ac_crate_list() -> void:
 			lbl.text = "★ Specific Skin: %s — %s" % [WeaponData.get_weapon(wid, 0, 0).display_name, ProfileManager.get_gun_skin_name(wid, sk)]
 			lbl.modulate = Color(1.0, 0.72, 0.98)
 		elif etype == "double_coins":
-			lbl.text = "★ 2x NCC Crate (Double Your NCC!)"
+			lbl.text = "★ 2x NC Crate (Double Your NC!)"
 			lbl.modulate = Color(0.32, 1.0, 0.60)
 		elif etype == "unlock_agent":
 			lbl.text = "★ Random Locked Agent Unlock"
@@ -3852,7 +3852,7 @@ func _refresh_ac_crate_list() -> void:
 			lbl.text = "★ Random Character Accessory / Cosmetic"
 			lbl.modulate = Color(0.98, 0.56, 0.92)
 		else:
-			lbl.text = "● NCC Drop: +%d NCC" % int(entry.get("coins", 200))
+			lbl.text = "● NC Drop: +%d NC" % int(entry.get("coins", 200))
 			lbl.modulate = Color(0.55, 1.0, 0.68)
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lbl.add_theme_font_size_override("font_size", 14)
@@ -3904,7 +3904,7 @@ func _prompt_reset_player_data() -> void:
 func _on_confirm_reset_player_data() -> void:
 	ProfileManager.reset_full_player_data()
 	_sync_coin_economy_ui()
-	var msg: String = "Reset full player data (NCC, skins, cosmetics, agents, daily states & achievements)!"
+	var msg: String = "Reset full player data (NC, skins, cosmetics, agents, daily states & achievements)!"
 	if is_instance_valid(_status_lbl):
 		_status_lbl.text = msg
 	if is_instance_valid(_coin_status_lbl):
