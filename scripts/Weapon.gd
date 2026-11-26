@@ -36,7 +36,7 @@ const TEX_AGENT_SHEET: Texture2D = preload("res://assets/sprites/weapons_agent_s
 const SELECTION_COLS: int = 16
 const SELECTION_ROWS: int = 10
 const FLOOR_COLS: int = 6
-const AGENT_COLS: int = 10
+const AGENT_COLS: int = 11
 
 const SELECTION_COL_BY_ID: Dictionary = {
 	0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10,
@@ -56,8 +56,17 @@ const AGENT_COL_BY_STYLE: Dictionary = {
 	"rook_frost_blade": 6,
 	"afera_spear": 7,
 	"bruski_revolver": 8,
-	"stone_hammer": 9
+	"stone_hammer": 9,
+	"gun": 10
 }
+## Grimhare's bramble fist (front hand of frame 0 in his modular hand sheet).
+const TEX_GRIMHARE_HAND: Texture2D = preload("res://assets/sprites/modular/bramble_hands.png")
+const GRIMHARE_HAND_REGION: Rect2 = Rect2(157.0, 153.0, 40.0, 29.0)
+
+
+## Fist-type melee styles: hidden until a punch, then jab forward.
+static func is_fist_style(style_name: String) -> bool:
+	return style_name == "boxing_glove" or style_name == "grimhare_hand"
 
 
 static func get_weapon_sprite_spec(weapon_id: int, skin_id: int = 0) -> Dictionary:

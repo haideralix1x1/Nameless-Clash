@@ -129,6 +129,8 @@ var leader_peer_id: int = 1
 
 var players: Dictionary = {}
 var bot_stats: Dictionary = {}
+var local_killed_counts: Dictionary = {}
+var killed_local_counts: Dictionary = {}
 var discovered_servers: Dictionary = {}
 
 var _udp_broadcaster: PacketPeerUDP = null
@@ -887,6 +889,12 @@ func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_lab
 	killfeed_event.emit(killer_label, victim_label, weapon_name)
 	kill_scored.emit(killer_id, victim_id)
 	var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
+	if killer_id == my_id and victim_id != my_id:
+		var v_name: String = victim_label if not victim_label.is_empty() else str(_get_participant_stats(victim_id).get("name", "Player"))
+		local_killed_counts[v_name] = int(local_killed_counts.get(v_name, 0)) + 1
+	elif victim_id == my_id and killer_id != my_id:
+		var k_name: String = killer_label if not killer_label.is_empty() else str(_get_participant_stats(killer_id).get("name", "Player"))
+		killed_local_counts[k_name] = int(killed_local_counts.get(k_name, 0)) + 1
 	if killer_id == my_id and killer_id != victim_id and has_node("/root/AchievementManager"):
 		var wid_match: int = -1
 		var wn_clean: String = weapon_name.replace(" (HS)", "").strip_edges().to_lower()
@@ -907,6 +915,8 @@ func reset_match_state() -> void:
 	match_time_left = float(mins * 60)
 	match_over = false
 	_timer_sync_accum = 0.0
+	local_killed_counts.clear()
+	killed_local_counts.clear()
 	for pid in players.keys():
 		players[pid]["kills"] = 0
 		players[pid]["assists"] = 0
@@ -1029,10 +1039,63 @@ func _apply_match_end(winner_text: String, rankings: Array) -> void:
 	match_timer_updated.emit(0.0)
 	if not is_test_mode():
 		var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
-		var local_won: bool = (not rankings.is_empty()) and int((rankings[0] as Dictionary).get("id", -1)) == my_id
+		var local_won: bool = (not rankings.is_empty()) and int((rankings[0] as Dictionary).get("peer_id", (rankings[0] as Dictionary).get("id", -1))) == my_id
 		ProfileManager.add_coins(ProfileManager.get_win_reward() if local_won else ProfileManager.get_match_reward())
 		if has_node("/root/AchievementManager"):
 			get_node("/root/AchievementManager").record_match_end(local_won)
+		var compact_rows: Array = []
+		var my_kills: int = 0
+		var my_deaths: int = 0
+		var my_assists: int = 0
+		var my_combo: int = 0
+		for r in rankings:
+			if not (r is Dictionary):
+				continue
+			var rd: Dictionary = r as Dictionary
+			var pid_val: int = int(rd.get("peer_id", rd.get("id", -1)))
+			var is_me: bool = (pid_val == my_id) and not bool(rd.get("is_bot", false))
+			var rk: int = int(rd.get("kills", 0))
+			var ra: int = int(rd.get("assists", 0))
+			var rde: int = int(rd.get("deaths", 0))
+			var rc: int = int(rd.get("max_combo", rd.get("combos", 0)))
+			var rscore: int = maxi(0, rk * 100 + ra * 25 - rde * 10)
+			if is_me:
+				my_kills = rk
+				my_deaths = rde
+				my_assists = ra
+				my_combo = rc
+			compact_rows.append({
+				"name": str(rd.get("name", "Player")),
+				"kills": rk,
+				"assists": ra,
+				"deaths": rde,
+				"max_combo": rc,
+				"score": rscore,
+				"is_bot": bool(rd.get("is_bot", false)),
+				"is_me": is_me,
+				"team": int(rd.get("team", 0))
+			})
+		var my_score: int = maxi(0, my_kills * 100 + my_assists * 25 - my_deaths * 10 + (150 if local_won else 0))
+		var mode_str: String = ("Agent Clash" if is_agent_clash_mode() else "Gun Game") + (" (Teams)" if is_team_mode() else "")
+		var map_str: String = MAP_NAMES[clampi(selected_map_id, 0, MAP_NAMES.size() - 1)]
+		ProfileManager.record_match_result({
+			"category": "local" if is_network_active() else "solo",
+			"timestamp": Time.get_datetime_string_from_system(false, true),
+			"unix_time": int(Time.get_unix_time_from_system()),
+			"mode": mode_str,
+			"map_name": map_str,
+			"winner": winner_text,
+			"local_won": local_won,
+			"local_name": local_player_name,
+			"score": my_score,
+			"kills": my_kills,
+			"deaths": my_deaths,
+			"assists": my_assists,
+			"max_combo": my_combo,
+			"rankings": compact_rows,
+			"killed_by_me": local_killed_counts.duplicate(true),
+			"killed_me": killed_local_counts.duplicate(true)
+		})
 	match_ended.emit(winner_text, rankings)
 
 

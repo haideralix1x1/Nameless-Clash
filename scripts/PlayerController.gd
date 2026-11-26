@@ -1816,7 +1816,7 @@ func _apply_weapon_visuals() -> void:
 			var bw: Dictionary = ag["base_weapon"]
 			_agent_weapon_node.set("weapon_style", str(bw["style"]))
 			_agent_weapon_node.set("weapon_color", bw["color"] as Color)
-			_agent_weapon_node.visible = (not is_dead) and (str(bw["style"]) != "boxing_glove" or _melee_swing_timer > 0.0)
+			_agent_weapon_node.visible = (not is_dead) and (dual_shotgun_timer <= 0.0) and (not WeaponData.is_fist_style(str(bw["style"])) or _melee_swing_timer > 0.0)
 			_agent_weapon_node.queue_redraw()
 		return
 
@@ -2620,7 +2620,7 @@ func _update_visual_state(delta: float) -> void:
 		var full_ov: Dictionary = ModularCharacter.get_pose_override(_modular_rig._current_part_id, active_stance, _modular_rig._current_anim, active_fr, _modular_rig.current_weapon_id)
 		w_ov = full_ov.get("weapon", {})
 	var swing_offset: float = 0.0
-	var is_boxing_glove: bool = (_agent_weapon_node != null and str(_agent_weapon_node.get("weapon_style")) == "boxing_glove")
+	var is_boxing_glove: bool = (_agent_weapon_node != null and WeaponData.is_fist_style(str(_agent_weapon_node.get("weapon_style"))))
 	if NetworkManager.is_agent_clash_mode() and _melee_swing_timer > 0.0:
 		var swing_prog: float = 1.0 - (_melee_swing_timer / 0.22)
 		if is_boxing_glove:
@@ -2631,7 +2631,7 @@ func _update_visual_state(delta: float) -> void:
 	elif _agent_weapon_node != null:
 		_agent_weapon_node.position.x = 0.0
 	if _weapon_pivot != null:
-		_weapon_pivot.visible = (not is_dead) and (_bat_ult_timer <= 0.0) and (electric_laser_timer <= 0.0) and (invis_timer <= 0.0 or is_local_human or is_preview_dummy)
+		_weapon_pivot.visible = (not is_dead) and (_bat_ult_timer <= 0.0) and (electric_laser_timer <= 0.0) and (dual_shotgun_timer <= 0.0) and (invis_timer <= 0.0 or is_local_human or is_preview_dummy)
 	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
 		_modular_rig.hands_z_over_weapon = 2
 		if is_dead:
@@ -3104,16 +3104,7 @@ func gain_ult_charge(_seconds_reduced: float) -> void:
 
 
 func _fire_agent_base_weapon() -> void:
-	if dual_shotgun_timer > 0.0 and dual_shotgun_shots > 0:
-		dual_shotgun_shots -= 1
-		if dual_shotgun_shots <= 0:
-			dual_shotgun_timer = 0.0
-		_fire_cooldown = 0.28
-		_melee_swing_timer = 0.20
-		_fire_anim_timer = 0.16
-		var safe_ds: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
-		_cast_gun_burst(safe_ds, aim_angle, 25, 6, 16.0, Color(1.0, 0.55, 0.22), "Dual Shotguns", 0.0, 960.0, _is_controlled_locally(), 0.04)
-		_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0)
+	if dual_shotgun_timer > 0.0:
 		return
 	var ag: Dictionary = AgentData.get_agent(archetype_id)
 	var bw: Dictionary = ag["base_weapon"]
@@ -3137,13 +3128,14 @@ func _fire_agent_base_weapon() -> void:
 	var w_label: String = str(bw["name"])
 	if is_ranged_bw:
 		var safe_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
-		var proj_style: String = "bullet" if (bw_style == "deagle" or bw_style == "gun") else "arrow"
-		var pitch_sfx: float = 0.82 if bw_style == "deagle" else 1.45
+		var is_gun_bw: bool = (bw_style == "deagle" or bw_style == "gun" or bw_style == "bruski_revolver")
+		var proj_style: String = "bullet" if is_gun_bw else "arrow"
+		var pitch_sfx: float = 0.82 if (bw_style == "deagle" or bw_style == "bruski_revolver") else 1.45
 		if NetworkManager.is_network_active():
 			spawn_agent_base_ranged_rpc.rpc(safe_m, aim_angle, dmg, col, w_label, proj_style, pitch_sfx)
 		else:
 			_spawn_styled_projectile(safe_m, aim_angle, 1180.0 if proj_style == "bullet" else 1020.0, dmg, proj_style, col, w_label, 0.0, 0.0, false, 60.0, 1.0, false, _is_controlled_locally())
-			_play_local_sfx("res://assets/audio/shoot_smg.wav", -4.0 if bw_style == "deagle" else -6.0, pitch_sfx)
+			_play_local_sfx("res://assets/audio/shoot_smg.wav", -4.0 if is_gun_bw else -6.0, pitch_sfx)
 	else:
 		var reach: float = float(bw["range"])
 		if _is_controlled_locally():
@@ -4016,6 +4008,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				hf.fist_angle = cast_angle
 				hf.fist_scale = 1.15
 				hf.slam_time = 0.14
+				hf.use_grimhare_hand = str(AgentData.get_agent(archetype_id)["base_weapon"]["style"]) == "grimhare_hand"
 				hf.global_position = hf.start_pos
 				parent_hp.add_child(hf)
 			add_screen_shake(1.8)
@@ -4041,6 +4034,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				sky_fist.fist_angle = PI * 0.5
 				sky_fist.fist_scale = 1.65
 				sky_fist.slam_time = 0.18
+				sky_fist.use_grimhare_hand = str(AgentData.get_agent(archetype_id)["base_weapon"]["style"]) == "grimhare_hand"
 				sky_fist.global_position = sky_fist.start_pos
 				parent_sp.add_child(sky_fist)
 			var smash_tw := create_tween()
@@ -5836,6 +5830,8 @@ class AgentWeaponVisual extends Node2D:
 		match weapon_style:
 			"deagle":
 				draw_texture_rect_region(WeaponData.TEX_SELECTION_SHEET, Rect2(-6.0, -14.0, 56.0, 28.0), Rect2(9.0 * 256.0, 0.0, 256.0, 128.0))
+			"gun":
+				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-12.0, -15.0, 58.0, 29.0), WeaponData.get_agent_weapon_region("gun"))
 			"bruski_revolver":
 				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-6.0, -14.0, 44.0, 22.0), WeaponData.get_agent_weapon_region("bruski_revolver"))
 			"afera_spear":
@@ -5852,6 +5848,8 @@ class AgentWeaponVisual extends Node2D:
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"boxing_glove":
 				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-14.0, -16.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("boxing_glove"))
+			"grimhare_hand":
+				draw_texture_rect_region(WeaponData.TEX_GRIMHARE_HAND, Rect2(-4.0, -14.0, 38.0, 27.5), WeaponData.GRIMHARE_HAND_REGION)
 			"greatsword":
 				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
@@ -6297,6 +6295,7 @@ class BoxingFistVfx extends Node2D:
 	var fist_angle: float = 0.0
 	var fist_scale: float = 1.5
 	var slam_time: float = 0.18
+	var use_grimhare_hand: bool = false
 	var _age: float = 0.0
 	var _hold_fade: float = 0.32
 
@@ -6318,8 +6317,11 @@ class BoxingFistVfx extends Node2D:
 
 	func _draw() -> void:
 		var a: float = clampf(1.0 - maxf(0.0, (_age - slam_time) / _hold_fade), 0.0, 1.0)
-		draw_circle(Vector2(2.0, 0.0), 26.0, Color(0.28, 0.62, 1.0, 0.24 * a))
-		draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-52.0, -26.0, 104.0, 52.0), WeaponData.get_agent_weapon_region("boxing_glove"), Color(1.0, 1.0, 1.0, a))
+		draw_circle(Vector2(2.0, 0.0), 26.0, Color(0.28, 0.62, 1.0, 0.24 * a) if not use_grimhare_hand else Color(0.92, 0.22, 0.30, 0.24 * a))
+		if use_grimhare_hand:
+			draw_texture_rect_region(WeaponData.TEX_GRIMHARE_HAND, Rect2(-36.0, -26.0, 72.0, 52.0), WeaponData.GRIMHARE_HAND_REGION, Color(1.0, 1.0, 1.0, a))
+		else:
+			draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-52.0, -26.0, 104.0, 52.0), WeaponData.get_agent_weapon_region("boxing_glove"), Color(1.0, 1.0, 1.0, a))
 
 
 func _spawn_prism_mirror(dur: float, col: Color) -> void:

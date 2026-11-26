@@ -63,6 +63,16 @@ var _ach_coin_lbl: Label
 var _ach_list_box: VBoxContainer
 var _ach_filter: String = "All"
 var _ach_filter_btns: Dictionary = {}
+var _ach_collapsed_parents: Dictionary = {}
+var _lb_overlay: Control
+var _lb_category: String = "solo"
+var _lb_selected_idx: int = 0
+var _lb_solo_tab_btn: Button
+var _lb_local_tab_btn: Button
+var _lb_top_tab_btn: Button
+var _lb_summary_lbl: Label
+var _lb_match_list_box: VBoxContainer
+var _lb_detail_box: VBoxContainer
 var _transitioning: bool = false
 var _diff_buttons: Array[Button] = []
 var _agent_select_overlay: Control
@@ -75,7 +85,6 @@ var _agent_select_for_practice: bool = false
 var _agent_preview_idx: int = 0
 var _agent_play_btn: Button
 var _top_shop_btn: Button
-var _hero_shop_btn: Button
 var _customize_btn: Button
 var _agent_mode_btn: Button
 var _coin_shop_top_btn: Button
@@ -309,33 +318,15 @@ func _build_ui() -> void:
 			_coin_shop_coin_lbl.text = c_str
 	)
 
-	_coin_shop_top_btn = _make_arcade_button("NC SHOP", Color(0.38, 0.98, 0.58), 40.0, 14, Color(0.08, 0.28, 0.14, 0.98))
-	_coin_shop_top_btn.icon = _get_coin_icon()
-	_coin_shop_top_btn.expand_icon = true
-	_coin_shop_top_btn.add_theme_constant_override("icon_max_width", 18)
-	_coin_shop_top_btn.custom_minimum_size = Vector2(124, 40)
-	_coin_shop_top_btn.pressed.connect(func(): _open_coin_shop())
-	econ_bar.add_child(_coin_shop_top_btn)
-
-	_ach_top_btn = _make_arcade_button("ACHIEVEMENTS", Color(0.76, 0.56, 1.0), 40.0, 14, Color(0.16, 0.10, 0.28, 0.98))
-	_ach_top_btn.custom_minimum_size = Vector2(136, 40)
-	_ach_top_btn.pressed.connect(_open_achievements_overlay)
-	econ_bar.add_child(_ach_top_btn)
-
 	_crate_top_btn = _make_arcade_button("CRATES & DAILY", Color(0.35, 0.96, 0.56), 40.0, 14, Color(0.08, 0.24, 0.14, 0.98))
-	_crate_top_btn.custom_minimum_size = Vector2(144, 40)
+	_crate_top_btn.custom_minimum_size = Vector2(154, 40)
 	_crate_top_btn.pressed.connect(_open_crate_overlay)
 	econ_bar.add_child(_crate_top_btn)
 
-	_top_shop_btn = _make_arcade_button("WEAPONS", Color(1.0, 0.82, 0.24), 40.0, 15, Color(0.24, 0.17, 0.05, 0.98))
-	_top_shop_btn.custom_minimum_size = Vector2(130, 40)
-	_top_shop_btn.pressed.connect(_open_gun_shop)
-	econ_bar.add_child(_top_shop_btn)
-
-	# Main Split: Left (Your Soldier Showcase) + Right (Big Touch Battle Modes)
+	# Main Split: Left Side Rail + Your Soldier Showcase + Right Big Touch Battle Modes
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.add_theme_constant_override("separation", 16)
+	split.add_theme_constant_override("separation", 14)
 	_hub_container.add_child(split)
 
 	var win_panel_sb := StyleBoxFlat.new()
@@ -348,7 +339,51 @@ func _build_ui() -> void:
 	win_panel_sb.shadow_size = 8
 	win_panel_sb.shadow_offset = Vector2.ZERO
 
-	# Left Card: Your Soldier Showcase
+	# Left Side Rail: Achievements, Leaderboards, NC Shop, Weapons
+	var left_rail_panel := PanelContainer.new()
+	left_rail_panel.custom_minimum_size = Vector2(168, 0)
+	var lr_sb := StyleBoxFlat.new()
+	lr_sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	lr_sb.border_color = Color(0.32, 0.56, 0.86, 0.85)
+	lr_sb.set_border_width_all(2)
+	lr_sb.set_corner_radius_all(16)
+	lr_sb.set_content_margin_all(10)
+	left_rail_panel.add_theme_stylebox_override("panel", lr_sb)
+	split.add_child(left_rail_panel)
+
+	var left_rail := VBoxContainer.new()
+	left_rail.add_theme_constant_override("separation", 10)
+	left_rail_panel.add_child(left_rail)
+
+	_ach_top_btn = _make_arcade_button("ACHIEVEMENTS", Color(0.76, 0.56, 1.0), 54.0, 14, Color(0.16, 0.10, 0.28, 0.98))
+	_ach_top_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_ach_top_btn.pressed.connect(_open_achievements_overlay)
+	left_rail.add_child(_ach_top_btn)
+
+	var btn_leaderboards := _make_arcade_button("LEADERBOARDS", Color(0.32, 0.88, 1.0), 54.0, 14, Color(0.08, 0.20, 0.30, 0.98))
+	btn_leaderboards.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn_leaderboards.pressed.connect(_open_leaderboard_overlay)
+	left_rail.add_child(btn_leaderboards)
+
+	_coin_shop_top_btn = _make_arcade_button("NC SHOP", Color(0.38, 0.98, 0.58), 54.0, 14, Color(0.08, 0.28, 0.14, 0.98))
+	_coin_shop_top_btn.icon = _get_coin_icon()
+	_coin_shop_top_btn.expand_icon = true
+	_coin_shop_top_btn.add_theme_constant_override("icon_max_width", 20)
+	_coin_shop_top_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_coin_shop_top_btn.pressed.connect(func(): _open_coin_shop())
+	left_rail.add_child(_coin_shop_top_btn)
+
+	_top_shop_btn = _make_arcade_button("WEAPONS", Color(1.0, 0.82, 0.24), 54.0, 15, Color(0.24, 0.17, 0.05, 0.98))
+	_top_shop_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_top_shop_btn.pressed.connect(_open_gun_shop)
+	left_rail.add_child(_top_shop_btn)
+
+	var btn_credits := _make_arcade_button("CREDITS", Color(0.95, 0.78, 0.25), 54.0, 15)
+	btn_credits.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn_credits.pressed.connect(_open_credits)
+	left_rail.add_child(btn_credits)
+
+	# Center-Left Card: Your Soldier Showcase
 	var preview_panel := PanelContainer.new()
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_stretch_ratio = 0.88
@@ -437,11 +472,6 @@ func _build_ui() -> void:
 	_customize_btn.pressed.connect(func(): _transition_to(NetworkManager.go_to_avatar_garage))
 	hero_btn_row.add_child(_customize_btn)
 
-	_hero_shop_btn = _make_arcade_button("WEAPONS", Color(1.0, 0.84, 0.26), 52.0, 16, Color(0.24, 0.18, 0.06, 0.96))
-	_hero_shop_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hero_shop_btn.pressed.connect(_open_gun_shop)
-	hero_btn_row.add_child(_hero_shop_btn)
-
 	# Right Card: Big Mobile Battle Mode Buttons
 	var nav_panel := PanelContainer.new()
 	nav_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -522,11 +552,6 @@ func _build_ui() -> void:
 	btn_settings.pressed.connect(func(): _transition_to(NetworkManager.go_to_settings))
 	bottom_row.add_child(btn_settings)
 
-	var btn_credits := _make_arcade_button("CREDITS", Color(0.95, 0.78, 0.25), 50.0, 17)
-	btn_credits.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_credits.pressed.connect(_open_credits)
-	bottom_row.add_child(btn_credits)
-
 	var btn_quit := _make_arcade_button("QUIT", Color(0.92, 0.30, 0.30), 50.0, 17)
 	btn_quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_quit.pressed.connect(func(): get_tree().quit())
@@ -541,6 +566,7 @@ func _build_ui() -> void:
 	_build_gun_shop_overlay()
 	_build_crate_overlay()
 	_build_achievements_overlay()
+	_build_leaderboard_overlay()
 	_build_coin_shop_overlay()
 	_build_coin_purchase_popup()
 	_update_crate_badge()
@@ -2733,7 +2759,6 @@ func _update_crate_badge() -> void:
 func _update_new_item_badges() -> void:
 	UIStyle.set_new_badge_visible(_agent_mode_btn, ProfileManager.has_any_new_agent(), "NewBadge", -10.0, 10.0, 12)
 	UIStyle.set_new_badge_visible(_top_shop_btn, ProfileManager.has_any_new_gun_skin(), "NewBadge", -5.0, 3.0, 10)
-	UIStyle.set_new_badge_visible(_hero_shop_btn, ProfileManager.has_any_new_gun_skin(), "NewBadge", -6.0, 4.0, 10)
 	UIStyle.set_new_badge_visible(_customize_btn, ProfileManager.has_any_new_customization(), "NewBadge", -6.0, 4.0, 10)
 
 
@@ -4226,11 +4251,13 @@ func _build_achievements_overlay() -> void:
 	var sc := ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.mouse_filter = Control.MOUSE_FILTER_PASS
 	root_v.add_child(sc)
 
 	_ach_list_box = VBoxContainer.new()
 	_ach_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ach_list_box.add_theme_constant_override("separation", 7)
+	_ach_list_box.mouse_filter = Control.MOUSE_FILTER_PASS
 	sc.add_child(_ach_list_box)
 
 
@@ -4257,11 +4284,22 @@ func _refresh_achievements_list() -> void:
 	for c in _ach_list_box.get_children():
 		c.queue_free()
 
+	var parent_child_counts: Dictionary = {}
+	for d in AchievementManager.definitions:
+		var pid_str: String = str(d.get("parent", ""))
+		if not pid_str.is_empty():
+			parent_child_counts[pid_str] = int(parent_child_counts.get(pid_str, 0)) + 1
+
 	for d in AchievementManager.definitions:
 		if _ach_filter != "All" and str(d["category"]) != _ach_filter:
 			continue
 		var aid: String = str(d["id"])
-		var is_sub: bool = not str(d.get("parent", "")).is_empty()
+		var parent_id: String = str(d.get("parent", ""))
+		var is_sub: bool = not parent_id.is_empty()
+		if _ach_filter == "All" and is_sub and bool(_ach_collapsed_parents.get(parent_id, false)):
+			continue
+		var has_children: bool = (not is_sub) and int(parent_child_counts.get(aid, 0)) > 0
+		var is_collapsed: bool = bool(_ach_collapsed_parents.get(aid, false))
 		var has_skin: bool = not str(d.get("reward_skin", "")).is_empty()
 		var prog: int = AchievementManager.get_progress(aid)
 		var target: int = maxi(1, int(d["target"]))
@@ -4270,14 +4308,17 @@ func _refresh_achievements_list() -> void:
 
 		var outer := HBoxContainer.new()
 		outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		outer.mouse_filter = Control.MOUSE_FILTER_PASS
 		_ach_list_box.add_child(outer)
 		if is_sub:
 			var indent := Control.new()
 			indent.custom_minimum_size = Vector2(28, 0)
+			indent.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			outer.add_child(indent)
 
 		var pcard := PanelContainer.new()
 		pcard.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pcard.mouse_filter = Control.MOUSE_FILTER_PASS
 		var csb := StyleBoxFlat.new()
 		if claimed_b:
 			csb.bg_color = Color(0.08, 0.16, 0.12, 0.92)
@@ -4299,11 +4340,35 @@ func _refresh_achievements_list() -> void:
 
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		pcard.add_child(row)
+
+		if _ach_filter == "All" and has_children:
+			var toggle_btn := Button.new()
+			toggle_btn.text = ("▶ %d" % int(parent_child_counts[aid])) if is_collapsed else ("▼ %d" % int(parent_child_counts[aid]))
+			toggle_btn.custom_minimum_size = Vector2(54, 34)
+			toggle_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			toggle_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			var t_sb := StyleBoxFlat.new()
+			t_sb.bg_color = Color(0.16, 0.12, 0.28, 0.96)
+			t_sb.border_color = Color(0.76, 0.56, 1.0, 0.85)
+			t_sb.set_border_width_all(1)
+			t_sb.set_corner_radius_all(7)
+			toggle_btn.add_theme_stylebox_override("normal", t_sb)
+			toggle_btn.add_theme_stylebox_override("hover", t_sb)
+			toggle_btn.add_theme_stylebox_override("pressed", t_sb)
+			toggle_btn.add_theme_font_size_override("font_size", 12)
+			var cap_aid: String = aid
+			toggle_btn.pressed.connect(func():
+				_ach_collapsed_parents[cap_aid] = not bool(_ach_collapsed_parents.get(cap_aid, false))
+				_refresh_achievements_list()
+			)
+			row.add_child(toggle_btn)
 
 		var info_v := VBoxContainer.new()
 		info_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info_v.add_theme_constant_override("separation", 3)
+		info_v.mouse_filter = Control.MOUSE_FILTER_PASS
 		row.add_child(info_v)
 
 		var title_l := Label.new()
@@ -4311,12 +4376,14 @@ func _refresh_achievements_list() -> void:
 		title_l.text = "%s%s" % [prefix, str(d["title"])]
 		title_l.add_theme_font_size_override("font_size", 14 if is_sub else 15)
 		title_l.modulate = Color(1.0, 0.88, 0.34) if (completed or has_skin) else Color(0.94, 0.96, 1.0)
+		title_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		info_v.add_child(title_l)
 
 		var desc_l := Label.new()
 		desc_l.text = str(d["desc"])
 		desc_l.add_theme_font_size_override("font_size", 11)
 		desc_l.modulate = Color(0.74, 0.82, 0.92)
+		desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		info_v.add_child(desc_l)
 
 		var pb := ProgressBar.new()
@@ -4325,6 +4392,7 @@ func _refresh_achievements_list() -> void:
 		pb.value = float(mini(prog, target))
 		pb.show_percentage = false
 		pb.custom_minimum_size = Vector2(0, 8)
+		pb.mouse_filter = Control.MOUSE_FILTER_PASS
 		var pb_bg := StyleBoxFlat.new()
 		pb_bg.bg_color = Color(0.04, 0.06, 0.10, 0.95)
 		pb_bg.set_corner_radius_all(4)
@@ -4338,6 +4406,7 @@ func _refresh_achievements_list() -> void:
 		var rew_v := VBoxContainer.new()
 		rew_v.custom_minimum_size = Vector2(185, 0)
 		rew_v.alignment = BoxContainer.ALIGNMENT_CENTER
+		rew_v.mouse_filter = Control.MOUSE_FILTER_PASS
 		row.add_child(rew_v)
 
 		_add_coin_icon_label(rew_v, "+%s" % ProfileManager.format_coins(int(d["reward_coins"])), 16, 13, Color(1.0, 0.86, 0.28), false, BoxContainer.ALIGNMENT_END)
@@ -4814,3 +4883,490 @@ func _show_coin_purchase_popup(receipt: Dictionary) -> void:
 	var tw := create_tween()
 	tw.tween_property(_coin_purchase_card, "scale", Vector2(1.04, 1.04), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(_coin_purchase_card, "scale", Vector2.ONE, 0.08)
+
+
+func _build_leaderboard_overlay() -> void:
+	_lb_overlay = ColorRect.new()
+	_lb_overlay.z_index = 64
+	_lb_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lb_overlay.color = Color(0.02, 0.03, 0.06, 0.92)
+	_lb_overlay.visible = false
+	add_child(_lb_overlay)
+
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_lb_overlay.add_child(cc)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(1040, 610)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
+	sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(18)
+	sb.set_content_margin_all(18)
+	sb.shadow_color = Color(1.0, 0.82, 0.22, 0.36)
+	sb.shadow_size = 10
+	sb.shadow_offset = Vector2.ZERO
+	card.add_theme_stylebox_override("panel", sb)
+	cc.add_child(card)
+
+	var root_v := VBoxContainer.new()
+	root_v.add_theme_constant_override("separation", 10)
+	card.add_child(root_v)
+
+	# Header
+	var hdr := HBoxContainer.new()
+	hdr.add_theme_constant_override("separation", 10)
+	root_v.add_child(hdr)
+
+	var title_lbl := Label.new()
+	title_lbl.text = "🏆 CAREER & TOP 10 LEADERBOARDS"
+	title_lbl.add_theme_font_size_override("font_size", 22)
+	title_lbl.modulate = Color(1.0, 0.84, 0.24)
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr.add_child(title_lbl)
+
+	_lb_solo_tab_btn = _make_arcade_button("SOLO CAREER", Color(1.0, 0.84, 0.24), 38.0, 13, Color(0.24, 0.18, 0.05, 0.98))
+	_lb_solo_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_solo_tab_btn.pressed.connect(func():
+		_lb_category = "solo"
+		_lb_selected_idx = 0
+		_refresh_leaderboard_ui()
+	)
+	hdr.add_child(_lb_solo_tab_btn)
+
+	_lb_local_tab_btn = _make_arcade_button("MULTIPLAYER", Color(1.0, 0.72, 0.22), 38.0, 13, Color(0.24, 0.14, 0.05, 0.98))
+	_lb_local_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_local_tab_btn.pressed.connect(func():
+		_lb_category = "local"
+		_lb_selected_idx = 0
+		_refresh_leaderboard_ui()
+	)
+	hdr.add_child(_lb_local_tab_btn)
+
+	_lb_top_tab_btn = _make_arcade_button("TOP 10 KILLS", Color(0.45, 0.96, 0.56), 38.0, 13, Color(0.08, 0.24, 0.12, 0.98))
+	_lb_top_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_top_tab_btn.pressed.connect(func():
+		_lb_category = "top_kills"
+		_lb_selected_idx = 0
+		_refresh_leaderboard_ui()
+	)
+	hdr.add_child(_lb_top_tab_btn)
+
+	var close_btn := _make_arcade_button("CLOSE", Color(0.92, 0.34, 0.34), 38.0, 14, Color(0.26, 0.08, 0.10, 0.96))
+	close_btn.custom_minimum_size = Vector2(92, 38)
+	close_btn.pressed.connect(func():
+		_lb_overlay.visible = false
+		_hub_container.visible = true
+	)
+	hdr.add_child(close_btn)
+
+	# Career Summary Bar (gold-trimmed like Win Screen)
+	var sum_panel := PanelContainer.new()
+	var sum_sb := StyleBoxFlat.new()
+	sum_sb.bg_color = Color(0.14, 0.11, 0.05, 0.94)
+	sum_sb.border_color = Color(1.0, 0.82, 0.26, 0.75)
+	sum_sb.set_border_width_all(2)
+	sum_sb.set_corner_radius_all(10)
+	sum_sb.set_content_margin_all(10)
+	sum_panel.add_theme_stylebox_override("panel", sum_sb)
+	root_v.add_child(sum_panel)
+
+	_lb_summary_lbl = Label.new()
+	_lb_summary_lbl.add_theme_font_size_override("font_size", 14)
+	_lb_summary_lbl.modulate = Color(1.0, 0.90, 0.45)
+	_lb_summary_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sum_panel.add_child(_lb_summary_lbl)
+
+	# Split: Left (10 Matches) + Right (Selected Match Details)
+	var split := HBoxContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 12)
+	root_v.add_child(split)
+
+	var lp_sb := StyleBoxFlat.new()
+	lp_sb.bg_color = Color(0.05, 0.08, 0.14, 0.95)
+	lp_sb.border_color = Color(1.0, 0.82, 0.26, 0.55)
+	lp_sb.set_border_width_all(2)
+	lp_sb.set_corner_radius_all(12)
+	lp_sb.set_content_margin_all(10)
+
+	var left_panel := PanelContainer.new()
+	left_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left_panel.size_flags_stretch_ratio = 0.42
+	left_panel.add_theme_stylebox_override("panel", lp_sb)
+	split.add_child(left_panel)
+
+	var left_v := VBoxContainer.new()
+	left_v.add_theme_constant_override("separation", 6)
+	left_panel.add_child(left_v)
+
+	var l_hdr := Label.new()
+	l_hdr.text = "MATCH HISTORY (LATEST 10)"
+	l_hdr.add_theme_font_size_override("font_size", 14)
+	l_hdr.modulate = Color(1.0, 0.84, 0.24)
+	left_v.add_child(l_hdr)
+
+	var l_sc := ScrollContainer.new()
+	l_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	l_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	left_v.add_child(l_sc)
+
+	_lb_match_list_box = VBoxContainer.new()
+	_lb_match_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lb_match_list_box.add_theme_constant_override("separation", 6)
+	l_sc.add_child(_lb_match_list_box)
+
+	var right_panel := PanelContainer.new()
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_stretch_ratio = 0.58
+	right_panel.add_theme_stylebox_override("panel", lp_sb)
+	split.add_child(right_panel)
+
+	var r_sc := ScrollContainer.new()
+	r_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	r_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	right_panel.add_child(r_sc)
+
+	_lb_detail_box = VBoxContainer.new()
+	_lb_detail_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lb_detail_box.add_theme_constant_override("separation", 8)
+	r_sc.add_child(_lb_detail_box)
+
+
+func _open_leaderboard_overlay() -> void:
+	_hub_container.visible = false
+	_lb_overlay.visible = true
+	_lb_selected_idx = 0
+	_refresh_leaderboard_ui()
+
+
+func _refresh_leaderboard_ui() -> void:
+	if not is_instance_valid(_lb_match_list_box) or not is_instance_valid(_lb_detail_box):
+		return
+	_lb_solo_tab_btn.modulate = Color(1.0, 1.0, 1.0, 1.0) if _lb_category == "solo" else Color(0.58, 0.56, 0.50, 0.78)
+	_lb_local_tab_btn.modulate = Color(1.0, 1.0, 1.0, 1.0) if _lb_category == "local" else Color(0.58, 0.56, 0.50, 0.78)
+	_lb_top_tab_btn.modulate = Color(1.0, 1.0, 1.0, 1.0) if _lb_category == "top_kills" else Color(0.58, 0.56, 0.50, 0.78)
+
+	var matches: Array = []
+	if _lb_category == "top_kills":
+		matches = ProfileManager.get_top_kills_records()
+		var solo_c: Dictionary = ProfileManager.get_career_data("solo").get("career", {}) as Dictionary
+		var local_c: Dictionary = ProfileManager.get_career_data("local").get("career", {}) as Dictionary
+		var tot_m: int = int(solo_c.get("matches", 0)) + int(local_c.get("matches", 0))
+		var tot_w: int = int(solo_c.get("wins", 0)) + int(local_c.get("wins", 0))
+		var tot_k: int = int(solo_c.get("kills", 0)) + int(local_c.get("kills", 0))
+		var best_k: int = maxi(int(solo_c.get("best_kills", 0)), int(local_c.get("best_kills", 0)))
+		var best_s: int = maxi(int(solo_c.get("best_score", 0)), int(local_c.get("best_score", 0)))
+		_lb_summary_lbl.text = "MY TOP 10 KILLS (SOLO & MULTIPLAYER)   •   Total Matches: %d   |   Total Wins: %d   |   Total Kills: %d   |   Best Match Kills: %d   |   Best Score: %d" % [
+			tot_m, tot_w, tot_k, best_k, best_s
+		]
+	else:
+		var data: Dictionary = ProfileManager.get_career_data(_lb_category)
+		var c: Dictionary = data.get("career", {}) as Dictionary
+		matches = data.get("recent_matches", []) as Array
+		var m_cnt: int = int(c.get("matches", 0))
+		var wins: int = int(c.get("wins", 0))
+		var kills: int = int(c.get("kills", 0))
+		var deaths: int = int(c.get("deaths", 0))
+		var assists: int = int(c.get("assists", 0))
+		var win_pct: int = int(round((float(wins) / float(maxi(1, m_cnt))) * 100.0)) if m_cnt > 0 else 0
+		var kd: float = float(kills) / float(maxi(1, deaths))
+		var mode_tag: String = "SOLO" if _lb_category == "solo" else "MULTIPLAYER"
+		_lb_summary_lbl.text = "%s CAREER   •   Matches: %d   |   Wins: %d (%d%%)   |   K: %d  /  D: %d  /  A: %d   |   K/D: %.2f   |   Best Score: %d   |   Best Combo: %dx" % [
+			mode_tag, m_cnt, wins, win_pct, kills, deaths, assists, kd, int(c.get("best_score", 0)), int(c.get("best_combo", 0))
+		]
+
+	for ch in _lb_match_list_box.get_children():
+		ch.queue_free()
+	for ch in _lb_detail_box.get_children():
+		ch.queue_free()
+
+	if matches.is_empty():
+		var empty_l := Label.new()
+		empty_l.text = "No matches recorded here yet.\nPlay a match to populate your Career!"
+		empty_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_l.modulate = Color(0.84, 0.80, 0.66)
+		_lb_match_list_box.add_child(empty_l)
+
+		var empty_r := Label.new()
+		empty_r.text = "Select any match on the left to inspect:\n• Match Winner & Full Scoreboard Table\n• Whom I Killed & How Many Times\n• Who Killed Me & How Many Times"
+		empty_r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_r.modulate = Color(0.88, 0.84, 0.70)
+		_lb_detail_box.add_child(empty_r)
+		return
+
+	_lb_selected_idx = clampi(_lb_selected_idx, 0, matches.size() - 1)
+	for i in range(matches.size()):
+		var m: Dictionary = matches[i] as Dictionary
+		var is_sel: bool = (i == _lb_selected_idx)
+		var won: bool = bool(m.get("local_won", false))
+		var cat_lbl: String = "MULTIPLAYER" if str(m.get("category", "solo")) == "local" else "SOLO"
+		var btn := Button.new()
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.custom_minimum_size = Vector2(0, 62)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var b_sb := StyleBoxFlat.new()
+		if is_sel:
+			b_sb.bg_color = Color(0.24, 0.18, 0.06, 0.96)
+			b_sb.border_color = Color(1.0, 0.86, 0.24, 1.0)
+			b_sb.set_border_width_all(2)
+		else:
+			b_sb.bg_color = Color(0.09, 0.12, 0.19, 0.90) if (i % 2 == 0) else Color(0.07, 0.10, 0.16, 0.90)
+			b_sb.border_color = Color(1.0, 0.82, 0.26, 0.45) if won else Color(0.28, 0.34, 0.46, 0.50)
+			b_sb.set_border_width_all(1)
+		b_sb.set_corner_radius_all(8)
+		b_sb.set_content_margin_all(8)
+		btn.add_theme_stylebox_override("normal", b_sb)
+		btn.add_theme_stylebox_override("hover", b_sb)
+		btn.add_theme_stylebox_override("pressed", b_sb)
+		btn.add_theme_color_override("font_color", Color(1.0, 0.90, 0.42) if is_sel else (Color(0.84, 0.96, 0.72) if won else Color(0.88, 0.90, 0.96)))
+		if _lb_category == "top_kills":
+			var rank_prefix: String = "🏆 #1" if i == 0 else ("#%d" % [i + 1])
+			btn.text = "%s  [%s]  %d KILLS  •  Score: %d  (%s)\n%s  •  %s  •  %s" % [
+				rank_prefix,
+				cat_lbl,
+				int(m.get("kills", 0)),
+				int(m.get("score", 0)),
+				"WIN" if won else "LOSS",
+				str(m.get("mode", "Match")),
+				str(m.get("map_name", "Arena")),
+				str(m.get("timestamp", ""))
+			]
+		else:
+			btn.text = "[%s]  %dK / %dD / %dA  •  Score: %d\n%s  •  %s  •  %s" % [
+				"WIN" if won else "LOSS",
+				int(m.get("kills", 0)),
+				int(m.get("deaths", 0)),
+				int(m.get("assists", 0)),
+				int(m.get("score", 0)),
+				str(m.get("mode", "Match")),
+				str(m.get("map_name", "Arena")),
+				str(m.get("timestamp", ""))
+			]
+		var cap_i: int = i
+		btn.pressed.connect(func():
+			_lb_selected_idx = cap_i
+			_refresh_leaderboard_ui()
+		)
+		_lb_match_list_box.add_child(btn)
+
+	# Selected Match Details — Win Screen Table Style
+	var sel: Dictionary = matches[_lb_selected_idx] as Dictionary
+	var sel_won: bool = bool(sel.get("local_won", false))
+	var sel_cat_lbl: String = "MULTIPLAYER" if str(sel.get("category", "solo")) == "local" else "SOLO"
+
+	var win_banner := PanelContainer.new()
+	var wb_sb := StyleBoxFlat.new()
+	wb_sb.bg_color = Color(0.22, 0.17, 0.06, 0.96) if sel_won else Color(0.18, 0.09, 0.10, 0.95)
+	wb_sb.border_color = Color(1.0, 0.84, 0.24, 0.98) if sel_won else Color(0.95, 0.38, 0.34, 0.92)
+	wb_sb.set_border_width_all(2)
+	wb_sb.set_corner_radius_all(10)
+	wb_sb.set_content_margin_all(10)
+	win_banner.add_theme_stylebox_override("panel", wb_sb)
+	_lb_detail_box.add_child(win_banner)
+
+	var wb_lbl := Label.new()
+	wb_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wb_lbl.text = "%s\n[%s]  %s  •  %s  •  %s" % [
+		str(sel.get("winner", "MATCH COMPLETE")),
+		sel_cat_lbl,
+		str(sel.get("mode", "Match")),
+		str(sel.get("map_name", "Arena")),
+		str(sel.get("timestamp", ""))
+	]
+	wb_lbl.add_theme_font_size_override("font_size", 17)
+	wb_lbl.modulate = Color(1.0, 0.86, 0.28) if sel_won else Color(1.0, 0.72, 0.68)
+	win_banner.add_child(wb_lbl)
+
+	# Scoreboard Table Header (exact Win Screen columns + SCORE)
+	var hdr_panel := PanelContainer.new()
+	var hdr_sb := StyleBoxFlat.new()
+	hdr_sb.bg_color = Color(0.14, 0.12, 0.07, 0.96)
+	hdr_sb.border_color = Color(1.0, 0.84, 0.24, 0.55)
+	hdr_sb.set_border_width_all(1)
+	hdr_sb.set_corner_radius_all(8)
+	hdr_sb.set_content_margin_all(8)
+	hdr_panel.add_theme_stylebox_override("panel", hdr_sb)
+	_lb_detail_box.add_child(hdr_panel)
+
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", 6)
+	hdr_panel.add_child(hdr_row)
+	var col_specs: Array = [
+		["RANK", 54, Color(1.0, 0.86, 0.34), HORIZONTAL_ALIGNMENT_CENTER],
+		["PLAYER", 0, Color(0.92, 0.94, 0.98), HORIZONTAL_ALIGNMENT_LEFT],
+		["KILLS", 54, Color(0.45, 0.96, 0.56), HORIZONTAL_ALIGNMENT_CENTER],
+		["ASSISTS", 62, Color(0.42, 0.86, 1.0), HORIZONTAL_ALIGNMENT_CENTER],
+		["DEATHS", 58, Color(1.0, 0.48, 0.46), HORIZONTAL_ALIGNMENT_CENTER],
+		["COMBO", 58, Color(1.0, 0.84, 0.35), HORIZONTAL_ALIGNMENT_CENTER],
+		["SCORE", 64, Color(1.0, 0.88, 0.28), HORIZONTAL_ALIGNMENT_CENTER]
+	]
+	for spec in col_specs:
+		var h_lbl := Label.new()
+		h_lbl.text = str(spec[0])
+		if int(spec[1]) > 0:
+			h_lbl.custom_minimum_size = Vector2(float(spec[1]), 0)
+		else:
+			h_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h_lbl.horizontal_alignment = spec[3]
+		h_lbl.add_theme_font_size_override("font_size", 12)
+		h_lbl.modulate = spec[2]
+		hdr_row.add_child(h_lbl)
+
+	var rows: Array = sel.get("rankings", []) as Array
+	if rows.is_empty():
+		var no_r := Label.new()
+		no_r.text = "No player scoreboard data."
+		no_r.modulate = Color(0.70, 0.76, 0.86)
+		_lb_detail_box.add_child(no_r)
+	else:
+		for ri in range(rows.size()):
+			var rd: Dictionary = rows[ri] as Dictionary
+			var is_me: bool = bool(rd.get("is_me", false))
+			var is_bot: bool = bool(rd.get("is_bot", false))
+			var is_first: bool = (ri == 0)
+
+			var row_p := PanelContainer.new()
+			var r_sb := StyleBoxFlat.new()
+			if is_first:
+				r_sb.bg_color = Color(0.22, 0.17, 0.07, 0.94)
+				r_sb.border_color = Color(1.0, 0.82, 0.26, 0.92)
+				r_sb.set_border_width_all(2)
+			elif is_me:
+				r_sb.bg_color = Color(0.10, 0.19, 0.30, 0.94)
+				r_sb.border_color = Color(0.35, 0.78, 1.0, 0.92)
+				r_sb.set_border_width_all(2)
+			else:
+				r_sb.bg_color = Color(0.09, 0.13, 0.21, 0.90) if (ri % 2 == 0) else Color(0.07, 0.10, 0.17, 0.90)
+				r_sb.border_color = Color(0.22, 0.28, 0.40, 0.45)
+				r_sb.set_border_width_all(1)
+			r_sb.set_corner_radius_all(8)
+			r_sb.set_content_margin_all(7)
+			row_p.add_theme_stylebox_override("panel", r_sb)
+			_lb_detail_box.add_child(row_p)
+
+			var row_hb := HBoxContainer.new()
+			row_hb.add_theme_constant_override("separation", 6)
+			row_p.add_child(row_hb)
+
+			var rank_col: Color = Color(1.0, 0.86, 0.28) if is_first else (Color(0.84, 0.88, 0.96) if ri == 1 else (Color(0.88, 0.62, 0.38) if ri == 2 else Color(0.68, 0.74, 0.86)))
+			var rank_txt: String = "🏆 #1" if is_first else ("#%d" % [ri + 1])
+			var p_tag: String = " (YOU)" if is_me else (" [BOT]" if is_bot else "")
+			var cells: Array = [
+				[rank_txt, 54, rank_col, HORIZONTAL_ALIGNMENT_CENTER],
+				[str(rd.get("name", "Player")) + p_tag, 0, Color(0.45, 0.90, 1.0) if is_me else Color(0.94, 0.96, 1.0), HORIZONTAL_ALIGNMENT_LEFT],
+				[str(int(rd.get("kills", 0))), 54, Color(0.48, 0.98, 0.58), HORIZONTAL_ALIGNMENT_CENTER],
+				[str(int(rd.get("assists", 0))), 62, Color(0.46, 0.88, 1.0), HORIZONTAL_ALIGNMENT_CENTER],
+				[str(int(rd.get("deaths", 0))), 58, Color(1.0, 0.50, 0.48), HORIZONTAL_ALIGNMENT_CENTER],
+				[str(int(rd.get("max_combo", 0))), 58, Color(1.0, 0.86, 0.38), HORIZONTAL_ALIGNMENT_CENTER],
+				[str(int(rd.get("score", 0))), 64, Color(1.0, 0.90, 0.36), HORIZONTAL_ALIGNMENT_CENTER]
+			]
+			for cell in cells:
+				var c_lbl := Label.new()
+				c_lbl.text = str(cell[0])
+				if int(cell[1]) > 0:
+					c_lbl.custom_minimum_size = Vector2(float(cell[1]), 0)
+				else:
+					c_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+					c_lbl.clip_text = true
+				c_lbl.horizontal_alignment = cell[3]
+				c_lbl.add_theme_font_size_override("font_size", 14)
+				c_lbl.modulate = cell[2]
+				row_hb.add_child(c_lbl)
+
+	# Head-to-head breakdown tables: Whom I Killed vs Who Killed Me
+	var h2h_row := HBoxContainer.new()
+	h2h_row.add_theme_constant_override("separation", 10)
+	_lb_detail_box.add_child(h2h_row)
+
+	_add_h2h_card(h2h_row, "WHOM I KILLED", "KILLS", sel.get("killed_by_me", {}) as Dictionary, Color(0.45, 0.96, 0.56))
+	_add_h2h_card(h2h_row, "WHO KILLED ME", "DEATHS", sel.get("killed_me", {}) as Dictionary, Color(1.0, 0.48, 0.46))
+
+
+func _add_h2h_card(parent_row: HBoxContainer, title_txt: String, count_col_txt: String, counts_dict: Dictionary, accent: Color) -> void:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.07, 0.10, 0.16, 0.95)
+	sb.border_color = Color(1.0, 0.82, 0.26, 0.65)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	sb.set_content_margin_all(8)
+	card.add_theme_stylebox_override("panel", sb)
+	parent_row.add_child(card)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 5)
+	card.add_child(v)
+
+	var hdr_p := PanelContainer.new()
+	var h_sb := StyleBoxFlat.new()
+	h_sb.bg_color = Color(0.14, 0.12, 0.07, 0.95)
+	h_sb.set_corner_radius_all(6)
+	h_sb.set_content_margin_all(6)
+	hdr_p.add_theme_stylebox_override("panel", h_sb)
+	v.add_child(hdr_p)
+
+	var hdr_hb := HBoxContainer.new()
+	hdr_p.add_child(hdr_hb)
+
+	var hdr := Label.new()
+	hdr.text = title_txt
+	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr.add_theme_font_size_override("font_size", 12)
+	hdr.modulate = Color(1.0, 0.84, 0.28)
+	hdr_hb.add_child(hdr)
+
+	var cnt_hdr := Label.new()
+	cnt_hdr.text = count_col_txt
+	cnt_hdr.custom_minimum_size = Vector2(56, 0)
+	cnt_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cnt_hdr.add_theme_font_size_override("font_size", 12)
+	cnt_hdr.modulate = accent
+	hdr_hb.add_child(cnt_hdr)
+
+	if counts_dict.is_empty():
+		var none_l := Label.new()
+		none_l.text = "None"
+		none_l.add_theme_font_size_override("font_size", 13)
+		none_l.modulate = Color(0.65, 0.72, 0.82)
+		v.add_child(none_l)
+		return
+
+	var pairs: Array = []
+	for k in counts_dict.keys():
+		pairs.append({"name": str(k), "count": int(counts_dict[k])})
+	pairs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["count"]) > int(b["count"])
+	)
+	for pi in range(pairs.size()):
+		var p: Dictionary = pairs[pi] as Dictionary
+		var row_p := PanelContainer.new()
+		var r_sb := StyleBoxFlat.new()
+		r_sb.bg_color = Color(0.09, 0.13, 0.21, 0.88) if (pi % 2 == 0) else Color(0.07, 0.10, 0.17, 0.88)
+		r_sb.set_corner_radius_all(5)
+		r_sb.set_content_margin_all(5)
+		row_p.add_theme_stylebox_override("panel", r_sb)
+		v.add_child(row_p)
+
+		var row_hb := HBoxContainer.new()
+		row_p.add_child(row_hb)
+
+		var n_lbl := Label.new()
+		n_lbl.text = str(p["name"])
+		n_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		n_lbl.clip_text = true
+		n_lbl.add_theme_font_size_override("font_size", 13)
+		n_lbl.modulate = Color(0.92, 0.96, 1.0)
+		row_hb.add_child(n_lbl)
+
+		var c_lbl := Label.new()
+		c_lbl.text = str(int(p["count"]))
+		c_lbl.custom_minimum_size = Vector2(56, 0)
+		c_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		c_lbl.add_theme_font_size_override("font_size", 13)
+		c_lbl.modulate = accent
+		row_hb.add_child(c_lbl)
+

@@ -438,26 +438,14 @@ func _input(event: InputEvent) -> void:
 				return
 			var l_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("left_stick")
 			var r_rad: float = STICK_RADIUS * SettingsManager.get_touch_element_scale("right_stick")
-			var tap_targeting: bool = (
-				local_player != null
-				and is_instance_valid(local_player)
-				and (float(local_player.get("touch_teleport_timer")) > 0.0 or float(local_player.get("touch_banish_timer")) > 0.0)
-			)
-			if tap_targeting:
-				if te.position.distance_to(_left_center) <= l_rad + 14.0 and _left_touch_idx == -1:
-					_left_touch_idx = te.index
-					_update_left_stick(te.position)
-				elif te.position.distance_to(_right_center) <= r_rad + 14.0 and _right_touch_idx == -1:
-					_right_touch_idx = te.index
-					_update_right_stick(te.position)
-				return
-			var half_w: float = get_viewport().get_visible_rect().size.x * 0.5
-			if te.position.x < half_w and _left_touch_idx == -1:
+			if te.position.distance_to(_left_center) <= l_rad + 18.0 and _left_touch_idx == -1:
 				_left_touch_idx = te.index
 				_update_left_stick(te.position)
-			elif te.position.x >= half_w and _right_touch_idx == -1:
+				get_viewport().set_input_as_handled()
+			elif te.position.distance_to(_right_center) <= r_rad + 18.0 and _right_touch_idx == -1:
 				_right_touch_idx = te.index
 				_update_right_stick(te.position)
+				get_viewport().set_input_as_handled()
 		else:
 			if te.index == _left_touch_idx:
 				_left_touch_idx = -1

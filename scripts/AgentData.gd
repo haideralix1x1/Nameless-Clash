@@ -1237,8 +1237,8 @@ const AGENTS: Array[Dictionary] = [
 		"role": "Brawler Hare",
 		"accent": Color(0.88, 0.20, 0.28),
 		"base_weapon": {
-			"name": "Crimson Knuckles",
-			"style": "claws",
+			"name": "Bramble Fists",
+			"style": "grimhare_hand",
 			"damage": 24,
 			"cooldown": 0.28,
 			"range": 102.0,

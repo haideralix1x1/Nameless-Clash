@@ -306,20 +306,42 @@ func _make_dock_style(bg: Color, pad: int = 10) -> StyleBoxFlat:
 	return s
 
 
+func _make_flow_bar(parent: Control, bg: Color, pad: int = 6, h_sep: int = 8, v_sep: int = 6) -> HFlowContainer:
+	var bar := PanelContainer.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_theme_stylebox_override("panel", _make_dock_style(bg, pad))
+	parent.add_child(bar)
+	var flow := HFlowContainer.new()
+	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flow.add_theme_constant_override("h_separation", h_sep)
+	flow.add_theme_constant_override("v_separation", v_sep)
+	bar.add_child(flow)
+	return flow
+
+
+func _wrap_panel_vscroll(panel: PanelContainer, vb: VBoxContainer) -> ScrollContainer:
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.clip_contents = true
+	var sc := ScrollContainer.new()
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(sc)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.add_child(vb)
+	return sc
+
+
 func _build_ui() -> void:
 	var main_vbox := VBoxContainer.new()
 	main_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_vbox.clip_contents = true
 	main_vbox.add_theme_constant_override("separation", 0)
 	add_child(main_vbox)
 
-	# 0. EDITOR MODE TAB BAR (Character Poses | In-Game UI Setter)
-	var tab_bar := PanelContainer.new()
-	tab_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.06, 0.08, 0.12), 6))
-	main_vbox.add_child(tab_bar)
-
-	var tab_hbox := HBoxContainer.new()
-	tab_hbox.add_theme_constant_override("separation", 8)
-	tab_bar.add_child(tab_hbox)
+	# 0. EDITOR MODE TAB BAR (wraps cleanly on narrow screens)
+	var tab_hbox := _make_flow_bar(main_vbox, Color(0.06, 0.08, 0.12), 6, 8, 6)
 
 	var studio_lbl := Label.new()
 	studio_lbl.text = "NAMELESS STUDIO"
@@ -330,45 +352,41 @@ func _build_ui() -> void:
 	_tab_pose_btn = Button.new()
 	_tab_pose_btn.text = "Character Poses"
 	_tab_pose_btn.toggle_mode = true
-	_tab_pose_btn.custom_minimum_size = Vector2(136, 30)
+	_tab_pose_btn.custom_minimum_size = Vector2(128, 30)
 	_tab_pose_btn.pressed.connect(func(): _switch_editor_tab(0))
 	tab_hbox.add_child(_tab_pose_btn)
 
 	_tab_ui_btn = Button.new()
 	_tab_ui_btn.text = "In-Game UI Setter"
 	_tab_ui_btn.toggle_mode = true
-	_tab_ui_btn.custom_minimum_size = Vector2(144, 30)
+	_tab_ui_btn.custom_minimum_size = Vector2(136, 30)
 	_tab_ui_btn.pressed.connect(func(): _switch_editor_tab(1))
 	tab_hbox.add_child(_tab_ui_btn)
 
 	_tab_range_btn = Button.new()
 	_tab_range_btn.text = "Weapons Studio"
 	_tab_range_btn.toggle_mode = true
-	_tab_range_btn.custom_minimum_size = Vector2(140, 30)
+	_tab_range_btn.custom_minimum_size = Vector2(130, 30)
 	_tab_range_btn.pressed.connect(func(): _switch_editor_tab(2))
 	tab_hbox.add_child(_tab_range_btn)
 
 	_tab_coin_btn = Button.new()
 	_tab_coin_btn.text = "NC Adjustment"
 	_tab_coin_btn.toggle_mode = true
-	_tab_coin_btn.custom_minimum_size = Vector2(138, 30)
+	_tab_coin_btn.custom_minimum_size = Vector2(128, 30)
 	_tab_coin_btn.pressed.connect(func(): _switch_editor_tab(3))
 	tab_hbox.add_child(_tab_coin_btn)
 
 	_tab_ach_crate_btn = Button.new()
 	_tab_ach_crate_btn.text = "Achievements & Crates"
 	_tab_ach_crate_btn.toggle_mode = true
-	_tab_ach_crate_btn.custom_minimum_size = Vector2(168, 30)
+	_tab_ach_crate_btn.custom_minimum_size = Vector2(158, 30)
 	_tab_ach_crate_btn.pressed.connect(func(): _switch_editor_tab(4))
 	tab_hbox.add_child(_tab_ach_crate_btn)
 
-	var tab_spacer := Control.new()
-	tab_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab_hbox.add_child(tab_spacer)
-
 	var reset_player_btn := Button.new()
 	reset_player_btn.text = "Reset Player Data"
-	reset_player_btn.custom_minimum_size = Vector2(158, 30)
+	reset_player_btn.custom_minimum_size = Vector2(146, 30)
 	reset_player_btn.modulate = Color(1.0, 0.48, 0.44)
 	reset_player_btn.tooltip_text = "Wipe all current player NC, skins, cosmetics, unlocked agents, badges & achievements back to a fresh profile"
 	reset_player_btn.pressed.connect(_prompt_reset_player_data)
@@ -388,13 +406,7 @@ func _build_ui() -> void:
 	main_vbox.add_child(_pose_mode_root)
 
 	# 1. TOP TOOLBAR (Agent, Stance, Weapon, Undo, Save)
-	var top_bar := PanelContainer.new()
-	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
-	_pose_mode_root.add_child(top_bar)
-
-	var top_hbox := HBoxContainer.new()
-	top_hbox.add_theme_constant_override("separation", 10)
-	top_bar.add_child(top_hbox)
+	var top_hbox := _make_flow_bar(_pose_mode_root, Color(0.10, 0.13, 0.19), 8, 8, 6)
 
 	var title := Label.new()
 	title.text = "POSE STUDIO"
@@ -494,10 +506,6 @@ func _build_ui() -> void:
 	)
 	top_hbox.add_child(_weapon_scope_btn)
 
-	var top_spacer := Control.new()
-	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_hbox.add_child(top_spacer)
-
 	var undo_btn := Button.new()
 	undo_btn.text = "Undo"
 	undo_btn.pressed.connect(_undo)
@@ -514,18 +522,19 @@ func _build_ui() -> void:
 	var mid_split := HBoxContainer.new()
 	mid_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid_split.clip_contents = true
 	mid_split.add_theme_constant_override("separation", 0)
 	_pose_mode_root.add_child(mid_split)
 
 	# 2A. LEFT DOCK: Select Part & Reset
 	var left_dock := PanelContainer.new()
-	left_dock.custom_minimum_size = Vector2(220, 0)
-	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	left_dock.custom_minimum_size = Vector2(210, 0)
+	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(left_dock)
 
 	var left_vb := VBoxContainer.new()
 	left_vb.add_theme_constant_override("separation", 5)
-	left_dock.add_child(left_vb)
+	_wrap_panel_vscroll(left_dock, left_vb)
 
 	left_vb.add_child(_make_section_label("Select Part to Move"))
 	for i in range(PARTS.size()):
@@ -637,13 +646,13 @@ func _build_ui() -> void:
 
 	# 2C. RIGHT DOCK: Transform & Layer Z-Order
 	var right_dock := PanelContainer.new()
-	right_dock.custom_minimum_size = Vector2(250, 0)
-	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	right_dock.custom_minimum_size = Vector2(240, 0)
+	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(right_dock)
 
 	var right_vb := VBoxContainer.new()
 	right_vb.add_theme_constant_override("separation", 5)
-	right_dock.add_child(right_vb)
+	_wrap_panel_vscroll(right_dock, right_vb)
 
 	right_vb.add_child(_make_section_label("Selected Part Transform"))
 	_x_spin = _add_spin_row(right_vb, "Pos X:", -80.0, 80.0, 0.5)
@@ -684,13 +693,7 @@ func _build_ui() -> void:
 	right_vb.add_child(hint)
 
 	# 3. BOTTOM TIMELINE BAR (Animation Preview, Scope, Flip, Frame Scrubber)
-	var bot_bar := PanelContainer.new()
-	bot_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 5))
-	_pose_mode_root.add_child(bot_bar)
-
-	var bot_hbox := HBoxContainer.new()
-	bot_hbox.add_theme_constant_override("separation", 6)
-	bot_bar.add_child(bot_hbox)
+	var bot_hbox := _make_flow_bar(_pose_mode_root, Color(0.10, 0.13, 0.19), 5, 6, 4)
 
 	_anim_play_btn = Button.new()
 	_anim_play_btn.text = "▶ Play"
@@ -1703,13 +1706,7 @@ func _build_ui_setter_tab(main_vbox: VBoxContainer) -> void:
 	main_vbox.add_child(_ui_setter_root)
 
 	# 1. TOP TOOLBAR
-	var top_bar := PanelContainer.new()
-	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
-	_ui_setter_root.add_child(top_bar)
-
-	var top_hbox := HBoxContainer.new()
-	top_hbox.add_theme_constant_override("separation", 10)
-	top_bar.add_child(top_hbox)
+	var top_hbox := _make_flow_bar(_ui_setter_root, Color(0.10, 0.13, 0.19), 8, 8, 6)
 
 	var title := Label.new()
 	title.text = "IN-GAME UI SETTER"
@@ -1739,10 +1736,6 @@ func _build_ui_setter_tab(main_vbox: VBoxContainer) -> void:
 			_ui_canvas.queue_redraw()
 	)
 	top_hbox.add_child(snap_btn)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_hbox.add_child(spacer)
 
 	var reset_sel_btn := Button.new()
 	reset_sel_btn.text = "Reset Selected"
@@ -1774,7 +1767,7 @@ func _build_ui_setter_tab(main_vbox: VBoxContainer) -> void:
 
 	var save_btn := Button.new()
 	save_btn.text = "SAVE AS DEFAULT"
-	save_btn.custom_minimum_size = Vector2(160, 34)
+	save_btn.custom_minimum_size = Vector2(150, 32)
 	save_btn.modulate = Color(0.45, 1.0, 0.65)
 	save_btn.pressed.connect(_save_ui_layout_as_default)
 	top_hbox.add_child(save_btn)
@@ -1783,18 +1776,22 @@ func _build_ui_setter_tab(main_vbox: VBoxContainer) -> void:
 	var mid_split := HBoxContainer.new()
 	mid_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid_split.clip_contents = true
 	mid_split.add_theme_constant_override("separation", 0)
 	_ui_setter_root.add_child(mid_split)
 
 	# 2A. LEFT DOCK: UI Elements List
 	var left_dock := PanelContainer.new()
-	left_dock.custom_minimum_size = Vector2(220, 0)
-	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	left_dock.custom_minimum_size = Vector2(210, 0)
+	left_dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_dock.clip_contents = true
+	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(left_dock)
 
 	var left_scroll := ScrollContainer.new()
 	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	left_dock.add_child(left_scroll)
 
 	var left_vb := VBoxContainer.new()
@@ -1830,13 +1827,13 @@ func _build_ui_setter_tab(main_vbox: VBoxContainer) -> void:
 
 	# 2C. RIGHT DOCK: Selected Element Inspector
 	var right_dock := PanelContainer.new()
-	right_dock.custom_minimum_size = Vector2(265, 0)
-	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	right_dock.custom_minimum_size = Vector2(250, 0)
+	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(right_dock)
 
 	var right_vb := VBoxContainer.new()
 	right_vb.add_theme_constant_override("separation", 10)
-	right_dock.add_child(right_vb)
+	_wrap_panel_vscroll(right_dock, right_vb)
 
 	_ui_sel_lbl = _make_section_label("Selected: Move Stick")
 	_ui_sel_lbl.modulate = Color(0.45, 0.95, 1.0)
@@ -2286,13 +2283,7 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	main_vbox.add_child(_range_mode_root)
 
 	# 1. TOP TOOLBAR
-	var top_bar := PanelContainer.new()
-	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
-	_range_mode_root.add_child(top_bar)
-
-	var top_hbox := HBoxContainer.new()
-	top_hbox.add_theme_constant_override("separation", 10)
-	top_bar.add_child(top_hbox)
+	var top_hbox := _make_flow_bar(_range_mode_root, Color(0.10, 0.13, 0.19), 8, 8, 6)
 
 	var title := Label.new()
 	title.text = "WEAPONS STUDIO"
@@ -2303,20 +2294,16 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	_subtab_muzzle_btn = Button.new()
 	_subtab_muzzle_btn.text = "Muzzle / Aim Point"
 	_subtab_muzzle_btn.toggle_mode = true
-	_subtab_muzzle_btn.custom_minimum_size = Vector2(160, 32)
+	_subtab_muzzle_btn.custom_minimum_size = Vector2(150, 32)
 	_subtab_muzzle_btn.pressed.connect(func(): _switch_weapon_subtab(0))
 	top_hbox.add_child(_subtab_muzzle_btn)
 
 	_subtab_range_btn = Button.new()
 	_subtab_range_btn.text = "Range Setter (Bunker)"
 	_subtab_range_btn.toggle_mode = true
-	_subtab_range_btn.custom_minimum_size = Vector2(175, 32)
+	_subtab_range_btn.custom_minimum_size = Vector2(165, 32)
 	_subtab_range_btn.pressed.connect(func(): _switch_weapon_subtab(1))
 	top_hbox.add_child(_subtab_range_btn)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_hbox.add_child(spacer)
 
 	var reset_sel_btn := Button.new()
 	reset_sel_btn.text = "Reset Gun"
@@ -2357,7 +2344,7 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 
 	var save_btn := Button.new()
 	save_btn.text = "SAVE WEAPONS"
-	save_btn.custom_minimum_size = Vector2(150, 34)
+	save_btn.custom_minimum_size = Vector2(140, 32)
 	save_btn.modulate = Color(0.45, 1.0, 0.65)
 	save_btn.pressed.connect(_save_weapon_ranges)
 	top_hbox.add_child(save_btn)
@@ -2366,18 +2353,22 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	var mid_split := HBoxContainer.new()
 	mid_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid_split.clip_contents = true
 	mid_split.add_theme_constant_override("separation", 0)
 	_range_mode_root.add_child(mid_split)
 
-	# 2A. LEFT DOCK: All 18 Weapons
+	# 2A. LEFT DOCK: All Weapons
 	var left_dock := PanelContainer.new()
-	left_dock.custom_minimum_size = Vector2(230, 0)
-	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	left_dock.custom_minimum_size = Vector2(210, 0)
+	left_dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_dock.clip_contents = true
+	left_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(left_dock)
 
 	var left_scroll := ScrollContainer.new()
 	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	left_dock.add_child(left_scroll)
 
 	var left_vb := VBoxContainer.new()
@@ -2423,13 +2414,16 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 
 	# 2C. RIGHT DOCK: Weapon Stats & Range Inspector
 	var right_dock := PanelContainer.new()
-	right_dock.custom_minimum_size = Vector2(280, 0)
-	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 12))
+	right_dock.custom_minimum_size = Vector2(265, 0)
+	right_dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_dock.clip_contents = true
+	right_dock.add_theme_stylebox_override("panel", _make_dock_style(Color(0.11, 0.14, 0.20), 10))
 	mid_split.add_child(right_dock)
 
 	var right_scroll := ScrollContainer.new()
 	right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	right_dock.add_child(right_scroll)
 
 	var right_vb := VBoxContainer.new()
@@ -2920,19 +2914,12 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	main_vbox.add_child(_coin_mode_root)
 
 	# Top bar
-	var top_bar := PanelContainer.new()
-	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
-	_coin_mode_root.add_child(top_bar)
-
-	var top_h := HBoxContainer.new()
-	top_h.add_theme_constant_override("separation", 12)
-	top_bar.add_child(top_h)
+	var top_h := _make_flow_bar(_coin_mode_root, Color(0.10, 0.13, 0.19), 8, 10, 6)
 
 	var hdr := Label.new()
 	hdr.text = "NC ECONOMY & SKIN / AGENT PRICE EDITOR"
 	hdr.add_theme_font_size_override("font_size", 16)
 	hdr.modulate = Color(1.0, 0.86, 0.30)
-	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_h.add_child(hdr)
 
 	var reset_btn := Button.new()
@@ -2948,7 +2935,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 
 	var save_btn := Button.new()
 	save_btn.text = "SAVE NC ECONOMY"
-	save_btn.custom_minimum_size = Vector2(180, 32)
+	save_btn.custom_minimum_size = Vector2(165, 32)
 	save_btn.modulate = Color(0.42, 1.0, 0.62)
 	save_btn.pressed.connect(func():
 		var ok: bool = ProfileManager.save_economy_config(true)
@@ -2961,18 +2948,19 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	var split := HBoxContainer.new()
 	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.clip_contents = true
 	split.add_theme_constant_override("separation", 0)
 	_coin_mode_root.add_child(split)
 
-	# LEFT COLUMN: Rewards + Agent Price + Dev Balance
+	# LEFT COLUMN: Rewards + Agent Price + Dev Balance (scrollable so it never forces split taller than screen)
 	var left_panel := PanelContainer.new()
-	left_panel.custom_minimum_size = Vector2(310, 0)
-	left_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.08, 0.11, 0.16), 14))
+	left_panel.custom_minimum_size = Vector2(280, 0)
+	left_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.08, 0.11, 0.16), 12))
 	split.add_child(left_panel)
 
 	var lv := VBoxContainer.new()
 	lv.add_theme_constant_override("separation", 10)
-	left_panel.add_child(lv)
+	_wrap_panel_vscroll(left_panel, lv)
 
 	var rw_hdr := _make_section_label("MATCH NC REWARDS")
 	rw_hdr.modulate = Color(1.0, 0.86, 0.32)
@@ -3132,11 +3120,15 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 
 	# MIDDLE COLUMN: Gun Selector
 	var mid_panel := PanelContainer.new()
-	mid_panel.custom_minimum_size = Vector2(240, 0)
+	mid_panel.custom_minimum_size = Vector2(210, 0)
+	mid_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid_panel.clip_contents = true
 	mid_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.06, 0.09, 0.14), 10))
 	split.add_child(mid_panel)
 
 	var mv := VBoxContainer.new()
+	mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mv.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mv.add_theme_constant_override("separation", 6)
 	mid_panel.add_child(mv)
 
@@ -3145,6 +3137,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	mv.add_child(gun_hdr)
 
 	var gun_scroll := ScrollContainer.new()
+	gun_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gun_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	gun_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	mv.add_child(gun_scroll)
@@ -3169,7 +3162,8 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	var right_panel := PanelContainer.new()
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 14))
+	right_panel.clip_contents = true
+	right_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 12))
 	split.add_child(right_panel)
 
 	var rv := VBoxContainer.new()
@@ -3217,6 +3211,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	rv.add_child(HSeparator.new())
 
 	var skin_scroll := ScrollContainer.new()
+	skin_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	skin_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	skin_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	rv.add_child(skin_scroll)
@@ -3373,13 +3368,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	main_vbox.add_child(_ach_crate_root)
 
 	# Sub-tab bar
-	var top_bar := PanelContainer.new()
-	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
-	_ach_crate_root.add_child(top_bar)
-
-	var top_h := HBoxContainer.new()
-	top_h.add_theme_constant_override("separation", 10)
-	top_bar.add_child(top_h)
+	var top_h := _make_flow_bar(_ach_crate_root, Color(0.10, 0.13, 0.19), 8, 8, 6)
 
 	var hdr := Label.new()
 	hdr.text = "ACHIEVEMENTS & CRATES EDITOR"
@@ -3390,24 +3379,20 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	_ac_sub_ach_btn = Button.new()
 	_ac_sub_ach_btn.text = "Achievements (100)"
 	_ac_sub_ach_btn.toggle_mode = true
-	_ac_sub_ach_btn.custom_minimum_size = Vector2(165, 32)
+	_ac_sub_ach_btn.custom_minimum_size = Vector2(155, 32)
 	_ac_sub_ach_btn.pressed.connect(func(): _switch_ac_subtab(0))
 	top_h.add_child(_ac_sub_ach_btn)
 
 	_ac_sub_crate_btn = Button.new()
 	_ac_sub_crate_btn.text = "Crate Loot Tables"
 	_ac_sub_crate_btn.toggle_mode = true
-	_ac_sub_crate_btn.custom_minimum_size = Vector2(165, 32)
+	_ac_sub_crate_btn.custom_minimum_size = Vector2(155, 32)
 	_ac_sub_crate_btn.pressed.connect(func(): _switch_ac_subtab(1))
 	top_h.add_child(_ac_sub_crate_btn)
 
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_h.add_child(sp)
-
 	var save_all_btn := Button.new()
 	save_all_btn.text = "SAVE ACHIEVEMENTS & CRATES"
-	save_all_btn.custom_minimum_size = Vector2(230, 32)
+	save_all_btn.custom_minimum_size = Vector2(220, 32)
 	save_all_btn.modulate = Color(0.42, 1.0, 0.62)
 	save_all_btn.pressed.connect(func():
 		var ok1: bool = AchievementManager.save_config(true)
@@ -3425,16 +3410,20 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	var ach_split := HBoxContainer.new()
 	ach_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ach_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ach_split.clip_contents = true
 	ach_split.add_theme_constant_override("separation", 0)
 	_ach_crate_root.add_child(ach_split)
 	_ac_ach_panel = ach_split
 
 	var al_panel := PanelContainer.new()
-	al_panel.custom_minimum_size = Vector2(360, 0)
+	al_panel.custom_minimum_size = Vector2(300, 0)
+	al_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	al_panel.clip_contents = true
 	al_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 10))
 	ach_split.add_child(al_panel)
 
 	var al_sc := ScrollContainer.new()
+	al_sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	al_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	al_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	al_panel.add_child(al_sc)
@@ -3459,12 +3448,12 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 
 	var ar_panel := PanelContainer.new()
 	ar_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ar_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.09, 0.12, 0.18), 16))
+	ar_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.09, 0.12, 0.18), 14))
 	ach_split.add_child(ar_panel)
 
 	var ar_vb := VBoxContainer.new()
 	ar_vb.add_theme_constant_override("separation", 12)
-	ar_panel.add_child(ar_vb)
+	_wrap_panel_vscroll(ar_panel, ar_vb)
 
 	_ac_ach_title_lbl = Label.new()
 	_ac_ach_title_lbl.add_theme_font_size_override("font_size", 20)
@@ -3555,6 +3544,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	var cr_root := VBoxContainer.new()
 	cr_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cr_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cr_root.clip_contents = true
 	cr_root.add_theme_constant_override("separation", 10)
 	_ach_crate_root.add_child(cr_root)
 	_ac_crate_panel = cr_root
@@ -3562,21 +3552,26 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	var cr_pad := PanelContainer.new()
 	cr_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cr_pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cr_pad.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 14))
+	cr_pad.clip_contents = true
+	cr_pad.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 12))
 	cr_root.add_child(cr_pad)
 
 	var cr_vb := VBoxContainer.new()
+	cr_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cr_vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cr_vb.add_theme_constant_override("separation", 10)
 	cr_pad.add_child(cr_vb)
 
-	var cr_sel_row := HBoxContainer.new()
-	cr_sel_row.add_theme_constant_override("separation", 10)
+	var cr_sel_row := HFlowContainer.new()
+	cr_sel_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cr_sel_row.add_theme_constant_override("h_separation", 8)
+	cr_sel_row.add_theme_constant_override("v_separation", 6)
 	cr_vb.add_child(cr_sel_row)
 
 	_ac_crate_std_btn = Button.new()
 	_ac_crate_std_btn.text = "Supply Crate (1,000 NC / 1 Free Daily)"
 	_ac_crate_std_btn.toggle_mode = true
-	_ac_crate_std_btn.custom_minimum_size = Vector2(280, 34)
+	_ac_crate_std_btn.custom_minimum_size = Vector2(265, 32)
 	_ac_crate_std_btn.pressed.connect(func():
 		_ac_crate_key = "standard"
 		_refresh_ac_crate_list()
@@ -3586,7 +3581,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	_ac_crate_prem_btn = Button.new()
 	_ac_crate_prem_btn.text = "Premium Crate (2,000 NC)"
 	_ac_crate_prem_btn.toggle_mode = true
-	_ac_crate_prem_btn.custom_minimum_size = Vector2(240, 34)
+	_ac_crate_prem_btn.custom_minimum_size = Vector2(220, 32)
 	_ac_crate_prem_btn.pressed.connect(func():
 		_ac_crate_key = "premium"
 		_refresh_ac_crate_list()
@@ -3594,8 +3589,6 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_sel_row.add_child(_ac_crate_prem_btn)
 
 	_ac_crate_total_lbl = Label.new()
-	_ac_crate_total_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_ac_crate_total_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ac_crate_total_lbl.add_theme_font_size_override("font_size", 15)
 	_ac_crate_total_lbl.modulate = Color(1.0, 0.88, 0.34)
 	cr_sel_row.add_child(_ac_crate_total_lbl)
@@ -3611,8 +3604,10 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_sel_row.add_child(rst_cr_btn)
 
 	# Add Item Bar
-	var add_row := HBoxContainer.new()
-	add_row.add_theme_constant_override("separation", 8)
+	var add_row := HFlowContainer.new()
+	add_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add_row.add_theme_constant_override("h_separation", 8)
+	add_row.add_theme_constant_override("v_separation", 6)
 	cr_vb.add_child(add_row)
 
 	_ac_add_type_opt = OptionButton.new()
@@ -3669,6 +3664,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_vb.add_child(HSeparator.new())
 
 	var cr_sc := ScrollContainer.new()
+	cr_sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cr_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cr_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	cr_vb.add_child(cr_sc)
@@ -3679,6 +3675,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	cr_sc.add_child(_ac_crate_list_box)
 
 	_ac_crate_status_lbl = Label.new()
+	_ac_crate_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_ac_crate_status_lbl.text = "Add or adjust crate item drop rates (%), then click SAVE ACHIEVEMENTS & CRATES."
 	_ac_crate_status_lbl.modulate = Color(0.75, 0.86, 0.96)
 	cr_vb.add_child(_ac_crate_status_lbl)

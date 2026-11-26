@@ -538,6 +538,7 @@ func _ready() -> void:
 	player_name = _default_name()
 	apply_archetype_preset(0, false)
 	load_profile()
+	load_career_leaderboards()
 
 
 func _default_name() -> String:
@@ -730,6 +731,8 @@ func mark_item_used(item_key: String) -> void:
 
 
 func is_agent_new(agent_id: int) -> bool:
+	if STARTER_UNLOCKED_AGENTS.has(agent_id):
+		return false
 	return is_agent_unlocked(agent_id, false) and not has_used_item(agent_item_key(agent_id))
 
 
@@ -807,7 +810,10 @@ func mark_dummy_part_used(prop_name: String, part_id: int) -> void:
 
 
 func is_dummy_new(dummy_idx: int) -> bool:
-	return dummy_idx >= 0 and dummy_idx < CUSTOM_DUMMIES.size() and not has_used_item(dummy_item_key(dummy_idx))
+	if dummy_idx < 0 or dummy_idx >= CUSTOM_DUMMIES.size():
+		return false
+	var dk: String = dummy_item_key(dummy_idx)
+	return flagged_new_keys.has(dk) and not has_used_item(dk)
 
 
 func mark_dummy_used(dummy_idx: int) -> void:
@@ -1947,3 +1953,124 @@ static func sanitize_avatar(d: Dictionary) -> Dictionary:
 		"m4a1_rail_mod": clampi(int(d.get("m4a1_rail_mod", 0)), 0, RAIL_MOD_NAMES.size() - 1),
 		"taunt_id": clampi(int(d.get("taunt_id", 0)), 0, AgentData.TAUNTS.size() - 1)
 	}
+
+
+const CAREER_LEADERBOARD_PATH: String = "user://career_leaderboards.json"
+const MAX_TOP_MATCHES: int = 10
+
+var career_leaderboards: Dictionary = {}
+
+
+static func _default_career_bucket() -> Dictionary:
+	return {
+		"career": {
+			"matches": 0,
+			"wins": 0,
+			"kills": 0,
+			"deaths": 0,
+			"assists": 0,
+			"best_score": 0,
+			"best_kills": 0,
+			"best_combo": 0
+		},
+		"recent_matches": [],
+		"top_matches": []
+	}
+
+
+func _ensure_career_structure() -> void:
+	for cat in ["solo", "local"]:
+		if not career_leaderboards.has(cat) or not (career_leaderboards[cat] is Dictionary):
+			career_leaderboards[cat] = _default_career_bucket()
+		var bucket: Dictionary = career_leaderboards[cat] as Dictionary
+		if not bucket.has("career") or not (bucket["career"] is Dictionary):
+			bucket["career"] = _default_career_bucket()["career"]
+		if not bucket.has("recent_matches") or not (bucket["recent_matches"] is Array):
+			bucket["recent_matches"] = (bucket.get("top_matches", []) as Array).duplicate(true)
+	if not career_leaderboards.has("top_kills") or not (career_leaderboards["top_kills"] is Array):
+		career_leaderboards["top_kills"] = []
+
+
+func load_career_leaderboards() -> void:
+	career_leaderboards = {
+		"solo": _default_career_bucket(),
+		"local": _default_career_bucket(),
+		"top_kills": []
+	}
+	if not FileAccess.file_exists(CAREER_LEADERBOARD_PATH):
+		return
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CAREER_LEADERBOARD_PATH))
+	if parsed is Dictionary:
+		career_leaderboards = parsed as Dictionary
+	_ensure_career_structure()
+
+
+func save_career_leaderboards() -> void:
+	_ensure_career_structure()
+	var f := FileAccess.open(CAREER_LEADERBOARD_PATH, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(career_leaderboards, "\t"))
+		f.close()
+
+
+func get_career_data(category: String) -> Dictionary:
+	_ensure_career_structure()
+	var cat: String = "local" if category == "local" else "solo"
+	return (career_leaderboards[cat] as Dictionary).duplicate(true)
+
+
+func get_top_kills_records() -> Array:
+	_ensure_career_structure()
+	return (career_leaderboards.get("top_kills", []) as Array).duplicate(true)
+
+
+func record_match_result(entry: Dictionary) -> void:
+	_ensure_career_structure()
+	var cat: String = "local" if str(entry.get("category", "solo")) == "local" else "solo"
+	var bucket: Dictionary = career_leaderboards[cat] as Dictionary
+	var c: Dictionary = bucket["career"] as Dictionary
+	var m_kills: int = int(entry.get("kills", 0))
+	var m_deaths: int = int(entry.get("deaths", 0))
+	var m_assists: int = int(entry.get("assists", 0))
+	var m_score: int = int(entry.get("score", 0))
+	var m_combo: int = int(entry.get("max_combo", 0))
+	c["matches"] = int(c.get("matches", 0)) + 1
+	if bool(entry.get("local_won", false)):
+		c["wins"] = int(c.get("wins", 0)) + 1
+	c["kills"] = int(c.get("kills", 0)) + m_kills
+	c["deaths"] = int(c.get("deaths", 0)) + m_deaths
+	c["assists"] = int(c.get("assists", 0)) + m_assists
+	c["best_score"] = maxi(int(c.get("best_score", 0)), m_score)
+	c["best_kills"] = maxi(int(c.get("best_kills", 0)), m_kills)
+	c["best_combo"] = maxi(int(c.get("best_combo", 0)), m_combo)
+
+	# 1) Newest 10 matches (Valorant-style Career history, most recent first)
+	var recent: Array = bucket["recent_matches"] as Array
+	recent.insert(0, entry.duplicate(true))
+	if recent.size() > MAX_TOP_MATCHES:
+		recent.resize(MAX_TOP_MATCHES)
+	bucket["recent_matches"] = recent
+
+	# 2) Combined Top 10 Most Kills records (mine only, across Solo & Multiplayer)
+	var top_k: Array = career_leaderboards["top_kills"] as Array
+	top_k.append(entry.duplicate(true))
+	top_k.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ka: int = int(a.get("kills", 0))
+		var kb: int = int(b.get("kills", 0))
+		if ka != kb:
+			return ka > kb
+		var sa: int = int(a.get("score", 0))
+		var sb: int = int(b.get("score", 0))
+		if sa != sb:
+			return sa > sb
+		var da: int = int(a.get("deaths", 0))
+		var db: int = int(b.get("deaths", 0))
+		if da != db:
+			return da < db
+		return int(a.get("unix_time", 0)) > int(b.get("unix_time", 0))
+	)
+	if top_k.size() > MAX_TOP_MATCHES:
+		top_k.resize(MAX_TOP_MATCHES)
+	career_leaderboards["top_kills"] = top_k
+	save_career_leaderboards()
+
