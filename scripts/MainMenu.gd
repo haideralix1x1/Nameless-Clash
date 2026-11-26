@@ -216,15 +216,16 @@ func _build_ui() -> void:
 	econ_bar.add_child(coin_pill)
 
 	_coin_pill_lbl = Label.new()
-	_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+	_coin_pill_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 	_coin_pill_lbl.add_theme_font_size_override("font_size", 17)
 	_coin_pill_lbl.modulate = Color(1.0, 0.88, 0.30)
 	coin_pill.add_child(_coin_pill_lbl)
 	ProfileManager.coins_changed.connect(func(new_c: int):
+		var c_str: String = ProfileManager.format_coins(new_c)
 		if is_instance_valid(_coin_pill_lbl):
-			_coin_pill_lbl.text = "COINS: %d" % new_c
+			_coin_pill_lbl.text = "COINS: %s" % c_str
 		if is_instance_valid(_shop_coin_lbl):
-			_shop_coin_lbl.text = "COINS: %d" % new_c
+			_shop_coin_lbl.text = "COINS: %s" % c_str
 	)
 
 	var top_shop_btn := _make_arcade_button("GUN SKIN SHOP", Color(1.0, 0.82, 0.24), 40.0, 16, Color(0.24, 0.17, 0.05, 0.98))
@@ -597,7 +598,7 @@ func _build_agent_select_overlay() -> void:
 				add_child(sfx)
 				sfx.play()
 				if is_instance_valid(_coin_pill_lbl):
-					_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+					_coin_pill_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 				if is_instance_valid(_preview):
 					_preview.refresh_from_profile()
 				_update_loadout_label()
@@ -831,7 +832,7 @@ func _refresh_agent_select_ui() -> void:
 	if is_instance_valid(_agent_kit_title):
 		var lock_tag: String = ""
 		if not ProfileManager.is_agent_unlocked(idx, false):
-			lock_tag = "  (FREE IN PRACTICE)" if _agent_select_for_practice else ("  (%d COINS)" % unlock_price)
+			lock_tag = "  (FREE IN PRACTICE)" if _agent_select_for_practice else ("  (%s COINS)" % ProfileManager.format_coins(unlock_price))
 		_agent_kit_title.text = "Agent Clash  —  %s (%s)%s" % [str(ag["agent_name"]).to_upper(), str(ag["role"]), lock_tag]
 	if is_instance_valid(_agent_preview_arena) and _agent_preview_arena.has_method("set_agent"):
 		_agent_preview_arena.set_agent(idx)
@@ -859,7 +860,7 @@ func _refresh_agent_select_ui() -> void:
 			_agent_play_btn.modulate = Color.WHITE
 		else:
 			var can_afford: bool = ProfileManager.coins >= unlock_price
-			_agent_play_btn.text = "UNLOCK (%d COINS)" % unlock_price
+			_agent_play_btn.text = "UNLOCK (%s COINS)" % ProfileManager.format_coins(unlock_price)
 			_agent_play_btn.disabled = not can_afford
 			_agent_play_btn.modulate = Color(1.0, 0.88, 0.30) if can_afford else Color(0.60, 0.58, 0.64)
 	var sorted_order: Array[int] = _get_sorted_agent_indices()
@@ -887,7 +888,7 @@ func _refresh_agent_select_ui() -> void:
 		elif _agent_select_for_practice:
 			card.text = "  %s\n  (FREE IN PRACTICE)" % str(c_ag["agent_name"])
 		else:
-			card.text = "  %s\n  %d COINS" % [str(c_ag["agent_name"]), unlock_price]
+			card.text = "  %s\n  %s COINS" % [str(c_ag["agent_name"]), ProfileManager.format_coins(unlock_price)]
 		var lock_node: Node = card.get_node_or_null("LockIcon")
 		if lock_node is Control:
 			(lock_node as Control).visible = not playable_now
@@ -2238,7 +2239,7 @@ func _build_gun_shop_overlay() -> void:
 	hdr.add_child(title)
 
 	_shop_coin_lbl = Label.new()
-	_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+	_shop_coin_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 	_shop_coin_lbl.add_theme_font_size_override("font_size", 19)
 	_shop_coin_lbl.modulate = Color(1.0, 0.90, 0.30)
 	hdr.add_child(_shop_coin_lbl)
@@ -2340,7 +2341,7 @@ func _open_gun_shop() -> void:
 	_hub_container.visible = false
 	_shop_overlay.visible = true
 	if is_instance_valid(_shop_coin_lbl):
-		_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+		_shop_coin_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 	_select_shop_weapon(_shop_selected_weapon_id)
 
 
@@ -2366,9 +2367,9 @@ func _refresh_shop_skins() -> void:
 	_shop_gun_preview.texture = WeaponData.get_weapon_atlas_texture(wid, int(prev_def.get("sheet_row", 0)))
 	_shop_gun_preview.modulate = ProfileManager.get_gun_skin_tint(wid, prev_key)
 	if is_instance_valid(_shop_coin_lbl):
-		_shop_coin_lbl.text = "COINS: %d" % ProfileManager.coins
+		_shop_coin_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 	if is_instance_valid(_coin_pill_lbl):
-		_coin_pill_lbl.text = "COINS: %d" % ProfileManager.coins
+		_coin_pill_lbl.text = "COINS: %s" % ProfileManager.format_coins(ProfileManager.coins)
 
 	for c in _shop_skin_grid.get_children():
 		c.queue_free()
@@ -2428,7 +2429,7 @@ func _refresh_shop_skins() -> void:
 		info_v.add_child(nl)
 
 		var pl := Label.new()
-		pl.text = "EQUIPPED" if equipped else ("OWNED" if owned else ("%d COINS" % price))
+		pl.text = "EQUIPPED" if equipped else ("OWNED" if owned else ("%s COINS" % ProfileManager.format_coins(price)))
 		pl.add_theme_font_size_override("font_size", 12)
 		pl.modulate = Color(0.35, 0.96, 0.55) if equipped else (Color(0.75, 0.85, 0.96) if owned else Color(1.0, 0.84, 0.28))
 		pl.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -2456,7 +2457,7 @@ func _refresh_shop_skins() -> void:
 			act_btn.pressed.connect(func():
 				if ProfileManager.buy_gun_skin(wid, skey):
 					_shop_preview_skin_key = skey
-					_shop_status_lbl.text = "Purchased & equipped %s for %d coins!" % [sname, price]
+					_shop_status_lbl.text = "Purchased & equipped %s for %s coins!" % [sname, ProfileManager.format_coins(price)]
 					_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
 					var sfx := AudioStreamPlayer.new()
 					sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
@@ -2466,7 +2467,7 @@ func _refresh_shop_skins() -> void:
 					sfx.play()
 					_refresh_shop_skins()
 				else:
-					_shop_status_lbl.text = "Not enough coins! Need %d coins." % price
+					_shop_status_lbl.text = "Not enough coins! Need %s coins." % ProfileManager.format_coins(price)
 					_shop_status_lbl.modulate = Color(1.0, 0.42, 0.35)
 			)
 		row.add_child(act_btn)

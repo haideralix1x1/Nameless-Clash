@@ -1257,7 +1257,13 @@ func get_current_weapon() -> WeaponData:
 
 
 func _fire_weapon(is_burst_followup: bool = false) -> void:
-	if not is_burst_followup:
+	var shots_to_fire: int = 1
+	var immediate_burst: bool = (not is_burst_followup and _weapon.burst_count > 1 and _weapon.burst_interval <= 0.001)
+	if immediate_burst:
+		shots_to_fire = mini(_weapon.burst_count, maxi(1, current_ammo))
+		_burst_shots_left = 0
+		_burst_shot_timer = 0.0
+	elif not is_burst_followup:
 		_fire_cooldown = _weapon.fire_interval
 		if is_bot:
 			var bot_diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
@@ -1272,21 +1278,30 @@ func _fire_weapon(is_burst_followup: bool = false) -> void:
 				var b_mult: float = 1.85 if bot_diff_b == 0 else (1.35 if bot_diff_b == 1 else 1.0)
 				_fire_cooldown = _weapon.burst_interval * float(_burst_shots_left) + _weapon.fire_interval * b_mult
 
-	var shots_to_fire: int = 1
+	if immediate_burst:
+		_fire_cooldown = _weapon.fire_interval
+		if is_bot:
+			var bot_diff_i: int = clampi(NetworkManager.bot_difficulty, 0, 2)
+			_fire_cooldown *= (1.85 if bot_diff_i == 0 else (1.35 if bot_diff_i == 1 else 1.0))
+
 	current_ammo = maxi(0, current_ammo - shots_to_fire)
 	_emit_ammo()
 
 	var fire_angle: float = aim_angle
 	var aim_dir: Vector2 = Vector2.from_angle(fire_angle)
-	velocity -= aim_dir * _weapon.recoil_impulse * (1.25 if shots_to_fire == 2 else 1.0)
+	velocity -= aim_dir * _weapon.recoil_impulse * (1.25 if (not immediate_burst and shots_to_fire == 2) else 1.0)
 	add_screen_shake(clampf(_weapon.recoil_impulse * 0.004, 0.15, 0.85))
 
 	_fire_anim_timer = 0.14
 	_update_visual_state(0.0)
 	_apply_weapon_visuals()
 	_sync_muzzle_positions(fire_angle)
-	var muzzle_positions := PackedVector2Array([_get_safe_muzzle_pos(_muzzle_primary.global_position)])
-	if shots_to_fire == 2:
+	var base_m: Vector2 = _get_safe_muzzle_pos(_muzzle_primary.global_position)
+	var muzzle_positions := PackedVector2Array([base_m])
+	if immediate_burst:
+		for bi in range(1, shots_to_fire):
+			muzzle_positions.append(base_m + aim_dir * (float(bi) * 14.0))
+	elif shots_to_fire == 2:
 		muzzle_positions.append(_get_safe_muzzle_pos(_muzzle_secondary.global_position))
 
 	# Predictable vertical recoil bias (positive climbs upward; Kriss Vector negative compensates downward)
@@ -1380,7 +1395,7 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 					# Shotguns deal strong burst at close-to-mid range (~315 px) and instant kill at close range
 					b.max_lifetime = 0.34
 					b.knockback_mult = 1.5 / float(w.pellet_count)
-					if w.id == 5 or w.id == 6 or w.id == 21:
+					if w.id == 5 or w.id == 6:
 						b.close_lethal_dist = 135.0
 				else:
 					b.max_lifetime = w.custom_lifetime
@@ -1804,7 +1819,6 @@ func _apply_weapon_visuals() -> void:
 		17: _primary_weapon.scale = Vector2(0.27, 0.27)
 		19: _primary_weapon.scale = Vector2(0.20, 0.20)
 		20: _primary_weapon.scale = Vector2(0.21, 0.21)
-		21: _primary_weapon.scale = Vector2(0.26, 0.26)
 		22, 23: _primary_weapon.scale = Vector2(0.25, 0.25)
 		_: _primary_weapon.scale = Vector2(0.24, 0.24)
 	_secondary_weapon.texture = spec["tex"] as Texture2D
@@ -1827,7 +1841,6 @@ static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) 
 		18: return Vector2(42.0, -3.5) # Nade Gun
 		19: return Vector2(34.0, -4.0) # Stun Gun
 		20: return Vector2(38.5, -4.5) # Suppressed Pistol
-		21: return Vector2(46.0, -3.0) # Black Shotgun
 		22: return Vector2(44.5, -2.5) # OTs-14 Groza
 		23: return Vector2(45.0, -2.5) # M416
 	var f: int = sprite_frame if sprite_frame >= 0 else clampi(weapon_id, 0, 10)
@@ -2155,21 +2168,35 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	_damage_by_attacker.clear()
 	NetworkManager.report_kill(attacker_id, peer_id, weapon_name, attacker_name, player_name, assist_ids)
 
+	var k_wid: int = -1
+	var k_skin: String = "default"
+	for p in get_tree().get_nodes_in_group("players"):
+		if is_instance_valid(p) and int(p.get("peer_id")) == attacker_id:
+			k_wid = int(p.get("current_weapon_id"))
+			var k_local: bool = bool(p.get("is_local_human"))
+			if k_local:
+				k_skin = ProfileManager.get_equipped_gun_skin(k_wid)
+			else:
+				var k_eq: Variant = p.get("equipped_gun_skins")
+				if k_eq is Dictionary:
+					k_skin = str((k_eq as Dictionary).get(str(k_wid), "default"))
+			break
+
 	if NetworkManager.is_network_active():
-		announce_death_rpc.rpc()
+		announce_death_rpc.rpc(k_wid, k_skin)
 	else:
-		_on_death_visuals()
+		_on_death_visuals(k_wid, k_skin)
 
 	if is_local_human:
 		died_signal.emit(RESPAWN_TIME)
 
 
 @rpc("any_peer", "call_local", "reliable")
-func announce_death_rpc() -> void:
-	_on_death_visuals()
+func announce_death_rpc(killer_wid: int = -1, killer_skin: String = "default") -> void:
+	_on_death_visuals(killer_wid, killer_skin)
 
 
-func _on_death_visuals() -> void:
+func _on_death_visuals(killer_wid: int = -1, killer_skin: String = "default") -> void:
 	is_dead = true
 	health = 0
 	_weapon_pivot.visible = false
@@ -2185,29 +2212,87 @@ func _on_death_visuals() -> void:
 		exp.max_damage = 0
 		exp.can_deal_damage = false
 		parent_node.add_child(exp)
-		_spawn_rising_soul(parent_node, global_position)
+		_spawn_rising_soul(parent_node, global_position, killer_wid, killer_skin)
 
 
-func _spawn_rising_soul(parent_node: Node, pos: Vector2) -> void:
-	var soul := Sprite2D.new()
-	soul.texture = TEX_SOUL_GHOST
+func _spawn_rising_soul(parent_node: Node, pos: Vector2, killer_wid: int = -1, killer_skin: String = "default") -> void:
+	var is_prem: bool = (killer_wid >= 0 and not killer_skin.is_empty() and killer_skin != "default" and ProfileManager.is_gun_skin_premium(killer_wid, killer_skin))
 	var start_pos: Vector2 = pos + Vector2(0.0, -16.0)
-	soul.global_position = start_pos
-	soul.scale = Vector2(1.15, 1.15)
-	soul.z_index = 26
-	soul.modulate = Color(1.0, 1.0, 1.0, 0.94)
-	parent_node.add_child(soul)
-	var tw := soul.create_tween()
-	tw.tween_method(func(t: float):
-		if not is_instance_valid(soul):
+	if not is_prem:
+		var soul := Sprite2D.new()
+		soul.texture = TEX_SOUL_GHOST
+		soul.global_position = start_pos
+		soul.scale = Vector2(1.15, 1.15)
+		soul.z_index = 26
+		soul.modulate = Color(1.0, 1.0, 1.0, 0.94)
+		parent_node.add_child(soul)
+		var tw := soul.create_tween()
+		tw.tween_method(func(t: float):
+			if not is_instance_valid(soul):
+				return
+			var wave_x: float = sin(t * TAU * 1.5) * 20.0
+			var rise_y: float = -112.0 * (1.0 - pow(1.0 - t, 1.6))
+			soul.global_position = start_pos + Vector2(wave_x, rise_y)
+			soul.rotation = cos(t * TAU * 1.5) * 0.14
+			soul.modulate.a = 0.94 * (1.0 - t * t)
+		, 0.0, 1.0, 1.0)
+		tw.tween_callback(soul.queue_free)
+		return
+
+	var skin_def: Dictionary = ProfileManager.get_gun_skin_def(killer_skin)
+	var scol: Color = skin_def.get("bullet", Color(1.0, 0.85, 0.25)) as Color
+	var root := Node2D.new()
+	root.global_position = start_pos
+	root.z_index = 26
+	parent_node.add_child(root)
+
+	var soul_spr := Sprite2D.new()
+	soul_spr.texture = TEX_SOUL_GHOST
+	soul_spr.scale = Vector2(1.25, 1.25)
+	soul_spr.modulate = scol.lightened(0.28)
+	root.add_child(soul_spr)
+
+	var fx := Node2D.new()
+	root.add_child(fx)
+	var motes: Array[Node2D] = []
+	for i in range(6):
+		var m := Polygon2D.new()
+		match killer_skin:
+			"gold", "arctic":
+				m.polygon = PackedVector2Array([Vector2(0, -5), Vector2(4, 0), Vector2(0, 5), Vector2(-4, 0)])
+			"magma", "crimson_royal":
+				m.polygon = PackedVector2Array([Vector2(0, -6), Vector2(4, 4), Vector2(-4, 4)])
+			"neon", "ocean_wave":
+				m.polygon = PackedVector2Array([Vector2(-4, -2), Vector2(4, -2), Vector2(4, 2), Vector2(-4, 2)])
+			_:
+				m.polygon = PackedVector2Array([Vector2(-3, -3), Vector2(3, -3), Vector2(3, 3), Vector2(-3, 3)])
+		m.color = scol.lightened(0.35) if (i % 2 == 0) else Color.WHITE
+		fx.add_child(m)
+		motes.append(m)
+
+	var tw_p := root.create_tween()
+	tw_p.tween_method(func(t: float):
+		if not is_instance_valid(root):
 			return
-		var wave_x: float = sin(t * TAU * 1.5) * 20.0
-		var rise_y: float = -112.0 * (1.0 - pow(1.0 - t, 1.6))
-		soul.global_position = start_pos + Vector2(wave_x, rise_y)
-		soul.rotation = cos(t * TAU * 1.5) * 0.14
-		soul.modulate.a = 0.94 * (1.0 - t * t)
-	, 0.0, 1.0, 1.0)
-	tw.tween_callback(soul.queue_free)
+		var freq: float = 2.6 if killer_skin == "neon" else (2.0 if killer_skin == "ocean_wave" else 1.5)
+		var amp: float = 26.0 if killer_skin == "ocean_wave" else (14.0 if killer_skin == "gold" else 20.0)
+		var wave_x: float = sin(t * TAU * freq) * amp
+		var rise_y: float = -132.0 * (1.0 - pow(1.0 - t, 1.6))
+		root.global_position = start_pos + Vector2(wave_x, rise_y)
+		soul_spr.rotation = cos(t * TAU * freq) * 0.16
+		var pulse: float = 1.25 + sin(t * TAU * 3.0) * 0.12
+		soul_spr.scale = Vector2(pulse, pulse)
+		var alpha: float = 0.96 * (1.0 - t * t)
+		soul_spr.modulate.a = alpha
+		for mi in range(motes.size()):
+			var mp: Node2D = motes[mi]
+			var ang: float = t * TAU * 1.8 + float(mi) * (TAU / float(motes.size()))
+			var rad: float = 18.0 + t * 22.0
+			mp.position = Vector2(cos(ang) * rad, sin(ang) * rad * 0.65 + t * 18.0)
+			mp.rotation = ang
+			mp.modulate.a = alpha
+	, 0.0, 1.0, 1.15)
+	tw_p.tween_callback(root.queue_free)
 
 
 func _respawn_self() -> void:

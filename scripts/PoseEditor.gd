@@ -391,11 +391,13 @@ func _build_ui() -> void:
 	_weapon_opt = OptionButton.new()
 	_weapon_opt.custom_minimum_size = Vector2(110, 0)
 	for w_idx in range(WeaponData.get_total_weapon_count()):
+		if WeaponData.is_weapon_removed(w_idx):
+			continue
 		var wd := WeaponData.get_weapon(w_idx, 0, false)
 		_weapon_opt.add_item("%d: %s" % [w_idx, wd.display_name], w_idx)
 	_weapon_opt.item_selected.connect(func(idx: int):
 		_clear_temp_preview()
-		_preview_weapon_id = idx
+		_preview_weapon_id = _weapon_opt.get_item_id(idx)
 		if _agent_mode:
 			_agent_mode = false
 			_agent_mode_btn.set_pressed_no_signal(false)
@@ -980,6 +982,9 @@ func _open_copy_to_guns_dialog() -> void:
 		var is_src: bool = (_per_weapon_scope and w_idx == _preview_weapon_id)
 		cb.text = ("%d: %s (Source)" % [w_idx, wd.display_name]) if is_src else ("%d: %s" % [w_idx, wd.display_name])
 		cb.disabled = is_src
+		if WeaponData.is_weapon_removed(w_idx):
+			cb.disabled = true
+			cb.visible = false
 		grid.add_child(cb)
 		gun_cbs.append(cb)
 
@@ -2231,6 +2236,8 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 
 	left_vb.add_child(_make_section_label("All Weapons (0..23)"))
 	for wid in range(WeaponData.get_total_weapon_count()):
+		if WeaponData.is_weapon_removed(wid):
+			continue
 		var wd := WeaponData.get_weapon(wid, 0, 0)
 		var btn := Button.new()
 		btn.text = "%d: %s" % [wid, wd.display_name]
@@ -2896,7 +2903,7 @@ func _sync_coin_economy_ui() -> void:
 	if is_instance_valid(_coin_agent_spin):
 		_coin_agent_spin.value = ProfileManager.agent_unlock_price
 	if is_instance_valid(_coin_bal_lbl):
-		_coin_bal_lbl.text = "Current Balance: %d COINS" % ProfileManager.coins
+		_coin_bal_lbl.text = "Current Balance: %s COINS" % ProfileManager.format_coins(ProfileManager.coins)
 	_coin_syncing = false
 	_refresh_coin_skin_rows()
 
@@ -2955,6 +2962,20 @@ func _refresh_coin_skin_rows() -> void:
 		nl.add_theme_font_size_override("font_size", 14)
 		nl.modulate = badge.lightened(0.25)
 		row.add_child(nl)
+
+		var prem_cb := CheckBox.new()
+		prem_cb.text = "Premium"
+		prem_cb.button_pressed = ProfileManager.is_gun_skin_premium(wid, skey)
+		prem_cb.modulate = Color(1.0, 0.86, 0.32) if prem_cb.button_pressed else Color(0.82, 0.86, 0.92)
+		if skey == "default":
+			prem_cb.disabled = true
+			prem_cb.button_pressed = false
+		else:
+			prem_cb.toggled.connect(func(on: bool):
+				ProfileManager.set_gun_skin_premium(wid, skey, on)
+				prem_cb.modulate = Color(1.0, 0.86, 0.32) if on else Color(0.82, 0.86, 0.92)
+			)
+		row.add_child(prem_cb)
 
 		var sb := SpinBox.new()
 		sb.min_value = 0

@@ -1,6 +1,40 @@
 {
-	"agent_unlock_price": 5000,
-	"gun_skin_prices": {},
+	"agent_unlock_price": 8500,
+	"gun_skin_prices": {
+		"0": {
+			"arctic": 8000,
+			"biohazard": 5000,
+			"crimson_royal": 675,
+			"desert_camo": 2000,
+			"gold": 8500,
+			"magma": 5000,
+			"nebula": 2000,
+			"neon": 5000,
+			"ocean_wave": 3500
+		},
+		"1": {
+			"arctic": 375,
+			"biohazard": 8000,
+			"crimson_royal": 7000,
+			"desert_camo": 2000,
+			"gold": 8500,
+			"magma": 5000,
+			"nebula": 3500,
+			"neon": 400,
+			"ocean_wave": 3500
+		},
+		"2": {
+			"arctic": 3000,
+			"biohazard": 4500,
+			"crimson_royal": 7000,
+			"desert_camo": 2500,
+			"gold": 8500,
+			"magma": 5000,
+			"nebula": 5000,
+			"neon": 4500,
+			"ocean_wave": 3500
+		}
+	},
 	"kill_reward": 25,
 	"match_reward": 30,
 	"treasure_reward": 15,

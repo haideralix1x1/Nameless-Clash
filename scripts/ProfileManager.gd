@@ -28,8 +28,10 @@ const GUN_SKIN_CATALOG: Array[Dictionary] = [
 	{"key": "gold",          "name": "24K Royal Gold",   "price": 850, "sheet_row": 9, "tint": Color(1.0, 0.86, 0.34), "bullet": Color(1.0, 0.88, 0.24), "badge": Color(1.0, 0.84, 0.24)}
 ]
 # Weapons whose columns in weapons_selection_sheet.png contain dedicated custom art for all 10 skin rows (no extra tint needed)
-const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6]
-const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 19, 20, 21, 23, 22]
+const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23]
+# Weapons that never get skins (always shown with the base/default art)
+const NO_SKIN_WEAPONS: Array[int] = [19]
+const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23, 22]
 
 const PROFILE_PATH: String = "user://player_profile.cfg"
 
@@ -379,6 +381,7 @@ var win_reward: int = 100
 var match_reward: int = 30
 var agent_unlock_price: int = DEFAULT_AGENT_UNLOCK_PRICE
 var gun_skin_prices: Dictionary = {}
+var premium_gun_skins: Dictionary = {}
 
 
 func _ready() -> void:
@@ -538,6 +541,7 @@ func load_economy_config() -> void:
 	match_reward = 30
 	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
 	gun_skin_prices = {}
+	premium_gun_skins = {}
 	for path in [ECONOMY_CONFIG_PATH, USER_ECONOMY_CONFIG_PATH]:
 		if not FileAccess.file_exists(path):
 			continue
@@ -564,6 +568,16 @@ func load_economy_config() -> void:
 							gun_skin_prices[wkey] = {}
 						for sk in (gp[wk] as Dictionary).keys():
 							(gun_skin_prices[wkey] as Dictionary)[str(sk)] = maxi(0, int((gp[wk] as Dictionary)[sk]))
+			if d.has("premium_gun_skins") and d["premium_gun_skins"] is Dictionary:
+				var pg: Dictionary = d["premium_gun_skins"] as Dictionary
+				for wk in pg.keys():
+					if pg[wk] is Dictionary:
+						var wkey := str(wk)
+						if not premium_gun_skins.has(wkey):
+							premium_gun_skins[wkey] = {}
+						for sk in (pg[wk] as Dictionary).keys():
+							if bool((pg[wk] as Dictionary)[sk]):
+								(premium_gun_skins[wkey] as Dictionary)[str(sk)] = true
 
 
 func save_economy_config(save_to_project: bool = true) -> bool:
@@ -573,7 +587,8 @@ func save_economy_config(save_to_project: bool = true) -> bool:
 		"win_reward": win_reward,
 		"match_reward": match_reward,
 		"agent_unlock_price": agent_unlock_price,
-		"gun_skin_prices": gun_skin_prices
+		"gun_skin_prices": gun_skin_prices,
+		"premium_gun_skins": premium_gun_skins
 	}
 	var json_txt: String = JSON.stringify(payload, "\t")
 	var ok_any: bool = false
@@ -600,6 +615,7 @@ func reset_economy_defaults() -> void:
 	match_reward = 30
 	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
 	gun_skin_prices.clear()
+	premium_gun_skins.clear()
 	economy_config_changed.emit()
 
 
@@ -643,6 +659,27 @@ func set_gun_skin_price(weapon_id: int, skin_key: String, price: int) -> void:
 	(gun_skin_prices[wk] as Dictionary)[skin_key] = maxi(0, price)
 
 
+func is_gun_skin_premium(weapon_id: int, skin_key: String) -> bool:
+	if skin_key == "default" or skin_key.is_empty():
+		return false
+	var wk := str(weapon_id)
+	if premium_gun_skins.has(wk) and premium_gun_skins[wk] is Dictionary:
+		return bool((premium_gun_skins[wk] as Dictionary).get(skin_key, false))
+	return false
+
+
+func set_gun_skin_premium(weapon_id: int, skin_key: String, is_premium: bool) -> void:
+	if skin_key == "default" or skin_key.is_empty():
+		return
+	var wk := str(weapon_id)
+	if not premium_gun_skins.has(wk) or not (premium_gun_skins[wk] is Dictionary):
+		premium_gun_skins[wk] = {}
+	if is_premium:
+		(premium_gun_skins[wk] as Dictionary)[skin_key] = true
+	else:
+		(premium_gun_skins[wk] as Dictionary).erase(skin_key)
+
+
 func is_agent_unlocked(arch_idx: int, allow_practice: bool = false) -> bool:
 	if allow_practice:
 		return true
@@ -675,7 +712,7 @@ func get_gun_skin_def(skin_key: String) -> Dictionary:
 
 
 func get_gun_skin_tint(weapon_id: int, skin_key: String) -> Color:
-	if CUSTOM_SKIN_ART_WEAPONS.has(weapon_id):
+	if CUSTOM_SKIN_ART_WEAPONS.has(weapon_id) or NO_SKIN_WEAPONS.has(weapon_id):
 		return Color.WHITE
 	return get_gun_skin_def(skin_key).get("tint", Color.WHITE) as Color
 
@@ -690,6 +727,8 @@ func owns_gun_skin(weapon_id: int, skin_key: String) -> bool:
 
 
 func get_equipped_gun_skin(weapon_id: int) -> String:
+	if NO_SKIN_WEAPONS.has(weapon_id):
+		return "default"
 	var wk := str(weapon_id)
 	if equipped_gun_skins.has(wk):
 		var sk: String = str(equipped_gun_skins[wk])
@@ -713,6 +752,30 @@ func spend_coins(amount: int) -> bool:
 	save_profile()
 	coins_changed.emit(coins)
 	return true
+
+
+static func format_coins(amount: int) -> String:
+	var neg: bool = amount < 0
+	var v: float = absf(float(amount))
+	var out: String = ""
+	if v >= 1_000_000_000.0:
+		out = _trim_compact_num(v / 1_000_000_000.0, 2) + "B"
+	elif v >= 1_000_000.0:
+		out = _trim_compact_num(v / 1_000_000.0, 2) + "M"
+	elif v >= 1_000.0:
+		out = _trim_compact_num(v / 1_000.0, 1) + "K"
+	else:
+		out = str(int(roundf(v)))
+	return ("-" + out) if neg else out
+
+
+static func _trim_compact_num(val: float, decimals: int) -> String:
+	var factor: float = pow(10.0, decimals)
+	var rounded: float = floorf(val * factor + 0.0001) / factor
+	var s: String = ("%." + str(decimals) + "f") % rounded
+	if s.contains("."):
+		s = s.rstrip("0").rstrip(".")
+	return s
 
 
 func buy_gun_skin(weapon_id: int, skin_key: String) -> bool:

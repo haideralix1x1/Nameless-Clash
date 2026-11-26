@@ -1069,7 +1069,7 @@ func _build_agent_pick_overlay() -> void:
 					lock_tr.visible = false
 					_style_button(ab, Color(0.10, 0.14, 0.22), Color(0.55, 0.40, 0.90), 8)
 				else:
-					note.text = "Locked! Need %d coins to unlock %s (you have %d)." % [ProfileManager.get_agent_unlock_price(), str(ag["agent_name"]), ProfileManager.coins]
+					note.text = "Locked! Need %s coins to unlock %s (you have %s)." % [ProfileManager.format_coins(ProfileManager.get_agent_unlock_price()), str(ag["agent_name"]), ProfileManager.format_coins(ProfileManager.coins)]
 					note.modulate = Color(1.0, 0.48, 0.42)
 					return
 			ProfileManager.apply_archetype_preset(i, true)

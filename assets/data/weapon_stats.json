@@ -13,13 +13,13 @@
 	"1": {
 		"bullet_range": 950.0,
 		"bullet_speed": 1500.0,
-		"damage": 19.0,
-		"fire_interval": 0.18,
-		"mag_size": 30.0,
-		"pellet_count": 1.0,
-		"recoil_impulse": 28.0,
-		"reload_time": 1.35,
-		"spread_deg": 1.5
+		"damage": 19,
+		"fire_interval": 0.5,
+		"mag_size": 30,
+		"pellet_count": 1,
+		"recoil_impulse": 30.0,
+		"reload_time": 1.4,
+		"spread_deg": 1.6
 	},
 	"10": {
 		"bullet_range": 2600.0,
@@ -109,16 +109,82 @@
 		"reload_time": 2.2,
 		"spread_deg": 4.0
 	},
+	"18": {
+		"bullet_range": 820.0,
+		"bullet_speed": 680.0,
+		"damage": 68.0,
+		"fire_interval": 0.72,
+		"mag_size": 3.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 110.0,
+		"reload_time": 1.85,
+		"spread_deg": 2.0
+	},
+	"19": {
+		"bullet_range": 580.0,
+		"bullet_speed": 1180.0,
+		"damage": 12.0,
+		"fire_interval": 0.65,
+		"mag_size": 6.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 20.0,
+		"reload_time": 1.35,
+		"spread_deg": 1.2
+	},
 	"2": {
 		"bullet_range": 1150.0,
 		"bullet_speed": 1700.0,
-		"damage": 34,
+		"damage": 34.0,
 		"fire_interval": 0.1,
-		"mag_size": 20,
-		"pellet_count": 1,
+		"mag_size": 20.0,
+		"pellet_count": 1.0,
 		"recoil_impulse": 80.0,
 		"reload_time": 1.7,
 		"spread_deg": 1.8
+	},
+	"20": {
+		"bullet_range": 680.0,
+		"bullet_speed": 1360.0,
+		"damage": 22.0,
+		"fire_interval": 0.17,
+		"mag_size": 15.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 18.0,
+		"reload_time": 1.15,
+		"spread_deg": 1.0
+	},
+	"21": {
+		"bullet_range": 380.0,
+		"bullet_speed": 1180.0,
+		"damage": 11.0,
+		"fire_interval": 0.52,
+		"mag_size": 8.0,
+		"pellet_count": 8.0,
+		"recoil_impulse": 92.0,
+		"reload_time": 1.65,
+		"spread_deg": 8.8
+	},
+	"22": {
+		"bullet_range": 920.0,
+		"bullet_speed": 1420.0,
+		"damage": 28.0,
+		"fire_interval": 0.068,
+		"mag_size": 30.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 22.0,
+		"reload_time": 1.45,
+		"spread_deg": 1.8
+	},
+	"23": {
+		"bullet_range": 950.0,
+		"bullet_speed": 1440.0,
+		"damage": 21.0,
+		"fire_interval": 0.086,
+		"mag_size": 30.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 24.0,
+		"reload_time": 1.35,
+		"spread_deg": 1.5
 	},
 	"3": {
 		"bullet_range": 650.0,
@@ -166,7 +232,7 @@
 	},
 	"7": {
 		"bullet_range": 2600.0,
-		"bullet_speed": 6000.0,
+		"bullet_speed": 4000.0,
 		"damage": 250.0,
 		"fire_interval": 1.45,
 		"mag_size": 5.0,

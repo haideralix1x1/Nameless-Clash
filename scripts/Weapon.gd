@@ -175,7 +175,7 @@ const GUN_PRESETS: Array[Dictionary] = [
 	},
 	{
 		"name": "Breacher CQB",
-		"primary": 21,
+		"primary": 5,
 		"secondary": 3,
 		"bombs": 3,
 		"bomb_type": "sticky",
@@ -184,8 +184,36 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "heavy",
 		"helmet_hp": 50,
 		"helmet_reduce": 0.35,
-		"desc": "Black Shotgun + SMG + 3 Sticky • Heavy Shield & Helmet",
+		"desc": "Shotgun + SMG + 3 Sticky • Heavy Shield & Helmet",
 		"accent": "purple"
+	},
+	{
+		"name": "Shotgun Rusher",
+		"primary": 5,
+		"secondary": 9,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"shield_tier": "heavy",
+		"shield_hp": 70,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "Shotgun + Deagle + 3 Frag • Heavy Shield / Med Helmet",
+		"accent": "purple"
+	},
+	{
+		"name": "Pump Action",
+		"primary": 6,
+		"secondary": 4,
+		"bombs": 3,
+		"bomb_type": "sticky",
+		"shield_tier": "heavy",
+		"shield_hp": 75,
+		"helmet_tier": "medium",
+		"helmet_hp": 35,
+		"helmet_reduce": 0.25,
+		"desc": "Pump Shotgun + Uzi + 3 Sticky • Heavy Shield / Med Helmet",
+		"accent": "orange"
 	},
 	{
 		"name": "Sniper Recon",
@@ -253,8 +281,16 @@ static func _get_network_manager() -> Node:
 	return null
 
 
+## Weapons fully removed from the game (Black Shotgun = 21). Old saves are remapped via sanitize_weapon_id().
+const REMOVED_WEAPON_IDS: Array[int] = [21]
+
+
+static func is_weapon_removed(weapon_id: int) -> bool:
+	return REMOVED_WEAPON_IDS.has(weapon_id)
+
+
 static func is_weapon_allowed(weapon_id: int) -> bool:
-	if weapon_id == 14:
+	if weapon_id == 14 or is_weapon_removed(weapon_id):
 		return false
 	var nm: Node = _get_network_manager()
 	if nm == null:
@@ -286,6 +322,8 @@ static func get_allowed_weapon_ids() -> Array[int]:
 static func sanitize_weapon_id(weapon_id: int) -> int:
 	if weapon_id == 14:
 		return 11
+	if weapon_id == 21:
+		return 5 if is_weapon_allowed(5) else 9
 	if weapon_id >= 11 and weapon_id <= 23:
 		var nm: Node = _get_network_manager()
 		if (weapon_id == 12 or weapon_id == 18) and nm != null and not bool(nm.get("allow_explosives")):
@@ -651,25 +689,6 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.bullet_color = Color(0.85, 0.94, 1.0)
 			w.sound_path = "res://assets/audio/shoot_m4a1.wav"
 			w.sprite_frame = 9
-		21:
-			w.code_name = "black_shotgun"
-			w.display_name = "Black Shotgun"
-			w.category = "Shotgun"
-			w.description = "Matte-black 8-round combat shotgun with full-mag reload and half per-shot damage of Pump Shotgun."
-			w.damage = 11
-			w.pellet_count = 8
-			w.fire_interval = 0.52
-			w.mag_size = 8
-			w.reload_time = 1.65
-			w.single_shell_reload = false
-			w.recoil_impulse = 92.0
-			w.bullet_speed = 1180.0
-			w.spread_deg = 8.8
-			w.max_zoom_level = 2
-			w.muzzle_flash_scale = 1.15
-			w.bullet_color = Color(1.0, 0.76, 0.24)
-			w.sound_path = "res://assets/audio/shoot_shotgun.wav"
-			w.sprite_frame = 6
 		22:
 			w.code_name = "groza"
 			w.display_name = "OTs-14 Groza"
