@@ -18,6 +18,9 @@ const BULLET_SCENE: PackedScene = preload("res://scenes/Bullet.tscn")
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
 const BOMB_SCRIPT: Script = preload("res://scripts/Bomb.gd")
 const TEX_SOUL_GHOST: Texture2D = preload("res://assets/sprites/soul_ghost.png")
+const TEX_DEAD_SOULS_SHEET: Texture2D = preload("res://assets/sprites/vfx/dead_souls_sheet.png")
+const DEAD_SOUL_COLS: int = 15
+const DEAD_SOUL_PRICE_THRESHOLD: int = 5000
 const ZOOM_LEVEL_VALUES: Array[float] = [1.30, 1.12, 0.98, 0.86, 0.76, 0.68, 0.60]
 
 const MOVE_SPEED: float = 310.0
@@ -56,6 +59,7 @@ var torso_id: int = 0
 var legs_id: int = 0
 var hands_id: int = 0
 var accessories_id: int = 0
+var face_acc_id: int = -1
 var shirt_color: Color = Color.WHITE
 var pants_color: Color = Color.WHITE
 var skin_color: Color = Color.WHITE
@@ -337,6 +341,7 @@ func setup_player(
 	legs_id = int(av["legs_id"])
 	hands_id = int(av["hands_id"])
 	accessories_id = int(av["accessories_id"])
+	face_acc_id = int(av.get("face_acc_id", -1))
 	shirt_color = av["shirt_color"] as Color
 	pants_color = av["pants_color"] as Color
 	skin_color = av["skin_color"] as Color
@@ -364,10 +369,21 @@ func setup_player(
 
 	if p_is_bot:
 		is_local_human = false
+		equipped_gun_skins.clear()
+		var cat: Array[Dictionary] = ProfileManager.GUN_SKIN_CATALOG
+		if not cat.is_empty():
+			for wid in ProfileManager.SHOP_WEAPON_IDS:
+				if ProfileManager.NO_SKIN_WEAPONS.has(wid):
+					continue
+				var pick_def: Dictionary = cat[randi() % cat.size()]
+				equipped_gun_skins[str(wid)] = str(pick_def.get("key", "default"))
 	elif not NetworkManager.is_network_active():
 		is_local_human = true
 	else:
 		is_local_human = (p_id == NetworkManager.get_local_peer_id())
+		var raw_skins: Variant = avatar_dict.get("equipped_gun_skins", {})
+		if raw_skins is Dictionary:
+			equipped_gun_skins = (raw_skins as Dictionary).duplicate(true)
 
 
 func _ready() -> void:
@@ -383,6 +399,8 @@ func _ready() -> void:
 	_camera.enabled = is_local_human
 	if is_local_human:
 		_camera.make_current()
+		if not is_preview_dummy and NetworkManager.is_agent_clash_mode():
+			ProfileManager.mark_agent_played(archetype_id)
 	_muzzle_flash.visible = false
 	_update_overhead_ui()
 	_emit_hud_signals()
@@ -530,12 +548,15 @@ func switch_agent_in_game(new_arch_id: int) -> void:
 	var idx: int = wrapi(new_arch_id, 0, ProfileManager.ARCHETYPES.size())
 	ProfileManager.apply_archetype_preset(idx, true)
 	archetype_id = ProfileManager.archetype_id
+	if is_local_human and not is_preview_dummy and NetworkManager.is_agent_clash_mode():
+		ProfileManager.mark_agent_played(archetype_id)
 	skin_id = ProfileManager.skin_id
 	head_id = ProfileManager.head_id
 	torso_id = ProfileManager.torso_id
 	legs_id = ProfileManager.legs_id
 	hands_id = ProfileManager.hands_id
 	accessories_id = ProfileManager.accessories_id
+	face_acc_id = -1
 	shirt_color = ProfileManager.shirt_color
 	pants_color = ProfileManager.pants_color
 	skin_color = ProfileManager.skin_color
@@ -594,6 +615,7 @@ func _apply_modular_textures() -> void:
 			"legs_id": int(parts.get("legs", base_part)),
 			"hands_id": int(parts.get("hands", base_part)),
 			"accessories_id": int(parts.get("acc", base_part)),
+			"face_acc_id": -1,
 			"shirt_color": arch.get("shirt", Color.WHITE),
 			"pants_color": arch.get("pants", Color.WHITE),
 			"skin_color": arch.get("skin", Color.WHITE),
@@ -609,6 +631,7 @@ func _apply_modular_textures() -> void:
 		"legs_id": legs_id,
 		"hands_id": hands_id,
 		"accessories_id": accessories_id,
+		"face_acc_id": face_acc_id,
 		"shirt_color": shirt_color,
 		"pants_color": pants_color,
 		"skin_color": skin_color,
@@ -1344,8 +1367,7 @@ func _spawn_projectiles_local(muzzles: PackedVector2Array, base_angle: float, we
 	rng.seed = rng_seed
 
 	var active_skin_key: String = ProfileManager.get_equipped_gun_skin(w.id) if is_local_human else str(equipped_gun_skins.get(str(w.id), "default"))
-	var active_skin_def: Dictionary = ProfileManager.get_gun_skin_def(active_skin_key)
-	var active_bullet_col: Color = (active_skin_def.get("bullet", w.bullet_color) as Color) if active_skin_key != "default" else w.bullet_color
+	var active_bullet_col: Color = ProfileManager.get_gun_skin_bullet_color(w.id, active_skin_key, w.bullet_color) if active_skin_key != "default" else w.bullet_color
 	var active_flash_col: Color = active_bullet_col.lightened(0.22) if active_skin_key != "default" else Color.WHITE
 
 	var deal_damage: bool = _is_controlled_locally()
@@ -1832,6 +1854,9 @@ func _apply_weapon_visuals() -> void:
 
 
 static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) -> Vector2:
+	var ov: Dictionary = WeaponData.get_weapon_muzzle_override(weapon_id)
+	if ov.has("x") and ov.has("y"):
+		return Vector2(float(ov["x"]), float(ov["y"]))
 	match weapon_id:
 		11: return Vector2(43.2, -4.0) # Flamethrower
 		13: return Vector2(41.9, -2.5) # Plasma Cannon
@@ -1898,6 +1923,8 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 	elif pickup_type == "weapon":
 		if not NetworkManager.is_agent_clash_mode():
 			var new_w_id: int = WeaponData.sanitize_weapon_id(value)
+			if is_local_human and has_node("/root/AchievementManager"):
+				get_node("/root/AchievementManager").record_weapon_pickup(new_w_id)
 			var picked_w: WeaponData = WeaponData.get_weapon(new_w_id, weapon_skin_id, m4a1_rail_mod)
 			var pickup_res: int = 3 if (new_w_id == 10 or new_w_id == 12) else picked_w.mag_size
 			if _is_using_secondary_slot():
@@ -2199,30 +2226,62 @@ func announce_death_rpc(killer_wid: int = -1, killer_skin: String = "default") -
 func _on_death_visuals(killer_wid: int = -1, killer_skin: String = "default") -> void:
 	is_dead = true
 	health = 0
-	_weapon_pivot.visible = false
 	if is_instance_valid(_modular_rig):
 		_modular_rig.stop_shoe_throw()
+		_modular_rig.visible = false
+	if is_instance_valid(_weapon_pivot):
+		_weapon_pivot.visible = false
+	if is_instance_valid(_muzzle_flash):
+		_muzzle_flash.visible = false
 	_jetpack_particles.emitting = false
 	_update_overhead_ui()
+	queue_redraw()
 	var parent_node: Node = get_parent()
 	if parent_node != null:
-		var exp := EXPLOSION_SCENE.instantiate()
-		exp.global_position = global_position
-		exp.explosion_radius = 65.0
-		exp.max_damage = 0
-		exp.can_deal_damage = false
-		parent_node.add_child(exp)
 		_spawn_rising_soul(parent_node, global_position, killer_wid, killer_skin)
 
 
+static func _get_dead_soul_frame(killer_wid: int, killer_skin: String) -> int:
+	if killer_wid < 0 or killer_skin.is_empty() or killer_skin == "default":
+		return 5 # Default cute angel ghost
+	var skin_price: int = ProfileManager.get_gun_skin_price(killer_wid, killer_skin)
+	if skin_price < DEAD_SOUL_PRICE_THRESHOLD:
+		return 5 # Below 5000 coins -> default dead soul
+	match killer_skin:
+		"magma": return 0          # Magma Skeleton
+		"biohazard": return 1      # Poison Slime Reaper
+		"arctic": return 2         # Ice Dragon Prince
+		"crimson_royal": return 3  # Crimson Demon King
+		"gold", "nebula": return 4 # Prime Royal Dragon
+		"neon": return 9           # Thunder Storm Cloud
+	# Remaining 5000+ skins (desert_camo, ocean_wave, etc.) -> unique fun/meme soul per gun
+	match killer_wid:
+		0: return 12               # AK-47 -> GG
+		1: return 10               # M16A4 -> Pepe Angel Ghost
+		2: return 8                # SCAR-L -> Trollface Ghost
+		3: return 6                # SMG -> Crying Angel Cat
+		4, 5: return 13            # Uzi / Shotgun -> Ezz
+		6, 10: return 14           # Pump Shotgun / Bazooka -> Middle Finger
+		7, 8: return 7             # Sniper / Auto Sniper -> Bullseye Target
+		9, 20: return 11           # Deagle / Suppressed Pistol -> Huh?
+		18: return 8               # Nade Gun -> Trollface Ghost
+		22: return 4               # OTs-14 Groza -> Prime Royal Dragon
+		23: return 10              # M416 -> Pepe Angel Ghost
+	return 6
+
+
 func _spawn_rising_soul(parent_node: Node, pos: Vector2, killer_wid: int = -1, killer_skin: String = "default") -> void:
-	var is_prem: bool = (killer_wid >= 0 and not killer_skin.is_empty() and killer_skin != "default" and ProfileManager.is_gun_skin_premium(killer_wid, killer_skin))
-	var start_pos: Vector2 = pos + Vector2(0.0, -16.0)
-	if not is_prem:
+	var soul_frame: int = _get_dead_soul_frame(killer_wid, killer_skin)
+	var is_custom_soul: bool = (soul_frame != 5)
+	var start_pos: Vector2 = pos + Vector2(0.0, -18.0)
+	if not is_custom_soul:
 		var soul := Sprite2D.new()
-		soul.texture = TEX_SOUL_GHOST
+		soul.texture = TEX_DEAD_SOULS_SHEET
+		soul.hframes = DEAD_SOUL_COLS
+		soul.vframes = 1
+		soul.frame = 5
 		soul.global_position = start_pos
-		soul.scale = Vector2(1.15, 1.15)
+		soul.scale = Vector2(0.62, 0.62)
 		soul.z_index = 26
 		soul.modulate = Color(1.0, 1.0, 1.0, 0.94)
 		parent_node.add_child(soul)
@@ -2247,9 +2306,12 @@ func _spawn_rising_soul(parent_node: Node, pos: Vector2, killer_wid: int = -1, k
 	parent_node.add_child(root)
 
 	var soul_spr := Sprite2D.new()
-	soul_spr.texture = TEX_SOUL_GHOST
-	soul_spr.scale = Vector2(1.25, 1.25)
-	soul_spr.modulate = scol.lightened(0.28)
+	soul_spr.texture = TEX_DEAD_SOULS_SHEET
+	soul_spr.hframes = DEAD_SOUL_COLS
+	soul_spr.vframes = 1
+	soul_spr.frame = soul_frame
+	soul_spr.scale = Vector2(0.72, 0.72)
+	soul_spr.modulate = Color.WHITE
 	root.add_child(soul_spr)
 
 	var fx := Node2D.new()
@@ -2280,7 +2342,7 @@ func _spawn_rising_soul(parent_node: Node, pos: Vector2, killer_wid: int = -1, k
 		var rise_y: float = -132.0 * (1.0 - pow(1.0 - t, 1.6))
 		root.global_position = start_pos + Vector2(wave_x, rise_y)
 		soul_spr.rotation = cos(t * TAU * freq) * 0.16
-		var pulse: float = 1.25 + sin(t * TAU * 3.0) * 0.12
+		var pulse: float = 0.72 + sin(t * TAU * 3.0) * 0.06
 		soul_spr.scale = Vector2(pulse, pulse)
 		var alpha: float = 0.96 * (1.0 - t * t)
 		soul_spr.modulate.a = alpha
@@ -2533,14 +2595,18 @@ func _update_visual_state(delta: float) -> void:
 	elif boar_ride_timer <= 0.0:
 		_modular_rig.position = Vector2(0.0, -16.5)
 
+	if is_instance_valid(_modular_rig):
+		_modular_rig.visible = (not is_dead) and (_bat_ult_timer <= 0.0)
+	if is_dead and is_instance_valid(_muzzle_flash):
+		_muzzle_flash.visible = false
 	if invis_timer > 0.0 and not is_dead:
 		var invis_alpha: float = 0.35 if (is_local_human or is_preview_dummy) else 0.0
 		_modular_rig.modulate = Color(0.32, 0.78, 1.85, invis_alpha)
-		_weapon_pivot.visible = (is_local_human or is_preview_dummy)
+		_weapon_pivot.visible = (is_local_human or is_preview_dummy) and (electric_laser_timer <= 0.0)
 		_weapon_pivot.modulate.a = invis_alpha
 	else:
-		_weapon_pivot.visible = not is_dead
-		_weapon_pivot.modulate.a = 1.0
+		_weapon_pivot.visible = (not is_dead) and (_bat_ult_timer <= 0.0) and (electric_laser_timer <= 0.0)
+		_weapon_pivot.modulate.a = _modular_rig.modulate.a
 	var active_stance: String = "none" if is_dead else ("throw_bomb" if _bomb_throw_timer > 0.0 else ("rifle" if NetworkManager.is_agent_clash_mode() else ModularCharacter.get_weapon_stance(current_weapon_id)))
 	var w_ov: Dictionary = {}
 	if is_instance_valid(_modular_rig):
@@ -2565,7 +2631,7 @@ func _update_visual_state(delta: float) -> void:
 	elif _agent_weapon_node != null:
 		_agent_weapon_node.position.x = 0.0
 	if _weapon_pivot != null:
-		_weapon_pivot.visible = (electric_laser_timer <= 0.0)
+		_weapon_pivot.visible = (not is_dead) and (_bat_ult_timer <= 0.0) and (electric_laser_timer <= 0.0) and (invis_timer <= 0.0 or is_local_human or is_preview_dummy)
 	if is_instance_valid(_modular_rig) and _shoe_windup_timer <= 0.0:
 		_modular_rig.hands_z_over_weapon = 2
 		if is_dead:
@@ -3120,6 +3186,8 @@ func use_agent_ability(slot_idx: int) -> void:
 		ability_cooldowns[slot_idx] = 1.0
 	if is_local_human:
 		agent_state_changed.emit(ability_cooldowns, ability_max_cooldowns, held_throwable_id, stun_timer)
+		if has_node("/root/AchievementManager"):
+			get_node("/root/AchievementManager").record_ability_use(slot_idx == 3)
 	if NetworkManager.is_network_active():
 		execute_ability_rpc.rpc(slot_idx, global_position, aim_angle)
 	else:
@@ -4446,16 +4514,19 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 		if _boar_sprite == null:
 			_boar_sprite = Sprite2D.new()
 			_boar_sprite.texture = TEX_WAR_BOAR
-			_boar_sprite.scale = Vector2(0.64, 0.64)
+			_boar_sprite.hframes = 4
+			_boar_sprite.vframes = 1
+			_boar_sprite.scale = Vector2(0.56, 0.56)
 			_boar_sprite.z_index = 3
 			_boar_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 			add_child(_boar_sprite)
 		_boar_sprite.visible = true
 		var move_face_right: bool = (velocity.x >= 0.0) if absf(velocity.x) > 25.0 else facing_right
 		_boar_sprite.flip_h = not move_face_right
+		_boar_sprite.frame = (int(Time.get_ticks_msec() / 85) % 4) if (velocity.length() > 30.0 or is_preview_dummy) else 0
 		var gallop: float = absf(sin(Time.get_ticks_msec() * 0.018))
-		_boar_sprite.position = Vector2(0.0, 14.0 - gallop * 4.0)
-		_boar_sprite.rotation = (0.08 if move_face_right else -0.08) * (gallop - 0.5)
+		_boar_sprite.position = Vector2(0.0, 14.0 - gallop * 3.0)
+		_boar_sprite.rotation = (0.05 if move_face_right else -0.05) * (gallop - 0.5)
 		if is_instance_valid(_modular_rig):
 			_modular_rig.position.y = -18.0 - gallop * 4.0
 			_modular_rig.z_index = 4

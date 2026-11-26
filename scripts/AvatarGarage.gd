@@ -2,16 +2,16 @@ extends Control
 
 const UIStyle = preload("res://scripts/UIStyle.gd")
 const TEX_BG: Texture2D = preload("res://assets/tilemaps/bunker_bg.png")
-const TEX_WEAPONS: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 
-const TAB_NAMES: Array[String] = ["HEROES", "OUTFIT", "COLORS", "WEAPONS"]
+const TAB_NAMES: Array[String] = ["CHARACTERS", "OUTFIT", "COLORS"]
 const GEAR_SPECS: Array[Dictionary] = [
-	{"label": "Helmet / Head", "prop": "head_id"},
-	{"label": "Armor / Shirt", "prop": "torso_id"},
-	{"label": "Pants / Boots", "prop": "legs_id"},
-	{"label": "Gloves", "prop": "hands_id"},
-	{"label": "Back / Belt", "prop": "accessories_id"},
-	{"label": "Body Type", "prop": "skin_id"}
+	{"label": "Helmet / Hat", "prop": "head_id", "removable": true},
+	{"label": "Back Accessory", "prop": "accessories_id", "removable": true},
+	{"label": "Facial Accessory", "prop": "face_acc_id", "removable": true},
+	{"label": "Armor / Shirt", "prop": "torso_id", "removable": false},
+	{"label": "Pants / Boots", "prop": "legs_id", "removable": false},
+	{"label": "Gloves", "prop": "hands_id", "removable": false},
+	{"label": "Face / Head", "prop": "skin_id", "removable": false}
 ]
 const COLOR_CHANNELS: Array[Dictionary] = [
 	{"label": "SHIRT", "prop": "shirt_color"},
@@ -23,44 +23,33 @@ const COLOR_CHANNELS: Array[Dictionary] = [
 
 var _preview: SoldierPreview
 var _name_input: LineEdit
-var _hero_name_label: Label
-var _hero_role_label: Label
-var _agent_summary_label: Label
+var _dummy_name_label: Label
+var _dummy_role_label: Label
 
 var _tab_buttons: Array[Button] = []
 var _tab_pages: Array[Control] = []
 var _active_tab: int = 0
 
 var _pose_buttons: Array[Button] = []
-var _hero_cards: Array[Button] = []
-var _hero_ability_btns: Array[Button] = []
-var _hero_preview_arena: Node2D = null
+var _dummy_cards: Array[Button] = []
 var _layer_labels: Dictionary = {}
+var _accessory_toggle_btns: Dictionary = {}
+var _slot_new_badges: Dictionary = {}
+var _last_equipped_parts: Dictionary = {"head_id": 3, "accessories_id": 3, "face_acc_id": 0}
 
 var _active_color_prop: String = "shirt_color"
 var _channel_buttons: Dictionary = {}
 var _custom_color_btn: ColorPickerButton
 
-var _editing_secondary: bool = false
-var _slot_primary_btn: Button
-var _slot_secondary_btn: Button
-var _camo_btn: Button
-var _agent_pick_overlay: Control
-var _taunt_opt: OptionButton
-var _rail_btn: Button
-
-var _weapon_icon_rect: TextureRect
-var _weapon_title_label: Label
-var _weapon_sub_label: Label
-var _bar_dmg: ProgressBar
-var _bar_rpm: ProgressBar
-var _bar_acc: ProgressBar
-var _bar_mob: ProgressBar
-var _weapon_trait_label: Label
-var _weapon_cards: Array[Button] = []
-
 
 func _ready() -> void:
+	if not ProfileManager.is_using_custom_dummy():
+		ProfileManager.apply_dummy_preset(ProfileManager.dummy_id, true)
+	var cur_dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[clampi(ProfileManager.dummy_id, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)]
+	var def_pid: int = int(cur_dm.get("part_id", 3))
+	_last_equipped_parts["head_id"] = ProfileManager.head_id if ProfileManager.head_id >= 0 else int(cur_dm.get("head_id", def_pid))
+	_last_equipped_parts["accessories_id"] = ProfileManager.accessories_id if ProfileManager.accessories_id >= 0 else int(cur_dm.get("accessories_id", def_pid))
+	_last_equipped_parts["face_acc_id"] = ProfileManager.face_acc_id if ProfileManager.face_acc_id >= 0 else 0
 	_build_ui()
 	_select_tab(0)
 	_select_color_channel("shirt_color")
@@ -123,7 +112,7 @@ func _build_ui() -> void:
 	root_v.add_theme_constant_override("separation", 8)
 	margin.add_child(root_v)
 
-	# Mobile Top Navigation Bar
+	# Top Navigation Bar
 	var top_bar := HBoxContainer.new()
 	top_bar.add_theme_constant_override("separation", 10)
 	root_v.add_child(top_bar)
@@ -137,8 +126,8 @@ func _build_ui() -> void:
 	top_bar.add_child(menu_btn)
 
 	var title := Label.new()
-	title.text = "HERO & ARMORY"
-	title.add_theme_font_size_override("font_size", 26)
+	title.text = "CHARACTER CUSTOMIZATION"
+	title.add_theme_font_size_override("font_size", 25)
 	title.modulate = Color(1.0, 0.84, 0.28)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(title)
@@ -152,7 +141,7 @@ func _build_ui() -> void:
 	_name_input = LineEdit.new()
 	_name_input.text = ProfileManager.player_name
 	_name_input.placeholder_text = "Your Name"
-	_name_input.custom_minimum_size = Vector2(175, 44)
+	_name_input.custom_minimum_size = Vector2(180, 44)
 	_name_input.add_theme_font_size_override("font_size", 17)
 	_name_input.text_changed.connect(_on_name_changed)
 	top_bar.add_child(_name_input)
@@ -165,23 +154,12 @@ func _build_ui() -> void:
 	lobby_btn.pressed.connect(func(): NetworkManager.go_to_lobby())
 	top_bar.add_child(lobby_btn)
 
-	var agent_btn := Button.new()
-	agent_btn.text = "AGENT MODE"
-	agent_btn.custom_minimum_size = Vector2(150, 50)
-	agent_btn.add_theme_font_size_override("font_size", 16)
-	_style_button(agent_btn, Color(0.20, 0.10, 0.34, 0.98), Color(0.78, 0.42, 1.0))
-	agent_btn.pressed.connect(_open_agent_pick_overlay)
-	top_bar.add_child(agent_btn)
-
 	var play_btn := Button.new()
 	play_btn.text = "GUNFIGHT"
 	play_btn.custom_minimum_size = Vector2(148, 50)
 	play_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(play_btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.28, 0.92, 0.45))
 	play_btn.pressed.connect(func():
-		if NetworkManager.is_agent_clash_mode():
-			_open_agent_pick_overlay()
-			return
 		NetworkManager.disconnect_network()
 		NetworkManager.test_mode_enabled = false
 		NetworkManager.match_mode = 0
@@ -189,18 +167,17 @@ func _build_ui() -> void:
 	)
 	top_bar.add_child(play_btn)
 
-	# Main 2-Pane Split: Hero Stage (Left) + Tabbed Customization Deck (Right)
+	# Main 2-Pane Split: Character Stage (Left) + Tabbed Customization Deck (Right)
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split.add_theme_constant_override("separation", 16)
 	root_v.add_child(split)
 
-	_build_hero_stage(split)
+	_build_character_stage(split)
 	_build_customization_deck(split)
-	_build_agent_pick_overlay()
 
 
-func _build_hero_stage(parent: HBoxContainer) -> void:
+func _build_character_stage(parent: HBoxContainer) -> void:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(280, 0)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -212,17 +189,17 @@ func _build_hero_stage(parent: HBoxContainer) -> void:
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
 
-	_hero_name_label = Label.new()
-	_hero_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_name_label.add_theme_font_size_override("font_size", 22)
-	_hero_name_label.modulate = Color(1.0, 0.85, 0.30)
-	v.add_child(_hero_name_label)
+	_dummy_name_label = Label.new()
+	_dummy_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dummy_name_label.add_theme_font_size_override("font_size", 22)
+	_dummy_name_label.modulate = Color(1.0, 0.85, 0.30)
+	v.add_child(_dummy_name_label)
 
-	_hero_role_label = Label.new()
-	_hero_role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hero_role_label.add_theme_font_size_override("font_size", 14)
-	_hero_role_label.modulate = Color(0.68, 0.88, 1.0)
-	v.add_child(_hero_role_label)
+	_dummy_role_label = Label.new()
+	_dummy_role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dummy_role_label.add_theme_font_size_override("font_size", 14)
+	_dummy_role_label.modulate = Color(0.68, 0.88, 1.0)
+	v.add_child(_dummy_role_label)
 
 	var stage := PanelContainer.new()
 	stage.custom_minimum_size = Vector2(0, 165)
@@ -238,6 +215,7 @@ func _build_hero_stage(parent: HBoxContainer) -> void:
 	anchor_wrap.add_child(anchor)
 
 	_preview = SoldierPreview.new()
+	_preview.hide_weapons = true
 	_preview.scale = Vector2(4.6, 4.6)
 	anchor.add_child(_preview)
 
@@ -278,7 +256,7 @@ func _build_customization_deck(parent: HBoxContainer) -> void:
 	deck_v.add_theme_constant_override("separation", 12)
 	panel.add_child(deck_v)
 
-	# 4 Big Category Tabs
+	# 3 Category Tabs: CHARACTERS | OUTFIT | COLORS
 	var tab_bar := HBoxContainer.new()
 	tab_bar.add_theme_constant_override("separation", 8)
 	deck_v.add_child(tab_bar)
@@ -295,81 +273,25 @@ func _build_customization_deck(parent: HBoxContainer) -> void:
 		_tab_buttons.append(tb)
 
 	_tab_pages.clear()
-	_tab_pages.append(_build_heroes_tab(deck_v))
+	_tab_pages.append(_build_characters_tab(deck_v))
 	_tab_pages.append(_build_outfit_tab(deck_v))
 	_tab_pages.append(_build_colors_tab(deck_v))
-	_tab_pages.append(_build_weapons_tab(deck_v))
 
 
-func _build_heroes_tab(parent: VBoxContainer) -> Control:
+func _build_characters_tab(parent: VBoxContainer) -> Control:
 	var root_v := VBoxContainer.new()
 	root_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root_v.add_theme_constant_override("separation", 8)
+	root_v.add_theme_constant_override("separation", 10)
 	parent.add_child(root_v)
 
-	# Top Ability Kit Preview (matching Agent Clash selection screen)
-	var kit_row := HBoxContainer.new()
-	kit_row.add_theme_constant_override("separation", 10)
-	root_v.add_child(kit_row)
+	var hint := Label.new()
+	hint.text = "Select one of %d customizable characters. Modify accessories, outfit & colors in the tabs above." % ProfileManager.CUSTOM_DUMMIES.size()
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.modulate = Color(0.72, 0.88, 1.0)
+	hint.add_theme_font_size_override("font_size", 15)
+	root_v.add_child(hint)
 
-	var stage := PanelContainer.new()
-	stage.custom_minimum_size = Vector2(240, 128)
-	stage.clip_contents = true
-	stage.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.04, 0.08, 0.96), Color(0.24, 0.36, 0.56, 0.7), 10, 4, 4))
-	kit_row.add_child(stage)
-
-	var sv_cont := SubViewportContainer.new()
-	sv_cont.stretch = true
-	sv_cont.custom_minimum_size = Vector2(240, 128)
-	stage.add_child(sv_cont)
-
-	var sv := SubViewport.new()
-	sv.world_2d = World2D.new()
-	sv.size = Vector2i(360, 160)
-	sv.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
-	sv_cont.add_child(sv)
-
-	_hero_preview_arena = Node2D.new()
-	_hero_preview_arena.set_script(load("res://scripts/AgentPreviewArena.gd"))
-	sv.add_child(_hero_preview_arena)
-
-	var ab_col := VBoxContainer.new()
-	ab_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ab_col.add_theme_constant_override("separation", 6)
-	kit_row.add_child(ab_col)
-
-	_agent_summary_label = Label.new()
-	_agent_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_agent_summary_label.custom_minimum_size = Vector2(0, 38)
-	_agent_summary_label.add_theme_font_size_override("font_size", 14)
-	_agent_summary_label.modulate = Color(0.88, 0.96, 1.0)
-	ab_col.add_child(_agent_summary_label)
-
-	var ab_grid := GridContainer.new()
-	ab_grid.columns = 2
-	ab_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ab_grid.add_theme_constant_override("h_separation", 6)
-	ab_grid.add_theme_constant_override("v_separation", 6)
-	ab_col.add_child(ab_grid)
-
-	_hero_ability_btns.clear()
-	for slot_i in range(4):
-		var is_ult: bool = (slot_i == 3)
-		var b_col: Color = Color(1.0, 0.78, 0.24) if is_ult else Color(0.32, 0.78, 1.0)
-		var b_bg: Color = Color(0.24, 0.16, 0.06, 0.95) if is_ult else Color(0.08, 0.16, 0.26, 0.95)
-		var ab_btn := Button.new()
-		ab_btn.text = "Ability"
-		ab_btn.custom_minimum_size = Vector2(0, 40)
-		ab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ab_btn.clip_text = true
-		ab_btn.add_theme_font_size_override("font_size", 13)
-		_style_button(ab_btn, b_bg, b_col, 8)
-		ab_btn.pressed.connect(_trigger_hero_ability.bind(slot_i))
-		ab_grid.add_child(ab_btn)
-		_hero_ability_btns.append(ab_btn)
-
-	# Bottom 24-Agent Portrait Grid (matching Agent Clash selection screen)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -379,35 +301,33 @@ func _build_heroes_tab(parent: VBoxContainer) -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(grid)
 
-	_hero_cards.clear()
-	var ag_order: Array[int] = []
-	for k in range(AgentData.AGENTS.size()):
-		ag_order.append(k)
-	ag_order.sort_custom(func(a: int, b: int) -> bool:
-		var a_unl: bool = ProfileManager.is_agent_unlocked(a, false)
-		var b_unl: bool = ProfileManager.is_agent_unlocked(b, false)
-		if a_unl != b_unl:
-			return a_unl
-		return str(AgentData.AGENTS[a].get("agent_name", "")).to_lower() < str(AgentData.AGENTS[b].get("agent_name", "")).to_lower()
-	)
-	for i in ag_order:
-		var ag: Dictionary = AgentData.AGENTS[i]
+	_dummy_cards.clear()
+	for i in range(ProfileManager.CUSTOM_DUMMIES.size()):
+		var dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[i]
 		var cb := Button.new()
-		cb.custom_minimum_size = Vector2(0, 64)
+		cb.custom_minimum_size = Vector2(0, 74)
 		cb.clip_text = true
 		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cb.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		cb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		cb.icon = _make_agent_icon(i)
-		cb.add_theme_font_size_override("font_size", 15)
-		cb.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
-		cb.pressed.connect(_on_hero_card_pressed.bind(i))
+		cb.icon = _make_dummy_icon(i)
+		cb.add_theme_font_size_override("font_size", 16)
+		cb.set_meta("dummy_idx", i)
+		cb.text = "  %s\n  %s" % [str(dm["name"]), str(dm["role"])]
+		cb.pressed.connect(_on_dummy_card_pressed.bind(i))
 		grid.add_child(cb)
-		_hero_cards.append(cb)
+		_dummy_cards.append(cb)
+
+	var footer := Label.new()
+	footer.text = "More customizable characters will be added here."
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.modulate = Color(0.62, 0.74, 0.88)
+	footer.add_theme_font_size_override("font_size", 14)
+	root_v.add_child(footer)
 
 	return root_v
 
@@ -424,14 +344,17 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 	scroll.add_child(v)
 
 	var hint := Label.new()
-	hint.text = "Mix and match gear parts from all %d Soldiers." % ProfileManager.ARCHETYPES.size()
+	hint.text = "Mix outfit parts and add or remove accessories anytime."
 	hint.modulate = Color(0.72, 0.88, 1.0)
 	hint.add_theme_font_size_override("font_size", 15)
 	v.add_child(hint)
 
 	_layer_labels.clear()
+	_accessory_toggle_btns.clear()
+	_slot_new_badges.clear()
 	for spec in GEAR_SPECS:
 		var prop: String = str(spec["prop"])
+		var removable: bool = bool(spec.get("removable", false))
 		var card := PanelContainer.new()
 		card.add_theme_stylebox_override("panel", _make_style(Color(0.09, 0.13, 0.20, 0.92), Color(0.24, 0.42, 0.68, 0.8), 10, 12, 8))
 		v.add_child(card)
@@ -440,11 +363,22 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 		row.add_theme_constant_override("separation", 10)
 		card.add_child(row)
 
+		var lbl_wrap := HBoxContainer.new()
+		lbl_wrap.custom_minimum_size = Vector2(172, 0)
+		lbl_wrap.add_theme_constant_override("separation", 6)
+		lbl_wrap.alignment = BoxContainer.ALIGNMENT_BEGIN
+		row.add_child(lbl_wrap)
+
 		var lbl := Label.new()
 		lbl.text = str(spec["label"])
-		lbl.custom_minimum_size = Vector2(145, 0)
+		lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		lbl.add_theme_font_size_override("font_size", 16)
-		row.add_child(lbl)
+		lbl_wrap.add_child(lbl)
+
+		var slot_nb: PanelContainer = UIStyle.make_inline_new_badge("NEW", 10)
+		slot_nb.visible = false
+		lbl_wrap.add_child(slot_nb)
+		_slot_new_badges[prop] = slot_nb
 
 		var prev_btn := Button.new()
 		prev_btn.text = "<"
@@ -469,6 +403,37 @@ func _build_outfit_tab(parent: VBoxContainer) -> Control:
 		_style_button(next_btn, Color(0.14, 0.20, 0.30), Color(0.45, 0.72, 0.98))
 		next_btn.pressed.connect(_step_layer.bind(prop, 1))
 		row.add_child(next_btn)
+
+		if removable:
+			var tog_btn := Button.new()
+			tog_btn.text = "REMOVE"
+			tog_btn.custom_minimum_size = Vector2(106, 46)
+			tog_btn.add_theme_font_size_override("font_size", 14)
+			tog_btn.pressed.connect(_on_toggle_accessory.bind(prop))
+			row.add_child(tog_btn)
+			_accessory_toggle_btns[prop] = tog_btn
+
+	var quick_row := HBoxContainer.new()
+	quick_row.add_theme_constant_override("separation", 10)
+	v.add_child(quick_row)
+
+	var strip_btn := Button.new()
+	strip_btn.text = "REMOVE ALL ACCESSORIES"
+	strip_btn.custom_minimum_size = Vector2(0, 46)
+	strip_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip_btn.add_theme_font_size_override("font_size", 15)
+	_style_button(strip_btn, Color(0.28, 0.12, 0.12), Color(0.95, 0.42, 0.36), 8)
+	strip_btn.pressed.connect(_on_remove_all_accessories)
+	quick_row.add_child(strip_btn)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "RESET CHARACTER"
+	reset_btn.custom_minimum_size = Vector2(0, 46)
+	reset_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reset_btn.add_theme_font_size_override("font_size", 15)
+	_style_button(reset_btn, Color(0.12, 0.24, 0.34), Color(0.35, 0.78, 1.0), 8)
+	reset_btn.pressed.connect(_on_reset_dummy_pressed)
+	quick_row.add_child(reset_btn)
 
 	return scroll
 
@@ -573,174 +538,6 @@ func _build_colors_tab(parent: VBoxContainer) -> Control:
 	return scroll
 
 
-func _build_weapons_tab(parent: VBoxContainer) -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	parent.add_child(scroll)
-
-	var v := VBoxContainer.new()
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_theme_constant_override("separation", 10)
-	scroll.add_child(v)
-
-	# Slot Switch + Camo + Rail Controls
-	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override("separation", 8)
-	v.add_child(slot_row)
-
-	_slot_primary_btn = Button.new()
-	_slot_primary_btn.text = "PRIMARY GUN"
-	_slot_primary_btn.custom_minimum_size = Vector2(0, 46)
-	_slot_primary_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_slot_primary_btn.add_theme_font_size_override("font_size", 16)
-	_slot_primary_btn.pressed.connect(_on_slot_selected.bind(false))
-	slot_row.add_child(_slot_primary_btn)
-
-	_slot_secondary_btn = Button.new()
-	_slot_secondary_btn.text = "BACKUP PISTOL"
-	_slot_secondary_btn.custom_minimum_size = Vector2(0, 46)
-	_slot_secondary_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_slot_secondary_btn.add_theme_font_size_override("font_size", 16)
-	_slot_secondary_btn.pressed.connect(_on_slot_selected.bind(true))
-	slot_row.add_child(_slot_secondary_btn)
-
-	_camo_btn = Button.new()
-	_camo_btn.custom_minimum_size = Vector2(150, 46)
-	_camo_btn.add_theme_font_size_override("font_size", 15)
-	_style_button(_camo_btn, Color(0.14, 0.18, 0.28), Color(0.76, 0.48, 1.0), 8)
-	_camo_btn.pressed.connect(_on_cycle_camo)
-	slot_row.add_child(_camo_btn)
-
-	_rail_btn = Button.new()
-	_rail_btn.custom_minimum_size = Vector2(160, 46)
-	_rail_btn.add_theme_font_size_override("font_size", 15)
-	_style_button(_rail_btn, Color(0.14, 0.22, 0.28), Color(0.28, 0.85, 0.95), 8)
-	_rail_btn.pressed.connect(_on_cycle_rail)
-	slot_row.add_child(_rail_btn)
-
-	# Gunfight Taunt Selector Row
-	var taunt_row := HBoxContainer.new()
-	taunt_row.add_theme_constant_override("separation", 8)
-	v.add_child(taunt_row)
-
-	var taunt_lbl := Label.new()
-	taunt_lbl.text = "GUNFIGHT TAUNT:"
-	taunt_lbl.custom_minimum_size = Vector2(148, 0)
-	taunt_lbl.add_theme_font_size_override("font_size", 14)
-	taunt_lbl.modulate = Color(1.0, 0.86, 0.35)
-	taunt_row.add_child(taunt_lbl)
-
-	_taunt_opt = OptionButton.new()
-	_taunt_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_taunt_opt.custom_minimum_size = Vector2(0, 40)
-	for t_dict in AgentData.TAUNTS:
-		_taunt_opt.add_item("%s %s (%s)" % [str(t_dict["emoji"]), str(t_dict["name"]), str(t_dict["text"])])
-	_taunt_opt.selected = clampi(ProfileManager.taunt_id, 0, AgentData.TAUNTS.size() - 1)
-	_taunt_opt.item_selected.connect(func(idx: int):
-		ProfileManager.taunt_id = idx
-		ProfileManager.notify_changed()
-	)
-	taunt_row.add_child(_taunt_opt)
-
-	# Visual Stat Card
-	var stat_card := PanelContainer.new()
-	stat_card.add_theme_stylebox_override("panel", _make_style(Color(0.04, 0.06, 0.11, 0.94), Color(0.45, 0.58, 0.80, 0.8), 10, 12, 10))
-	v.add_child(stat_card)
-
-	var sc_v := VBoxContainer.new()
-	sc_v.add_theme_constant_override("separation", 6)
-	stat_card.add_child(sc_v)
-
-	var top_stat := HBoxContainer.new()
-	top_stat.add_theme_constant_override("separation", 12)
-	sc_v.add_child(top_stat)
-
-	var w_atlas := AtlasTexture.new()
-	w_atlas.atlas = TEX_WEAPONS
-	w_atlas.region = Rect2(0, 0, 256, 128)
-	_weapon_icon_rect = TextureRect.new()
-	_weapon_icon_rect.texture = w_atlas
-	_weapon_icon_rect.custom_minimum_size = Vector2(96, 48)
-	_weapon_icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_weapon_icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	top_stat.add_child(_weapon_icon_rect)
-
-	var title_box := VBoxContainer.new()
-	title_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_stat.add_child(title_box)
-
-	_weapon_title_label = Label.new()
-	_weapon_title_label.add_theme_font_size_override("font_size", 20)
-	_weapon_title_label.modulate = Color(1.0, 0.85, 0.35)
-	title_box.add_child(_weapon_title_label)
-
-	_weapon_sub_label = Label.new()
-	_weapon_sub_label.add_theme_font_size_override("font_size", 13)
-	_weapon_sub_label.modulate = Color(0.75, 0.88, 1.0)
-	title_box.add_child(_weapon_sub_label)
-
-	var bars_grid := GridContainer.new()
-	bars_grid.columns = 2
-	bars_grid.add_theme_constant_override("h_separation", 14)
-	bars_grid.add_theme_constant_override("v_separation", 6)
-	sc_v.add_child(bars_grid)
-
-	_bar_dmg = _add_stat_bar(bars_grid, "POWER", Color(1.0, 0.36, 0.32))
-	_bar_rpm = _add_stat_bar(bars_grid, "FIRE RATE", Color(1.0, 0.72, 0.22))
-	_bar_acc = _add_stat_bar(bars_grid, "ACCURACY", Color(0.28, 0.86, 1.0))
-	_bar_mob = _add_stat_bar(bars_grid, "SPEED", Color(0.32, 0.94, 0.55))
-
-	_weapon_trait_label = Label.new()
-	_weapon_trait_label.add_theme_font_size_override("font_size", 14)
-	_weapon_trait_label.modulate = Color(0.68, 0.96, 0.75)
-	_weapon_trait_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	sc_v.add_child(_weapon_trait_label)
-
-	# 11-Weapon Touch Grid
-	var w_grid := GridContainer.new()
-	w_grid.columns = 2
-	w_grid.add_theme_constant_override("h_separation", 8)
-	w_grid.add_theme_constant_override("v_separation", 8)
-	v.add_child(w_grid)
-
-	_weapon_cards.clear()
-	for i in range(WeaponData.get_weapon_count()):
-		var w_info: WeaponData = WeaponData.get_weapon(i, 0, 0)
-		var wb := Button.new()
-		wb.text = w_info.display_name
-		wb.custom_minimum_size = Vector2(0, 52)
-		wb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		wb.add_theme_font_size_override("font_size", 16)
-		wb.pressed.connect(_on_weapon_card_pressed.bind(i))
-		w_grid.add_child(wb)
-		_weapon_cards.append(wb)
-
-	return scroll
-
-
-func _add_stat_bar(grid: GridContainer, title_txt: String, bar_col: Color) -> ProgressBar:
-	var box := HBoxContainer.new()
-	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 8)
-	grid.add_child(box)
-
-	var lbl := Label.new()
-	lbl.text = title_txt
-	lbl.custom_minimum_size = Vector2(82, 0)
-	lbl.add_theme_font_size_override("font_size", 13)
-	box.add_child(lbl)
-
-	var bar := ProgressBar.new()
-	bar.max_value = 100
-	bar.show_percentage = false
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.custom_minimum_size = Vector2(0, 14)
-	bar.modulate = bar_col
-	box.add_child(bar)
-	return bar
-
-
 func _select_tab(tab_idx: int) -> void:
 	_active_tab = clampi(tab_idx, 0, _tab_pages.size() - 1)
 	for i in range(_tab_pages.size()):
@@ -767,14 +564,83 @@ func _on_pose_pressed(pose_idx: int) -> void:
 	_refresh_pose_buttons()
 
 
-func _on_hero_card_pressed(arch_idx: int) -> void:
-	ProfileManager.apply_archetype_preset(arch_idx)
+func _on_dummy_card_pressed(dummy_idx: int) -> void:
+	ProfileManager.apply_dummy_preset(dummy_idx, true)
+	ProfileManager.mark_dummy_used(dummy_idx)
+	var dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[clampi(dummy_idx, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)]
+	var def_pid: int = int(dm.get("part_id", 3))
+	_last_equipped_parts["head_id"] = int(dm.get("head_id", def_pid))
+	_last_equipped_parts["accessories_id"] = int(dm.get("accessories_id", def_pid))
+	if ProfileManager.face_acc_id >= 0:
+		_last_equipped_parts["face_acc_id"] = ProfileManager.face_acc_id
 	_on_avatar_updated()
 
 
 func _step_layer(prop_name: String, delta_step: int) -> void:
+	var allowed: Array[int] = []
+	var unlocked: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot(prop_name)
+	if prop_name == "head_id" or prop_name == "accessories_id" or prop_name == "face_acc_id":
+		allowed.append(-1)
+	for pid in unlocked:
+		allowed.append(pid)
+	if prop_name == "face_acc_id" and allowed.size() <= 1:
+		return
+	if allowed.is_empty():
+		return
 	var cur: int = int(ProfileManager.get(prop_name))
-	ProfileManager.set(prop_name, wrapi(cur + delta_step, 0, ProfileManager.ARCHETYPES.size()))
+	var pos: int = allowed.find(cur)
+	if pos < 0:
+		pos = 0
+	var next_id: int = allowed[wrapi(pos + delta_step, 0, allowed.size())]
+	if next_id >= 0 and (prop_name == "head_id" or prop_name == "accessories_id" or prop_name == "face_acc_id"):
+		_last_equipped_parts[prop_name] = next_id
+	ProfileManager.set(prop_name, next_id)
+	if next_id >= 0:
+		ProfileManager.mark_dummy_part_used(prop_name, next_id)
+	_on_avatar_updated()
+
+
+func _on_toggle_accessory(prop_name: String) -> void:
+	var cur: int = int(ProfileManager.get(prop_name))
+	if cur >= 0:
+		_last_equipped_parts[prop_name] = cur
+		ProfileManager.set(prop_name, -1)
+	else:
+		var dm_idx: int = clampi(ProfileManager.dummy_id, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)
+		var def_part: int = int(ProfileManager.CUSTOM_DUMMIES[dm_idx].get("part_id", 3))
+		var allowed: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot(prop_name)
+		if allowed.is_empty():
+			return
+		var fallback_id: int = allowed[0] if prop_name == "face_acc_id" else (def_part if allowed.has(def_part) else allowed[0])
+		var restore_id: int = int(_last_equipped_parts.get(prop_name, fallback_id))
+		if not allowed.has(restore_id):
+			restore_id = fallback_id
+		ProfileManager.set(prop_name, restore_id)
+		ProfileManager.mark_dummy_part_used(prop_name, restore_id)
+	_on_avatar_updated()
+
+
+func _on_remove_all_accessories() -> void:
+	if ProfileManager.head_id >= 0:
+		_last_equipped_parts["head_id"] = ProfileManager.head_id
+	if ProfileManager.accessories_id >= 0:
+		_last_equipped_parts["accessories_id"] = ProfileManager.accessories_id
+	if ProfileManager.face_acc_id >= 0:
+		_last_equipped_parts["face_acc_id"] = ProfileManager.face_acc_id
+	ProfileManager.head_id = -1
+	ProfileManager.accessories_id = -1
+	ProfileManager.face_acc_id = -1
+	_on_avatar_updated()
+
+
+func _on_reset_dummy_pressed() -> void:
+	ProfileManager.apply_dummy_preset(ProfileManager.dummy_id, true)
+	var dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[clampi(ProfileManager.dummy_id, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)]
+	var def_pid: int = int(dm.get("part_id", 3))
+	_last_equipped_parts["head_id"] = int(dm.get("head_id", def_pid))
+	_last_equipped_parts["accessories_id"] = int(dm.get("accessories_id", def_pid))
+	if ProfileManager.face_acc_id >= 0:
+		_last_equipped_parts["face_acc_id"] = ProfileManager.face_acc_id
 	_on_avatar_updated()
 
 
@@ -794,42 +660,53 @@ func _on_custom_color_picked(col: Color) -> void:
 
 
 func _on_randomize_pressed() -> void:
-	var count: int = ProfileManager.ARCHETYPES.size()
-	ProfileManager.archetype_id = randi() % count
-	ProfileManager.head_id = randi() % count
-	ProfileManager.torso_id = randi() % count
-	ProfileManager.legs_id = randi() % count
-	ProfileManager.hands_id = randi() % count
-	ProfileManager.accessories_id = randi() % count
-	ProfileManager.skin_id = randi() % count
+	var base_parts: Array[int] = ProfileManager.get_dummy_part_ids()
+	var head_pool: Array[int] = [-1]
+	for pid in ProfileManager.get_unlocked_dummy_part_ids_for_slot("head_id"):
+		head_pool.append(pid)
+	var acc_pool: Array[int] = [-1]
+	for pid in ProfileManager.get_unlocked_dummy_part_ids_for_slot("accessories_id"):
+		acc_pool.append(pid)
+	var face_pool: Array[int] = [-1]
+	for pid in ProfileManager.get_unlocked_dummy_part_ids_for_slot("face_acc_id"):
+		face_pool.append(pid)
+	var torso_pool: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot("torso_id")
+	if torso_pool.is_empty():
+		torso_pool = base_parts
+	var legs_pool: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot("legs_id")
+	if legs_pool.is_empty():
+		legs_pool = base_parts
+	var hands_pool: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot("hands_id")
+	if hands_pool.is_empty():
+		hands_pool = base_parts
+	var skin_pool: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot("skin_id")
+	if skin_pool.is_empty():
+		skin_pool = base_parts
+
+	ProfileManager.dummy_id = randi() % ProfileManager.CUSTOM_DUMMIES.size()
+	ProfileManager.head_id = head_pool[randi() % head_pool.size()]
+	ProfileManager.accessories_id = acc_pool[randi() % acc_pool.size()]
+	ProfileManager.face_acc_id = face_pool[randi() % face_pool.size()]
+	ProfileManager.torso_id = torso_pool[randi() % torso_pool.size()]
+	ProfileManager.legs_id = legs_pool[randi() % legs_pool.size()]
+	ProfileManager.hands_id = hands_pool[randi() % hands_pool.size()]
+	ProfileManager.skin_id = skin_pool[randi() % skin_pool.size()]
+	if ProfileManager.head_id >= 0:
+		_last_equipped_parts["head_id"] = ProfileManager.head_id
+	if ProfileManager.accessories_id >= 0:
+		_last_equipped_parts["accessories_id"] = ProfileManager.accessories_id
+	if ProfileManager.face_acc_id >= 0:
+		_last_equipped_parts["face_acc_id"] = ProfileManager.face_acc_id
+	ProfileManager.mark_dummy_used(ProfileManager.dummy_id)
+	for slot_prop in ["head_id", "accessories_id", "face_acc_id", "torso_id", "legs_id", "hands_id", "skin_id"]:
+		var eq_pid: int = int(ProfileManager.get(slot_prop))
+		if eq_pid >= 0:
+			ProfileManager.mark_dummy_part_used(slot_prop, eq_pid)
 	var swatches := ProfileManager.COLOR_SWATCHES
 	ProfileManager.shirt_color = swatches[randi() % swatches.size()]
 	ProfileManager.pants_color = swatches[randi() % swatches.size()]
 	ProfileManager.helmet_color = swatches[randi() % swatches.size()]
 	ProfileManager.gear_color = swatches[randi() % swatches.size()]
-	_on_avatar_updated()
-
-
-func _on_slot_selected(secondary: bool) -> void:
-	_editing_secondary = secondary
-	_refresh_ui()
-
-
-func _on_cycle_camo() -> void:
-	ProfileManager.weapon_skin_id = wrapi(ProfileManager.weapon_skin_id + 1, 0, ProfileManager.WEAPON_SKIN_NAMES.size())
-	_on_avatar_updated()
-
-
-func _on_cycle_rail() -> void:
-	ProfileManager.m4a1_rail_mod = wrapi(ProfileManager.m4a1_rail_mod + 1, 0, ProfileManager.RAIL_MOD_NAMES.size())
-	_on_avatar_updated()
-
-
-func _on_weapon_card_pressed(w_id: int) -> void:
-	if _editing_secondary:
-		ProfileManager.secondary_weapon_id = w_id
-	else:
-		ProfileManager.primary_weapon_id = w_id
 	_on_avatar_updated()
 
 
@@ -859,48 +736,72 @@ func _get_part_names(prop_name: String) -> Array[String]:
 			return ProfileManager.HANDS_NAMES
 		"accessories_id":
 			return ProfileManager.ACC_NAMES
+		"face_acc_id":
+			return ProfileManager.FACE_ACC_NAMES
 		_:
 			return ProfileManager.SKIN_NAMES
 
 
 func _refresh_ui() -> void:
-	var arch_idx: int = clampi(ProfileManager.archetype_id, 0, ProfileManager.ARCHETYPES.size() - 1)
-	_hero_name_label.text = str(ProfileManager.ARCHETYPES[arch_idx]["name"]).to_upper()
-	_hero_role_label.text = ProfileManager.ARCHETYPE_ROLES[arch_idx] if arch_idx < ProfileManager.ARCHETYPE_ROLES.size() else "Agent"
-	var ag: Dictionary = AgentData.get_agent(arch_idx)
-	var bw: Dictionary = ag["base_weapon"]
-	var abils: Array = ag["abilities"]
-	var ult: Dictionary = ag["ultimate"]
-	if is_instance_valid(_hero_preview_arena) and _hero_preview_arena.has_method("set_agent"):
-		_hero_preview_arena.set_agent(arch_idx)
-	if is_instance_valid(_agent_summary_label):
-		_agent_summary_label.text = "BASE WEAPON: %s (%d DMG) — Tap an ability below to preview!" % [str(bw["name"]), int(bw["damage"])]
-	for si in range(_hero_ability_btns.size()):
-		var btn: Button = _hero_ability_btns[si]
-		if not is_instance_valid(btn):
-			continue
-		if si == 3:
-			btn.text = "ULT: %s" % str(ult["name"])
-		else:
-			btn.text = "%d: %s" % [si + 1, str(abils[si]["name"])]
+	var dm_idx: int = clampi(ProfileManager.dummy_id, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)
+	var cur_dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[dm_idx]
+	_dummy_name_label.text = str(cur_dm.get("name", "FIGHTER")).to_upper()
+	_dummy_role_label.text = str(cur_dm.get("role", "Customizable Fighter"))
 	_refresh_pose_buttons()
 
-	# Hero preset grid highlight
-	var ac: Color = ag["accent"] as Color
-	for i in range(_hero_cards.size()):
-		var sel: bool = (i == arch_idx)
-		var bg_c: Color = Color(0.22, 0.14, 0.34) if sel else Color(0.10, 0.14, 0.22)
-		var bd_c: Color = ac if sel else Color(0.28, 0.42, 0.62)
-		_style_button(_hero_cards[i], bg_c, bd_c, 8)
+	if _tab_buttons.size() >= 1:
+		UIStyle.set_new_badge_visible(_tab_buttons[0], ProfileManager.has_any_new_dummy(), "NewBadge", -6.0, 4.0, 10)
+	if _tab_buttons.size() >= 2:
+		UIStyle.set_new_badge_visible(_tab_buttons[1], ProfileManager.has_any_new_cosmetic(), "NewBadge", -6.0, 4.0, 10)
 
-	# Friendly gear labels
+	for card in _dummy_cards:
+		var c_idx: int = int(card.get_meta("dummy_idx")) if card.has_meta("dummy_idx") else -1
+		if c_idx < 0 or c_idx >= ProfileManager.CUSTOM_DUMMIES.size():
+			continue
+		var sel: bool = (c_idx == dm_idx)
+		var bg_c: Color = Color(0.28, 0.18, 0.06) if sel else Color(0.10, 0.14, 0.22)
+		var bd_c: Color = Color(1.0, 0.78, 0.25) if sel else Color(0.28, 0.42, 0.62)
+		_style_button(card, bg_c, bd_c, 8)
+		UIStyle.set_new_badge_visible(card, ProfileManager.is_dummy_new(c_idx), "NewBadge", -6.0, 6.0, 10)
+
+	# Gear & accessory rows
 	for spec in GEAR_SPECS:
 		var prop: String = str(spec["prop"])
-		var names_list: Array[String] = _get_part_names(prop)
-		var idx: int = clampi(int(ProfileManager.get(prop)), 0, names_list.size() - 1)
+		var raw_val: int = int(ProfileManager.get(prop))
+		var unlocked_for_slot: Array[int] = ProfileManager.get_unlocked_dummy_part_ids_for_slot(prop)
+		if _slot_new_badges.has(prop):
+			var slot_badge: Control = _slot_new_badges[prop] as Control
+			if is_instance_valid(slot_badge):
+				slot_badge.visible = ProfileManager.has_new_cosmetic_for_slot(prop)
 		var lbl: Label = _layer_labels.get(prop) as Label
 		if lbl != null:
-			lbl.text = names_list[idx]
+			if raw_val < 0:
+				if prop == "face_acc_id" and unlocked_for_slot.is_empty():
+					lbl.text = "Locked (Open Crates)"
+					lbl.modulate = Color(0.55, 0.62, 0.74)
+				else:
+					lbl.text = "None (Removed)"
+					lbl.modulate = Color(0.62, 0.68, 0.78)
+			else:
+				var names_list: Array[String] = _get_part_names(prop)
+				var idx: int = clampi(raw_val, 0, names_list.size() - 1)
+				lbl.text = names_list[idx]
+				lbl.modulate = Color(1.0, 0.9, 0.48)
+		if _accessory_toggle_btns.has(prop):
+			var tog_btn: Button = _accessory_toggle_btns[prop] as Button
+			if is_instance_valid(tog_btn):
+				if prop == "face_acc_id" and unlocked_for_slot.is_empty() and raw_val < 0:
+					tog_btn.text = "LOCKED"
+					tog_btn.disabled = true
+					_style_button(tog_btn, Color(0.14, 0.16, 0.22), Color(0.35, 0.40, 0.50), 8)
+				elif raw_val < 0:
+					tog_btn.text = "ADD"
+					tog_btn.disabled = false
+					_style_button(tog_btn, Color(0.10, 0.30, 0.16), Color(0.32, 0.92, 0.48), 8)
+				else:
+					tog_btn.text = "REMOVE"
+					tog_btn.disabled = false
+					_style_button(tog_btn, Color(0.28, 0.12, 0.12), Color(0.95, 0.42, 0.36), 8)
 
 	# Color channels
 	for prop in _channel_buttons.keys():
@@ -913,197 +814,13 @@ func _refresh_ui() -> void:
 	if is_instance_valid(_custom_color_btn):
 		_custom_color_btn.color = ProfileManager.get(_active_color_prop) as Color
 
-	# Weapons slot & stats
-	var active_w_id: int = ProfileManager.secondary_weapon_id if _editing_secondary else ProfileManager.primary_weapon_id
-	var w: WeaponData = WeaponData.get_weapon(active_w_id, ProfileManager.weapon_skin_id, ProfileManager.m4a1_rail_mod)
 
-	_style_button(
-		_slot_primary_btn,
-		Color(0.26, 0.18, 0.06) if not _editing_secondary else Color(0.10, 0.14, 0.22),
-		Color(1.0, 0.78, 0.25) if not _editing_secondary else Color(0.32, 0.45, 0.65),
-		8
-	)
-	_style_button(
-		_slot_secondary_btn,
-		Color(0.26, 0.18, 0.06) if _editing_secondary else Color(0.10, 0.14, 0.22),
-		Color(1.0, 0.78, 0.25) if _editing_secondary else Color(0.32, 0.45, 0.65),
-		8
-	)
-	_camo_btn.text = "CAMO: " + ProfileManager.WEAPON_SKIN_NAMES[ProfileManager.weapon_skin_id].split(" ")[0].to_upper()
-	_rail_btn.visible = w.has_accessory_rail
-	_rail_btn.text = "RAIL: " + ProfileManager.RAIL_MOD_NAMES[ProfileManager.m4a1_rail_mod]
-	if is_instance_valid(_taunt_opt):
-		_taunt_opt.selected = clampi(ProfileManager.taunt_id, 0, AgentData.TAUNTS.size() - 1)
-
-	var atlas: AtlasTexture = _weapon_icon_rect.texture as AtlasTexture
-	if atlas != null:
-		atlas.region = Rect2(w.sprite_frame * 256, ProfileManager.weapon_skin_id * 128, 256, 128)
-
-	_weapon_title_label.text = w.display_name
-	_weapon_sub_label.text = "%s  •  %d Rounds" % [w.category, w.mag_size]
-
-	var burst_dmg: float = float(w.damage * w.pellet_count)
-	_bar_dmg.value = clampf(burst_dmg, 12.0, 100.0)
-	var rpm: float = 60.0 / maxf(0.03, w.fire_interval)
-	_bar_rpm.value = clampf((rpm / 1200.0) * 100.0, 8.0, 100.0)
-	_bar_acc.value = clampf(100.0 - w.spread_deg * 8.0, 15.0, 100.0)
-	_bar_mob.value = clampf(w.move_speed_multiplier * 90.0, 45.0, 100.0)
-
-	var traits: PackedStringArray = PackedStringArray()
-	if w.unlimited_reserve:
-		traits.append("Unlimited Ammo & Quick Draw")
-	if w.single_shell_reload:
-		traits.append("Shell-by-Shell Reload")
-	if w.scope_zoom < 0.95:
-		traits.append("Zoom Sniper Scope")
-	if w.vertical_recoil_bias < 0.0:
-		traits.append("Low Recoil Kick")
-	if w.has_backblast:
-		traits.append("Explosive Blast Rocket")
-	if w.has_accessory_rail:
-		traits.append("Supports Suppressor / Scope")
-	_weapon_trait_label.text = "  •  ".join(traits) if not traits.is_empty() else w.description
-
-	for i in range(_weapon_cards.size()):
-		var cur_w: bool = (i == active_w_id)
-		var bg_c: Color = Color(0.26, 0.18, 0.06) if cur_w else Color(0.10, 0.14, 0.22)
-		var bd_c: Color = Color(1.0, 0.78, 0.25) if cur_w else Color(0.28, 0.42, 0.65)
-		_style_button(_weapon_cards[i], bg_c, bd_c, 8)
-
-
-func _build_agent_pick_overlay() -> void:
-	_agent_pick_overlay = ColorRect.new()
-	_agent_pick_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_agent_pick_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
-	_agent_pick_overlay.visible = false
-	add_child(_agent_pick_overlay)
-
-	var cc := CenterContainer.new()
-	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_agent_pick_overlay.add_child(cc)
-
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(780, 480)
-	panel.add_theme_stylebox_override("panel", _make_style(Color(0.06, 0.09, 0.15, 0.98), Color(0.78, 0.42, 1.0, 0.95), 14, 16, 14))
-	cc.add_child(panel)
-
-	var pv := VBoxContainer.new()
-	pv.add_theme_constant_override("separation", 10)
-	panel.add_child(pv)
-
-	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 10)
-	pv.add_child(top_row)
-
-	var title := Label.new()
-	title.text = "SELECT AN AGENT FOR AGENT MODE"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", 21)
-	title.modulate = Color(0.88, 0.68, 1.0)
-	top_row.add_child(title)
-
-	var close_btn := Button.new()
-	close_btn.text = "CANCEL"
-	close_btn.custom_minimum_size = Vector2(110, 40)
-	close_btn.add_theme_font_size_override("font_size", 15)
-	_style_button(close_btn, Color(0.24, 0.10, 0.12), Color(0.95, 0.42, 0.36))
-	close_btn.pressed.connect(func(): _agent_pick_overlay.visible = false)
-	top_row.add_child(close_btn)
-
-	var note := Label.new()
-	note.text = "Custom outfits & colors only apply in Gunfight. Pick an Agent to enter Agent Mode:"
-	note.add_theme_font_size_override("font_size", 14)
-	note.modulate = Color(0.74, 0.88, 1.0)
-	pv.add_child(note)
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	pv.add_child(scroll)
-
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 8)
-	scroll.add_child(grid)
-
-	var ag_order: Array[int] = []
-	for k in range(AgentData.AGENTS.size()):
-		ag_order.append(k)
-	ag_order.sort_custom(func(a: int, b: int) -> bool:
-		var a_unl: bool = ProfileManager.is_agent_unlocked(a, false)
-		var b_unl: bool = ProfileManager.is_agent_unlocked(b, false)
-		if a_unl != b_unl:
-			return a_unl
-		return str(AgentData.AGENTS[a].get("agent_name", "")).to_lower() < str(AgentData.AGENTS[b].get("agent_name", "")).to_lower()
-	)
-	for i in ag_order:
-		var ag: Dictionary = AgentData.AGENTS[i]
-		var is_unl: bool = ProfileManager.is_agent_unlocked(i, false)
-		var u_price: int = ProfileManager.get_agent_unlock_price()
-		var ab := Button.new()
-		ab.custom_minimum_size = Vector2(0, 56)
-		ab.clip_text = true
-		ab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ab.add_theme_font_size_override("font_size", 14)
-		ab.text = ("%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]) if is_unl else ("%s\n%d COINS" % [str(ag["agent_name"]), u_price])
-		_style_button(ab, Color(0.10, 0.14, 0.22) if is_unl else Color(0.08, 0.08, 0.11), Color(0.55, 0.40, 0.90) if is_unl else Color(0.45, 0.36, 0.22), 8)
-		var lock_tr := TextureRect.new()
-		lock_tr.texture = load("res://assets/ui/icons/icon_lock.png") as Texture2D
-		lock_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		lock_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		lock_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		lock_tr.anchor_left = 1.0
-		lock_tr.anchor_right = 1.0
-		lock_tr.offset_left = -28.0
-		lock_tr.offset_top = 6.0
-		lock_tr.offset_right = -6.0
-		lock_tr.offset_bottom = 28.0
-		lock_tr.visible = not is_unl
-		ab.add_child(lock_tr)
-		ab.pressed.connect(func():
-			if not ProfileManager.is_agent_unlocked(i, false):
-				if ProfileManager.buy_agent(i):
-					ab.text = "%s\n(%s)" % [str(ag["agent_name"]), str(ag["title"])]
-					lock_tr.visible = false
-					_style_button(ab, Color(0.10, 0.14, 0.22), Color(0.55, 0.40, 0.90), 8)
-				else:
-					note.text = "Locked! Need %s coins to unlock %s (you have %s)." % [ProfileManager.format_coins(ProfileManager.get_agent_unlock_price()), str(ag["agent_name"]), ProfileManager.format_coins(ProfileManager.coins)]
-					note.modulate = Color(1.0, 0.48, 0.42)
-					return
-			ProfileManager.apply_archetype_preset(i, true)
-			NetworkManager.disconnect_network()
-			NetworkManager.test_mode_enabled = false
-			NetworkManager.match_mode = 2
-			_agent_pick_overlay.visible = false
-			NetworkManager.go_to_arena()
-		)
-		grid.add_child(ab)
-
-
-func _open_agent_pick_overlay() -> void:
-	if is_instance_valid(_agent_pick_overlay):
-		_agent_pick_overlay.visible = true
-
-
-func _trigger_hero_ability(slot_i: int) -> void:
-	var idx: int = clampi(ProfileManager.archetype_id, 0, AgentData.AGENTS.size() - 1)
-	var ab: Dictionary = AgentData.get_ability_slot(idx, slot_i)
-	if is_instance_valid(_agent_summary_label):
-		var prefix: String = "ULT" if slot_i == 3 else ("ABIL %d" % (slot_i + 1))
-		_agent_summary_label.text = "%s — %s: %s" % [prefix, str(ab["name"]), str(ab["desc"])]
-	if is_instance_valid(_hero_preview_arena) and _hero_preview_arena.has_method("cast_slot"):
-		_hero_preview_arena.cast_slot(slot_i)
-
-
-func _make_agent_icon(arch_idx: int) -> Texture2D:
-	var arch: Dictionary = ProfileManager.ARCHETYPES[clampi(arch_idx, 0, ProfileManager.ARCHETYPES.size() - 1)]
-	var parts: Dictionary = arch.get("parts", {})
-	var def_part: int = ProfileManager.get_archetype_part_id(arch_idx)
-	var s_idx: int = clampi(int(parts.get("head", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
+func _make_dummy_icon(dummy_idx: int) -> Texture2D:
+	var dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[clampi(dummy_idx, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)]
+	var def_part: int = int(dm.get("part_id", 3))
+	var s_idx: int = clampi(int(dm.get("skin_id", def_part)), 0, ModularCharacter.MAX_PART_INDEX)
+	var h_idx: int = int(dm.get("head_id", def_part))
 	var skin_tex: Texture2D = load(ModularCharacter.get_part_texture_path("skin", s_idx)) as Texture2D
-	var head_tex: Texture2D = load(ModularCharacter.get_part_texture_path("head", s_idx)) as Texture2D
 	if skin_tex == null:
 		return null
 	var fw: int = skin_tex.get_width() / 8
@@ -1112,24 +829,26 @@ func _make_agent_icon(arch_idx: int) -> Texture2D:
 	var base_img: Image = skin_tex.get_image().get_region(crop)
 	if base_img.get_format() != Image.FORMAT_RGBA8:
 		base_img.convert(Image.FORMAT_RGBA8)
-	if head_tex != null:
-		var h_fw: int = maxi(1, head_tex.get_width() / 8)
-		var h_fh: int = mini(head_tex.get_height(), int(float(head_tex.get_height()) * 0.72))
-		var head_img: Image = head_tex.get_image().get_region(Rect2i(0, 0, h_fw, h_fh))
-		if head_img.get_format() != Image.FORMAT_RGBA8:
-			head_img.convert(Image.FORMAT_RGBA8)
-		if h_fw != fw or h_fh != fh:
-			head_img.resize(fw, fh, Image.INTERPOLATE_BILINEAR)
-		base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
+	if h_idx >= 0:
+		var head_tex: Texture2D = load(ModularCharacter.get_part_texture_path("head", clampi(h_idx, 0, ModularCharacter.MAX_PART_INDEX))) as Texture2D
+		if head_tex != null:
+			var h_fw: int = maxi(1, head_tex.get_width() / 8)
+			var h_fh: int = mini(head_tex.get_height(), int(float(head_tex.get_height()) * 0.72))
+			var head_img: Image = head_tex.get_image().get_region(Rect2i(0, 0, h_fw, h_fh))
+			if head_img.get_format() != Image.FORMAT_RGBA8:
+				head_img.convert(Image.FORMAT_RGBA8)
+			if h_fw != fw or h_fh != fh:
+				head_img.resize(fw, fh, Image.INTERPOLATE_BILINEAR)
+			base_img.blend_rect(head_img, Rect2i(0, 0, fw, fh), Vector2i.ZERO)
 	var used: Rect2i = base_img.get_used_rect()
 	if used.size.x <= 0 or used.size.y <= 0:
 		return null
 	var trimmed: Image = base_img.get_region(used)
-	var scale_f: float = 42.0 / float(maxi(used.size.x, used.size.y))
+	var scale_f: float = 44.0 / float(maxi(used.size.x, used.size.y))
 	var tw: int = maxi(1, int(round(float(used.size.x) * scale_f)))
 	var th: int = maxi(1, int(round(float(used.size.y) * scale_f)))
 	trimmed.resize(tw, th, Image.INTERPOLATE_BILINEAR)
-	var sq := Image.create(48, 48, false, Image.FORMAT_RGBA8)
+	var sq := Image.create(52, 52, false, Image.FORMAT_RGBA8)
 	sq.fill(Color(0, 0, 0, 0))
-	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((48 - tw) / 2, (48 - th) / 2))
+	sq.blit_rect(trimmed, Rect2i(0, 0, tw, th), Vector2i((52 - tw) / 2, (52 - th) / 2))
 	return ImageTexture.create_from_image(sq)

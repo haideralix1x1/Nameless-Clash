@@ -6,7 +6,7 @@ extends Node2D
 
 const FRAME_SIZE := Vector2i(96, 96)
 const SHEET_FRAMES := 8
-const MAX_PART_INDEX := 29
+const MAX_PART_INDEX := 33
 
 const PART_OWNER_NAMES: Array[String] = [
 	"contra", "mike_jones", "bruski", "commando", "rook_frost",
@@ -14,7 +14,17 @@ const PART_OWNER_NAMES: Array[String] = [
 	"pirate", "yagami", "dead_buddy", "nothing", "wraith",
 	"mummy", "jack_47", "viper_x", "nyx", "akuza",
 	"mirror_ogre", "ignis", "prism", "afera", "raven",
-	"ray_lina", "draken", "soulless", "bramble", "jackson"
+	"ray_lina", "draken", "soulless", "bramble", "jackson",
+	"dummy_urban", "dummy_cyber", "dummy_desert", "dummy_stealth"
+]
+
+const FACE_ACC_FILES: Array[String] = [
+	"faceacc_0_mustache",
+	"faceacc_1_beard",
+	"faceacc_2_goatee",
+	"faceacc_3_shades",
+	"faceacc_4_bandana",
+	"faceacc_5_eyepatch"
 ]
 
 
@@ -25,6 +35,11 @@ static func get_part_owner_name(part_id: int) -> String:
 
 static func get_part_texture_path(part_kind: String, part_id: int) -> String:
 	return "res://assets/sprites/modular/%s_%s.png" % [get_part_owner_name(part_id), part_kind]
+
+
+static func get_face_acc_texture_path(face_acc_id: int) -> String:
+	var idx: int = clampi(face_acc_id, 0, FACE_ACC_FILES.size() - 1)
+	return "res://assets/sprites/modular/%s.png" % FACE_ACC_FILES[idx]
 
 
 const ANIM_DEFS: Dictionary = {
@@ -40,6 +55,7 @@ var _sprite_back: Sprite2D
 var _anim_legs: AnimatedSprite2D
 var _anim_torso: AnimatedSprite2D
 var _anim_head: AnimatedSprite2D
+var _sprite_face_acc: Sprite2D
 var _sprite_gear: Sprite2D
 var _sprite_hands: Sprite2D
 var _sprite_hand_far: Sprite2D
@@ -50,6 +66,9 @@ var _manual_sync_mode: bool = false
 var _manual_frame: int = 0
 var _flip_h: bool = false
 var _custom_full_sheet: bool = false
+var _has_headgear: bool = true
+var _has_back_acc: bool = true
+var _has_face_acc: bool = false
 var _is_raven_wing: bool = false
 var _is_wraith_cape: bool = false
 var _is_nyx_tail: bool = false
@@ -212,6 +231,7 @@ func _ensure_layers() -> void:
 	_anim_legs = _get_or_create_animated("AnimatedSprite2D_Legs")
 	_anim_torso = _get_or_create_animated("AnimatedSprite2D_Torso")
 	_anim_head = _get_or_create_animated("AnimatedSprite2D_Head")
+	_sprite_face_acc = _get_or_create_sprite("Sprite2D_FaceAcc")
 	_sprite_gear = _get_or_create_sprite("Sprite2D_Gear")
 	_sprite_hand_far = _get_or_create_sprite("Sprite2D_HandFar")
 	_sprite_hand_far.hframes = 1
@@ -268,12 +288,20 @@ func apply_loadout(config: Dictionary) -> void:
 	var arch_idx := clampi(int(config.get("archetype", config.get("archetype_id", 0))), 0, MAX_PART_INDEX)
 	var def_part := arch_idx
 	var skin_id := clampi(int(config.get("skin_id", def_part)), 0, MAX_PART_INDEX)
-	var head_id := clampi(int(config.get("head_id", def_part)), 0, MAX_PART_INDEX)
+	var raw_head_id := int(config.get("head_id", def_part))
+	var has_explicit_gear_tex := config.has("gear_texture") or config.has("helmet_texture")
+	_has_headgear = (raw_head_id >= 0) or has_explicit_gear_tex
+	var head_id := clampi(raw_head_id, 0, MAX_PART_INDEX) if raw_head_id >= 0 else skin_id
 	_current_part_id = head_id
 	var torso_id := clampi(int(config.get("torso_id", def_part)), 0, MAX_PART_INDEX)
 	var legs_id := clampi(int(config.get("legs_id", def_part)), 0, MAX_PART_INDEX)
-	var acc_id := clampi(int(config.get("accessories_id", def_part)), 0, MAX_PART_INDEX)
+	var raw_acc_id := int(config.get("accessories_id", def_part))
+	var has_explicit_back_tex := config.has("back_texture") or config.has("accessories_texture")
+	_has_back_acc = (raw_acc_id >= 0) or has_explicit_back_tex
+	var acc_id := clampi(raw_acc_id, 0, MAX_PART_INDEX) if raw_acc_id >= 0 else def_part
 	var hands_id := clampi(int(config.get("hands_id", def_part)), 0, MAX_PART_INDEX)
+	var raw_face_acc_id := int(config.get("face_acc_id", -1))
+	_has_face_acc = (raw_face_acc_id >= 0 and raw_face_acc_id < FACE_ACC_FILES.size())
 
 	var head_path := str(config.get("head_texture", config.get("skin_texture",
 		get_part_texture_path("skin", skin_id))))
@@ -290,8 +318,10 @@ func apply_loadout(config: Dictionary) -> void:
 
 	_custom_full_sheet = false
 	_anim_head.visible = true
-	_sprite_gear.visible = true
-	_sprite_back.visible = true
+	if _sprite_face_acc != null:
+		_sprite_face_acc.visible = _has_face_acc
+	_sprite_gear.visible = _has_headgear
+	_sprite_back.visible = _has_back_acc
 	_sprite_hands.visible = true
 	if _sprite_hand_far != null:
 		_sprite_hand_far.visible = true
@@ -301,14 +331,18 @@ func apply_loadout(config: Dictionary) -> void:
 	_apply_animated_strip(_anim_head, head_path)
 	_apply_animated_strip(_anim_torso, torso_path)
 	_apply_animated_strip(_anim_legs, legs_path)
-	_apply_sprite_strip(_sprite_gear, gear_path)
-	_apply_sprite_strip(_sprite_back, back_path)
-	_is_raven_wing = (acc_id == 24) or back_path.ends_with("raven_accessories.png")
-	_is_wraith_cape = (acc_id == 14) or (acc_id == 21) or (acc_id == 26) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("draken_accessories.png") or back_path.ends_with("soulless_accessories.png")
-	_is_nyx_tail = (acc_id == 18) or back_path.ends_with("nyx_accessories.png")
-	_is_ignis_head_fire = (head_id == 21) or gear_path.ends_with("ignis_head.png")
+	if _has_face_acc and _sprite_face_acc != null:
+		_apply_sprite_strip(_sprite_face_acc, get_face_acc_texture_path(raw_face_acc_id))
+	if _has_headgear:
+		_apply_sprite_strip(_sprite_gear, gear_path)
+	if _has_back_acc:
+		_apply_sprite_strip(_sprite_back, back_path)
+	_is_raven_wing = _has_back_acc and ((acc_id == 24) or back_path.ends_with("raven_accessories.png"))
+	_is_wraith_cape = _has_back_acc and ((acc_id == 14) or (acc_id == 21) or (acc_id == 26) or (acc_id == 27) or back_path.ends_with("wraith_accessories.png") or back_path.ends_with("ignis_accessories.png") or back_path.ends_with("draken_accessories.png") or back_path.ends_with("soulless_accessories.png"))
+	_is_nyx_tail = _has_back_acc and ((acc_id == 18) or back_path.ends_with("nyx_accessories.png"))
+	_is_ignis_head_fire = _has_headgear and ((head_id == 21) or gear_path.ends_with("ignis_head.png"))
 	_is_ignis_hands_fire = (hands_id == 21) or hands_path.ends_with("ignis_hands.png")
-	_is_soulless_smoke = (head_id == 27) or gear_path.ends_with("soulless_head.png")
+	_is_soulless_smoke = _has_headgear and ((head_id == 27) or gear_path.ends_with("soulless_head.png"))
 	_apply_sprite_strip(_sprite_hands, hands_path)
 	_sprite_hands.hframes = 1
 	_sprite_hands.region_enabled = true
@@ -364,6 +398,8 @@ func apply_layer_colors(team_tint: Color = Color.WHITE, team_blend: float = 0.0)
 		_sprite_hand_far.modulate = skin
 	_sprite_gear.modulate = helmet
 	_sprite_back.modulate = gear
+	if _sprite_face_acc != null:
+		_sprite_face_acc.modulate = Color.WHITE.lerp(team_tint, blend * 0.20) if blend > 0.0 else Color.WHITE
 
 
 func set_headless(headless: bool) -> void:
@@ -371,7 +407,9 @@ func set_headless(headless: bool) -> void:
 	if _custom_full_sheet:
 		return
 	_anim_head.visible = not headless
-	_sprite_gear.visible = not headless
+	if _sprite_face_acc != null:
+		_sprite_face_acc.visible = (not headless) and _has_face_acc
+	_sprite_gear.visible = (not headless) and _has_headgear
 
 
 func play_state(anim_name: String, flip_h: bool = false) -> void:
@@ -543,8 +581,8 @@ func _sub_frame_for_sheet_frame(anim_name: String, sheet_frame: int) -> int:
 
 func _apply_sheet_frame_to_sprites(sheet_frame: int) -> void:
 	var safe := clampi(sheet_frame, 0, SHEET_FRAMES - 1)
-	for spr in [_sprite_back, _sprite_gear]:
-		if spr != null:
+	for spr in [_sprite_back, _sprite_face_acc, _sprite_gear]:
+		if spr != null and spr.texture != null:
 			spr.frame = safe
 	if _sprite_hands != null and _sprite_hands.texture != null:
 		var fw: float = float(_sprite_hands.texture.get_width()) / float(SHEET_FRAMES)
@@ -556,7 +594,7 @@ func _apply_sheet_frame_to_sprites(sheet_frame: int) -> void:
 
 
 func _apply_flip_to_sprites(flip_h: bool) -> void:
-	for spr in [_sprite_back, _sprite_gear, _sprite_hands, _sprite_hand_far]:
+	for spr in [_sprite_back, _sprite_face_acc, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if spr != null:
 			spr.flip_h = flip_h
 	var sign_x: float = -1.0 if flip_h else 1.0
@@ -635,10 +673,16 @@ func reset_taunt_pose() -> void:
 
 func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 	_ensure_layers()
-	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]
+	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_face_acc, _sprite_gear, _sprite_hands, _sprite_hand_far]
 	for n in vis_nodes:
 		if n != null:
 			n.visible = true
+	if _sprite_back != null:
+		_sprite_back.visible = (not _custom_full_sheet) and _has_back_acc
+	if _sprite_face_acc != null:
+		_sprite_face_acc.visible = (not _custom_full_sheet) and _has_face_acc
+	if _sprite_gear != null:
+		_sprite_gear.visible = (not _custom_full_sheet) and _has_headgear
 
 	var dir: float = -1.0 if flip_h else 1.0
 	var p: float = clampf(progress_0_to_1, 0.0, 1.0)
@@ -647,7 +691,7 @@ func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 		var bend: float = sin((p / 0.62) * PI * 0.85)
 		var upper_pos := Vector2(dir * 5.5 * bend, 5.0 * bend)
 		var upper_rot: float = dir * 0.36 * bend
-		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_gear]:
+		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_face_acc, _sprite_gear]:
 			if u != null:
 				u.position = upper_pos
 				u.rotation = upper_rot
@@ -666,7 +710,7 @@ func play_shoe_throw_frame(progress_0_to_1: float, flip_h: bool) -> void:
 		var lean: float = lerpf(-0.28, 0.22, throw_t)
 		var upper_pos := Vector2(dir * lean * 8.0, -1.5 * sin(throw_t * PI))
 		var upper_rot: float = dir * lean
-		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_gear]:
+		for u in [_sprite_back, _anim_torso, _anim_head, _sprite_face_acc, _sprite_gear]:
 			if u != null:
 				u.position = upper_pos
 				u.rotation = upper_rot
@@ -690,12 +734,18 @@ func stop_shoe_throw() -> void:
 	_ensure_layers()
 	if _sprite_shoe_throw != null:
 		_sprite_shoe_throw.visible = false
-	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]
-	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_gear, _sprite_hands, _sprite_hand_far]:
+	var vis_nodes: Array = [_anim_legs, _anim_torso] if _custom_full_sheet else [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_face_acc, _sprite_gear, _sprite_hands, _sprite_hand_far]
+	for n in [_sprite_back, _anim_legs, _anim_torso, _anim_head, _sprite_face_acc, _sprite_gear, _sprite_hands, _sprite_hand_far]:
 		if n != null:
 			n.visible = (n in vis_nodes)
 			n.position = Vector2.ZERO
 			n.rotation = 0.0
+	if _sprite_back != null:
+		_sprite_back.visible = (not _custom_full_sheet) and _has_back_acc
+	if _sprite_face_acc != null:
+		_sprite_face_acc.visible = (not _custom_full_sheet) and _has_face_acc
+	if _sprite_gear != null:
+		_sprite_gear.visible = (not _custom_full_sheet) and _has_headgear
 	var sign_x: float = -1.0 if _flip_h else 1.0
 	if _sprite_hands != null:
 		_sprite_hands.position = Vector2(-26.0 * sign_x, 6.0)
@@ -725,6 +775,11 @@ func apply_weapon_arm_pose(stance: String, aim_ang: float, facing_r: bool, fire_
 	var head_pos := Vector2(float(head_ov.get("x", 0.0)) * dir, float(head_ov.get("y", 0.0)) + jet_bob_y)
 	var head_rot: float = dir * deg_to_rad(float(head_ov.get("rot", 0.0)))
 	var head_z: int = int(head_ov.get("z", 0))
+	if _sprite_face_acc != null:
+		_sprite_face_acc.position = head_pos
+		_sprite_face_acc.rotation = head_rot
+		_sprite_face_acc.z_index = head_z
+		_apply_part_scale(_sprite_face_acc, head_ov)
 	if _sprite_gear != null:
 		_sprite_gear.position = head_pos
 		_sprite_gear.rotation = head_rot

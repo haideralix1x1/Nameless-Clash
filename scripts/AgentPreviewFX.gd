@@ -111,6 +111,12 @@ func _draw() -> void:
 			var fw: float = float(_tex.get_width()) / 10.0
 			var fh: float = float(_tex.get_height())
 			draw_texture_rect_region(_tex, Rect2(Vector2(pos_x, 4.0) - sz * 0.5, sz), Rect2(float(f_idx) * fw, 0.0, fw, fh))
+		elif _active_kind == "boar_ride":
+			var bf_idx: int = int(_phase * 1.4) % 4
+			var bfw: float = float(_tex.get_width()) / 4.0
+			var bfh: float = float(_tex.get_height())
+			var bsz := Vector2(88.0, 66.0)
+			draw_texture_rect_region(_tex, Rect2(Vector2(pos_x, pos_y) - bsz * 0.5, bsz), Rect2(float(bf_idx) * bfw, 0.0, bfw, bfh))
 		elif _active_kind == "ult_winged_lion":
 			var lf_idx: int = int(_phase * 0.90) % 16
 			var lfw: float = float(_tex.get_width()) / 16.0

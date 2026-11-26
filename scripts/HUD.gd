@@ -216,6 +216,8 @@ func _ready() -> void:
 	NetworkManager.match_timer_updated.connect(_on_match_timer_updated)
 	NetworkManager.match_ended.connect(_on_match_ended)
 	NetworkManager.combo_achieved.connect(_on_combo_achieved)
+	if has_node("/root/AchievementManager"):
+		get_node("/root/AchievementManager").achievement_unlocked.connect(_on_achievement_unlocked)
 	if NetworkManager.has_signal("game_rules_updated"):
 		NetworkManager.game_rules_updated.connect(_sync_mode_hud_visibility)
 	SettingsManager.touch_layout_changed.connect(_update_stick_and_button_positions)
@@ -1616,17 +1618,13 @@ func _on_weapon_changed(weapon_data: WeaponData) -> void:
 	_refresh_top_info_pill()
 
 
-func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, skin_row: int) -> void:
+func _set_weapon_icon_texture(icon_rect: TextureRect, w_data: WeaponData, _skin_row: int) -> void:
 	if not is_instance_valid(icon_rect) or w_data == null:
 		return
-	icon_rect.texture = WeaponData.get_weapon_atlas_texture(w_data.id, 0)
-	return
-	var atlas: AtlasTexture = icon_rect.texture as AtlasTexture
-	if atlas == null:
-		atlas = AtlasTexture.new()
-		atlas.atlas = WeaponData.TEX_SELECTION_SHEET
-		icon_rect.texture = atlas
-	atlas.region = Rect2(w_data.sprite_frame * 256, skin_row * 128, 256, 128)
+	var eq_key: String = ProfileManager.get_equipped_gun_skin(w_data.id)
+	var eq_row: int = ProfileManager.get_equipped_gun_skin_row(w_data.id)
+	icon_rect.texture = WeaponData.get_weapon_atlas_texture(w_data.id, eq_row)
+	icon_rect.modulate = ProfileManager.get_gun_skin_tint(w_data.id, eq_key)
 
 
 func _set_portrait_frame(rect: TextureRect, tex_path: String) -> void:
@@ -2379,7 +2377,7 @@ func _refresh_preset_cards() -> void:
 
 
 func _get_weapon_icon_tex(w_id: int, _wd: WeaponData) -> Texture2D:
-	return WeaponData.get_weapon_atlas_texture(w_id, 0)
+	return WeaponData.get_weapon_atlas_texture(w_id, ProfileManager.get_equipped_gun_skin_row(w_id))
 
 
 func _make_armor_icon(kind: String, col: Color) -> Texture2D:
@@ -2644,6 +2642,34 @@ func _on_match_timer_updated(t_left: float) -> void:
 		_match_timer_label.modulate = Color(0.95, 0.96, 1.0)
 
 
+func _on_achievement_unlocked(_ach_id: String, title: String) -> void:
+	var toast := PanelContainer.new()
+	toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast.offset_left = -210.0
+	toast.offset_right = 210.0
+	toast.offset_top = 128.0
+	toast.offset_bottom = 172.0
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.10, 0.08, 0.18, 0.96)
+	sb.border_color = Color(1.0, 0.84, 0.24, 0.98)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(12)
+	sb.set_content_margin_all(8)
+	toast.add_theme_stylebox_override("panel", sb)
+	var lbl := Label.new()
+	lbl.text = "★ ACHIEVEMENT UNLOCKED: %s" % title
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 15)
+	lbl.modulate = Color(1.0, 0.90, 0.34)
+	toast.add_child(lbl)
+	add_child(toast)
+	var tw := toast.create_tween()
+	tw.tween_interval(2.4)
+	tw.tween_property(toast, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(toast.queue_free)
+
+
 func _on_combo_achieved(killer_id: int, killer_name: String, combo_count: int) -> void:
 	var local_pid: int = local_player.peer_id if (local_player != null and is_instance_valid(local_player)) else NetworkManager.get_local_peer_id()
 	if killer_id != local_pid or not is_instance_valid(_combo_banner_label):
@@ -2878,4 +2904,3 @@ class BombHudIcon extends Control:
 				draw_texture_rect(TEX_BOMB_MINE, r, false)
 			_:
 				draw_texture_rect(TEX_BOMB_FRAG, r, false)
-

@@ -92,6 +92,7 @@ var _drag_start_weapon_val: Dictionary = {}
 var _syncing_ui: bool = false
 
 var _pose_data: Dictionary = {"stances": {}, "agents": {}}
+var _weapon_muzzles: Dictionary = {}
 var _undo_stack: Array[Dictionary] = []
 var _zoom_scale: float = 4.5
 
@@ -124,10 +125,41 @@ var _tab_pose_btn: Button
 var _tab_ui_btn: Button
 var _tab_range_btn: Button
 var _tab_coin_btn: Button
+var _tab_ach_crate_btn: Button
 var _pose_mode_root: VBoxContainer
 var _ui_setter_root: VBoxContainer
 var _range_mode_root: VBoxContainer
 var _coin_mode_root: VBoxContainer
+var _ach_crate_root: VBoxContainer
+
+var _ac_subtab: int = 0
+var _ac_sub_ach_btn: Button
+var _ac_sub_crate_btn: Button
+var _ac_ach_panel: Control
+var _ac_crate_panel: Control
+var _ac_selected_ach_id: String = ""
+var _ac_ach_btns: Dictionary = {}
+var _ac_ach_title_lbl: Label
+var _ac_ach_desc_lbl: Label
+var _ac_ach_coins_spin: SpinBox
+var _ac_ach_target_spin: SpinBox
+var _ac_ach_weapon_opt: OptionButton
+var _ac_ach_skin_opt: OptionButton
+var _ac_ach_excl_cb: CheckBox
+var _ac_ach_status_lbl: Label
+var _ac_syncing: bool = false
+
+var _ac_crate_key: String = "standard"
+var _ac_crate_std_btn: Button
+var _ac_crate_prem_btn: Button
+var _ac_crate_list_box: VBoxContainer
+var _ac_crate_total_lbl: Label
+var _ac_crate_status_lbl: Label
+var _ac_add_type_opt: OptionButton
+var _ac_add_coins_spin: SpinBox
+var _ac_add_weapon_opt: OptionButton
+var _ac_add_skin_opt: OptionButton
+var _ac_add_chance_spin: SpinBox
 
 var _coin_kill_spin: SpinBox
 var _coin_treasure_spin: SpinBox
@@ -136,6 +168,7 @@ var _coin_match_spin: SpinBox
 var _coin_agent_spin: SpinBox
 var _coin_bal_lbl: Label
 var _coin_status_lbl: Label
+var _reset_player_dlg: ConfirmationDialog
 var _coin_selected_wid: int = 0
 var _coin_gun_btns: Dictionary = {}
 var _coin_skin_spins: Dictionary = {}
@@ -173,6 +206,14 @@ var _weapon_stats: Dictionary = {}
 var _range_selected_wid: int = 0
 var _range_gun_btns: Dictionary = {}
 var _range_canvas: Control
+var _muzzle_canvas: Control
+var _weapon_subtab: int = 0 # 0 = Muzzle / Aim Point (default), 1 = Range Setter (Bunker)
+var _subtab_muzzle_btn: Button
+var _subtab_range_btn: Button
+var _muzzle_zoom: float = 8.0
+var _muzzle_dragging: bool = false
+var _w_muz_x_spin: SpinBox
+var _w_muz_y_spin: SpinBox
 var _range_shooter_pos: Vector2 = Vector2(480.0, 920.0)
 var _range_aim_angle: float = 0.0
 var _range_drag_mode: int = 0 # 0=none, 1=move shooter, 2=aim+set range
@@ -215,6 +256,7 @@ var _ui_drag_start_elem: Dictionary = {}
 
 func _ready() -> void:
 	_load_pose_data()
+	_weapon_muzzles = WeaponData.load_weapon_muzzles().duplicate(true)
 	_load_ui_layout_data()
 	_load_weapon_ranges()
 	_build_ui()
@@ -249,7 +291,8 @@ func _save_pose_data() -> void:
 		f_usr.store_string(json_str)
 		f_usr.close()
 	ModularCharacter.reload_pose_overrides()
-	_status_lbl.text = "Saved pose_overrides.json!" if ok_res else "Saved to user://pose_overrides.json!"
+	WeaponData.save_weapon_muzzles(_weapon_muzzles, true)
+	_status_lbl.text = "Saved pose_overrides.json & weapon_muzzles.json!" if ok_res else "Saved to user://!"
 	_status_lbl.modulate = Color(0.35, 0.96, 0.58)
 
 
@@ -287,30 +330,56 @@ func _build_ui() -> void:
 	_tab_pose_btn = Button.new()
 	_tab_pose_btn.text = "Character Poses"
 	_tab_pose_btn.toggle_mode = true
-	_tab_pose_btn.custom_minimum_size = Vector2(160, 30)
+	_tab_pose_btn.custom_minimum_size = Vector2(136, 30)
 	_tab_pose_btn.pressed.connect(func(): _switch_editor_tab(0))
 	tab_hbox.add_child(_tab_pose_btn)
 
 	_tab_ui_btn = Button.new()
 	_tab_ui_btn.text = "In-Game UI Setter"
 	_tab_ui_btn.toggle_mode = true
-	_tab_ui_btn.custom_minimum_size = Vector2(170, 30)
+	_tab_ui_btn.custom_minimum_size = Vector2(144, 30)
 	_tab_ui_btn.pressed.connect(func(): _switch_editor_tab(1))
 	tab_hbox.add_child(_tab_ui_btn)
 
 	_tab_range_btn = Button.new()
-	_tab_range_btn.text = "Weapon Ranges (Bunker)"
+	_tab_range_btn.text = "Weapons Studio"
 	_tab_range_btn.toggle_mode = true
-	_tab_range_btn.custom_minimum_size = Vector2(200, 30)
+	_tab_range_btn.custom_minimum_size = Vector2(140, 30)
 	_tab_range_btn.pressed.connect(func(): _switch_editor_tab(2))
 	tab_hbox.add_child(_tab_range_btn)
 
 	_tab_coin_btn = Button.new()
-	_tab_coin_btn.text = "Coin Adjustment"
+	_tab_coin_btn.text = "NCC Adjustment"
 	_tab_coin_btn.toggle_mode = true
-	_tab_coin_btn.custom_minimum_size = Vector2(165, 30)
+	_tab_coin_btn.custom_minimum_size = Vector2(138, 30)
 	_tab_coin_btn.pressed.connect(func(): _switch_editor_tab(3))
 	tab_hbox.add_child(_tab_coin_btn)
+
+	_tab_ach_crate_btn = Button.new()
+	_tab_ach_crate_btn.text = "Achievements & Crates"
+	_tab_ach_crate_btn.toggle_mode = true
+	_tab_ach_crate_btn.custom_minimum_size = Vector2(168, 30)
+	_tab_ach_crate_btn.pressed.connect(func(): _switch_editor_tab(4))
+	tab_hbox.add_child(_tab_ach_crate_btn)
+
+	var tab_spacer := Control.new()
+	tab_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tab_hbox.add_child(tab_spacer)
+
+	var reset_player_btn := Button.new()
+	reset_player_btn.text = "Reset Player Data"
+	reset_player_btn.custom_minimum_size = Vector2(158, 30)
+	reset_player_btn.modulate = Color(1.0, 0.48, 0.44)
+	reset_player_btn.tooltip_text = "Wipe all current player NCC, skins, cosmetics, unlocked agents, badges & achievements back to a fresh profile"
+	reset_player_btn.pressed.connect(_prompt_reset_player_data)
+	tab_hbox.add_child(reset_player_btn)
+
+	_reset_player_dlg = ConfirmationDialog.new()
+	_reset_player_dlg.title = "Reset Full Player Data?"
+	_reset_player_dlg.ok_button_text = "RESET ALL PLAYER DATA"
+	_reset_player_dlg.dialog_text = "This wipes ALL data of the current player profile back to defaults:\n- NCC reset to 500\n- All unlocked agents, gun skins & cosmetics cleared\n- Daily bonus, free crate & crate limit states cleared\n- All NEW badges & achievement progress cleared\n\nEditor configs (poses, weapon stats, crate tables, NCC economy, achievement rewards) are NOT affected."
+	_reset_player_dlg.confirmed.connect(_on_confirm_reset_player_data)
+	add_child(_reset_player_dlg)
 
 	_pose_mode_root = VBoxContainer.new()
 	_pose_mode_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -827,6 +896,7 @@ func _build_ui() -> void:
 	_build_ui_setter_tab(main_vbox)
 	_build_range_editor_tab(main_vbox)
 	_build_coin_economy_tab(main_vbox)
+	_build_ach_and_crate_tab(main_vbox)
 	_switch_editor_tab(0)
 
 
@@ -1085,6 +1155,13 @@ func _get_default_part_pose(pname: String) -> Dictionary:
 
 
 func _get_part_val(pname: String) -> Dictionary:
+	if pname == "muzzle":
+		var wk := str(_preview_weapon_id)
+		if _weapon_muzzles.has(wk) and _weapon_muzzles[wk] is Dictionary:
+			var m: Dictionary = _weapon_muzzles[wk] as Dictionary
+			return {"x": float(m.get("x", 44.0)), "y": float(m.get("y", -3.0)), "rot": 0.0, "z": 0}
+		var def_m: Vector2 = PlayerControllerScript.get_weapon_muzzle_local_pos(_preview_weapon_id)
+		return {"x": def_m.x, "y": def_m.y, "rot": 0.0, "z": 0}
 	var d := _get_active_pose_dict()
 	if d.has(pname):
 		return d[pname]
@@ -1100,6 +1177,20 @@ func _clear_temp_preview() -> void:
 
 
 func _set_part_val(pname: String, val: Dictionary) -> void:
+	if pname == "muzzle":
+		var wk := str(_preview_weapon_id)
+		_weapon_muzzles[wk] = {
+			"x": snappedf(float(val.get("x", 44.0)), 0.1),
+			"y": snappedf(float(val.get("y", -3.0)), 0.1)
+		}
+		WeaponData._muzzle_cache[wk] = (_weapon_muzzles[wk] as Dictionary).duplicate(true)
+		WeaponData._muzzle_cache_loaded = true
+		if is_instance_valid(_status_lbl):
+			_status_lbl.text = "Muzzle #%d -> (%.1f, %.1f) — click Save to persist" % [_preview_weapon_id, float(_weapon_muzzles[wk]["x"]), float(_weapon_muzzles[wk]["y"])]
+			_status_lbl.modulate = Color(1.0, 0.55, 0.42)
+		if is_instance_valid(_overlay):
+			_overlay.queue_redraw()
+		return
 	var old_hn: Dictionary = (_drag_start_val if _dragging else _get_part_val("hand_near")) if pname == "hand_near" else {}
 	var base_w: Dictionary = (_drag_start_weapon_val if (_dragging and not _drag_start_weapon_val.is_empty()) else _get_part_val("weapon")) if pname == "hand_near" else {}
 	var skey := _get_target_stance_key()
@@ -1367,7 +1458,14 @@ func _refresh_character_pose() -> void:
 		if _agent_weapon_node != null:
 			_agent_weapon_node.visible = false
 		_gun_p.visible = true
-		_gun_p.position = Vector2(14.0 * dir, 0.0)
+		var gun_x: float = 18.0 if _preview_weapon_id == 17 else 16.0
+		_gun_p.position = Vector2(gun_x * dir, 0.0)
+		match _preview_weapon_id:
+			17: _gun_p.scale = Vector2(0.27, 0.27)
+			19: _gun_p.scale = Vector2(0.20, 0.20)
+			20: _gun_p.scale = Vector2(0.21, 0.21)
+			22, 23: _gun_p.scale = Vector2(0.25, 0.25)
+			_: _gun_p.scale = Vector2(0.24, 0.24)
 		_gun_p.flip_h = flip_h
 		var spec_p: Dictionary = WeaponData.get_weapon_sprite_spec(_preview_weapon_id, 0)
 		_gun_p.texture = spec_p["tex"] as Texture2D
@@ -1377,6 +1475,12 @@ func _refresh_character_pose() -> void:
 
 
 func _get_part_screen_pos(pname: String) -> Vector2:
+	if pname == "muzzle" and _weapon_pivot != null:
+		var mv := _get_part_val("muzzle")
+		var m_dir := 1.0 if _facing_right else -1.0
+		var local_m := Vector2(float(mv.get("x", 44.0)) * m_dir, float(mv.get("y", -3.0)))
+		var world_m := _weapon_pivot.position + (local_m * _weapon_pivot.scale).rotated(_weapon_pivot.rotation)
+		return _stage_root.position + world_m * _zoom_scale
 	if pname == "weapon" and _weapon_pivot != null:
 		return _stage_root.position + _weapon_pivot.position * _zoom_scale
 	if pname == "hand_near" and _modular != null and _modular._sprite_hands != null:
@@ -1417,13 +1521,23 @@ func _on_overlay_draw() -> void:
 		var hn_p := _get_part_screen_pos("hand_near")
 		var wp_p := _get_part_screen_pos("weapon")
 		_overlay.draw_line(hn_p, wp_p, Color(0.25, 0.95, 1.0, 0.35), 1.5)
+	if _selected_stance != "none" and not _agent_mode and _weapon_pivot != null:
+		var mz_p := _get_part_screen_pos("muzzle")
+		var aim_dir := Vector2(1.0 if _facing_right else -1.0, 0.0).rotated(_weapon_pivot.rotation)
+		_overlay.draw_line(mz_p, mz_p + aim_dir * 320.0, Color(1.0, 0.14, 0.14, 0.80), 2.2)
+		_overlay.draw_line(mz_p + Vector2(-9, 0), mz_p + Vector2(9, 0), Color(1.0, 0.25, 0.22, 0.95), 1.8)
+		_overlay.draw_line(mz_p + Vector2(0, -9), mz_p + Vector2(0, 9), Color(1.0, 0.25, 0.22, 0.95), 1.8)
+		if font != null and _selected_part == "muzzle":
+			_overlay.draw_string(font, mz_p + Vector2(12.0, -10.0), "MUZZLE / AIM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.35, 0.28))
 	for i in range(PARTS.size()):
 		var pname: String = PARTS[i]
 		if pname == "weapon" and _selected_stance == "none" and not _agent_mode:
 			continue
+		if pname == "muzzle" and (_selected_stance == "none" or _agent_mode):
+			continue
 		var p := _get_part_screen_pos(pname)
 		var is_sel := (pname == _selected_part)
-		var col := Color(0.25, 0.95, 1.0, 0.95) if is_sel else Color(1, 1, 1, 0.35)
+		var col := (Color(1.0, 0.28, 0.22, 0.98) if pname == "muzzle" else Color(0.25, 0.95, 1.0, 0.95)) if is_sel else (Color(1.0, 0.30, 0.22, 0.72) if pname == "muzzle" else Color(1, 1, 1, 0.35))
 		_overlay.draw_circle(p, 7.0 if is_sel else 4.5, col)
 		if is_sel:
 			_overlay.draw_arc(p, 13.0, 0.0, TAU, 24, col, 2.0)
@@ -1438,6 +1552,8 @@ func _on_overlay_gui_input(event: InputEvent) -> void:
 				var best_d := 34.0
 				for pname in PARTS:
 					if pname == "weapon" and _selected_stance == "none" and not _agent_mode:
+						continue
+					if pname == "muzzle" and (_selected_stance == "none" or _agent_mode):
 						continue
 					var d := mb.position.distance_to(_get_part_screen_pos(pname))
 					if d < best_d:
@@ -1476,7 +1592,13 @@ func _on_overlay_gui_input(event: InputEvent) -> void:
 			v["rot"] = float(_drag_start_val.get("rot", 0.0)) + (mm.position.x - _drag_start_mouse.x) * 0.5
 		else:
 			var move_delta := delta_px
-			if _selected_part == "weapon" and _modular != null:
+			if _selected_part == "muzzle" and _weapon_pivot != null:
+				move_delta = delta_px.rotated(-_weapon_pivot.rotation)
+				if absf(_weapon_pivot.scale.x) > 0.01:
+					move_delta.x /= _weapon_pivot.scale.x
+				if absf(_weapon_pivot.scale.y) > 0.01:
+					move_delta.y /= _weapon_pivot.scale.y
+			elif _selected_part == "weapon" and _modular != null:
 				var eff_st := "rifle" if (_agent_mode and _selected_stance == "none") else _selected_stance
 				var sock: Dictionary = _modular.get_weapon_socket_transform(eff_st, _facing_right, _drag_start_val, 9.0)
 				move_delta = delta_px.rotated(-float(sock["hand_delta_rot"]))
@@ -1510,6 +1632,8 @@ func _switch_editor_tab(tab_idx: int) -> void:
 		_range_mode_root.visible = (tab_idx == 2)
 	if _coin_mode_root != null:
 		_coin_mode_root.visible = (tab_idx == 3)
+	if _ach_crate_root != null:
+		_ach_crate_root.visible = (tab_idx == 4)
 	if _tab_pose_btn != null:
 		_tab_pose_btn.set_pressed_no_signal(tab_idx == 0)
 		_tab_pose_btn.modulate = Color(0.45, 0.95, 1.0) if tab_idx == 0 else Color(0.75, 0.80, 0.88)
@@ -1522,8 +1646,13 @@ func _switch_editor_tab(tab_idx: int) -> void:
 	if _tab_coin_btn != null:
 		_tab_coin_btn.set_pressed_no_signal(tab_idx == 3)
 		_tab_coin_btn.modulate = Color(1.0, 0.86, 0.28) if tab_idx == 3 else Color(0.75, 0.80, 0.88)
+	if _tab_ach_crate_btn != null:
+		_tab_ach_crate_btn.set_pressed_no_signal(tab_idx == 4)
+		_tab_ach_crate_btn.modulate = Color(0.84, 0.58, 1.0) if tab_idx == 4 else Color(0.75, 0.80, 0.88)
 	if tab_idx == 3:
 		_sync_coin_economy_ui()
+	if tab_idx == 4:
+		_refresh_ac_crate_list()
 	if tab_idx != 0:
 		_anim_playing = false
 		if _anim_play_btn != null:
@@ -1531,8 +1660,11 @@ func _switch_editor_tab(tab_idx: int) -> void:
 			_anim_play_btn.text = "Activate Anim Preview"
 	if tab_idx == 1 and _ui_canvas != null:
 		_ui_canvas.queue_redraw()
-	if tab_idx == 2 and _range_canvas != null:
-		_range_canvas.queue_redraw()
+	if tab_idx == 2:
+		if _range_canvas != null:
+			_range_canvas.queue_redraw()
+		if _muzzle_canvas != null:
+			_muzzle_canvas.queue_redraw()
 
 
 func _load_ui_layout_data() -> void:
@@ -2139,8 +2271,9 @@ func _save_weapon_ranges() -> void:
 		fs_user.close()
 
 	WeaponData.reload_weapon_stats()
+	WeaponData.save_weapon_muzzles(_weapon_muzzles, true)
 	if _range_status_lbl != null:
-		_range_status_lbl.text = "Saved all 18 weapons! (res:// + user://)" if saved_res else "Saved all 18 weapons to user://!"
+		_range_status_lbl.text = "Saved stats, ranges & muzzle points!" if saved_res else "Saved to user://!"
 		_range_status_lbl.modulate = Color(0.45, 1.0, 0.65)
 
 
@@ -2162,10 +2295,24 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	top_bar.add_child(top_hbox)
 
 	var title := Label.new()
-	title.text = "WEAPON STATS & RANGE SETTER — BUNKER BASE (2240 × 1248 px)"
+	title.text = "WEAPONS STUDIO"
 	title.add_theme_font_size_override("font_size", 16)
 	title.modulate = Color(1.0, 0.45, 0.42)
 	top_hbox.add_child(title)
+
+	_subtab_muzzle_btn = Button.new()
+	_subtab_muzzle_btn.text = "Muzzle / Aim Point"
+	_subtab_muzzle_btn.toggle_mode = true
+	_subtab_muzzle_btn.custom_minimum_size = Vector2(160, 32)
+	_subtab_muzzle_btn.pressed.connect(func(): _switch_weapon_subtab(0))
+	top_hbox.add_child(_subtab_muzzle_btn)
+
+	_subtab_range_btn = Button.new()
+	_subtab_range_btn.text = "Range Setter (Bunker)"
+	_subtab_range_btn.toggle_mode = true
+	_subtab_range_btn.custom_minimum_size = Vector2(175, 32)
+	_subtab_range_btn.pressed.connect(func(): _switch_weapon_subtab(1))
+	top_hbox.add_child(_subtab_range_btn)
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2176,14 +2323,18 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	reset_sel_btn.pressed.connect(func():
 		var k := str(_range_selected_wid)
 		_weapon_stats.erase(k)
+		_weapon_muzzles.erase(k)
+		WeaponData._muzzle_cache.erase(k)
 		var def := WeaponData.get_builtin_default_ranges()
 		_weapon_ranges[k] = float(def.get(k, 860.0))
 		_get_stat_dict(_range_selected_wid)
 		_sync_range_inspector()
 		if _range_canvas != null:
 			_range_canvas.queue_redraw()
+		if _muzzle_canvas != null:
+			_muzzle_canvas.queue_redraw()
 		if _range_status_lbl != null:
-			_range_status_lbl.text = "Reset gun #%d to defaults." % _range_selected_wid
+			_range_status_lbl.text = "Reset gun #%d (stats, range & muzzle) to defaults." % _range_selected_wid
 			_range_status_lbl.modulate = Color(0.85, 0.90, 1.0)
 	)
 	top_hbox.add_child(reset_sel_btn)
@@ -2256,6 +2407,13 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	stage_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.05, 0.06, 0.09), 0))
 	mid_split.add_child(stage_panel)
 
+	_muzzle_canvas = Control.new()
+	_muzzle_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_muzzle_canvas.mouse_filter = Control.MOUSE_FILTER_STOP
+	_muzzle_canvas.draw.connect(_on_muzzle_canvas_draw)
+	_muzzle_canvas.gui_input.connect(_on_muzzle_canvas_gui_input)
+	stage_panel.add_child(_muzzle_canvas)
+
 	_range_canvas = Control.new()
 	_range_canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_range_canvas.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -2282,6 +2440,19 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	_range_gun_lbl = _make_section_label("Gun: 0 - AK-47")
 	_range_gun_lbl.modulate = Color(1.0, 0.55, 0.45)
 	right_vb.add_child(_range_gun_lbl)
+
+	_w_muz_x_spin = _add_spin_row(right_vb, "Muzzle X:", -100.0, 200.0, 0.5)
+	_w_muz_y_spin = _add_spin_row(right_vb, "Muzzle Y:", -100.0, 100.0, 0.5)
+	_w_muz_x_spin.value_changed.connect(func(v: float):
+		if _range_syncing: return
+		var cur: Vector2 = _get_muzzle_pos_for_wid(_range_selected_wid)
+		_set_muzzle_pos_for_wid(_range_selected_wid, Vector2(v, cur.y))
+	)
+	_w_muz_y_spin.value_changed.connect(func(v: float):
+		if _range_syncing: return
+		var cur: Vector2 = _get_muzzle_pos_for_wid(_range_selected_wid)
+		_set_muzzle_pos_for_wid(_range_selected_wid, Vector2(cur.x, v))
+	)
 
 	_range_spin = _add_spin_row(right_vb, "Range (px):", 80.0, 8000.0, 10.0)
 	_range_spin.allow_greater = true
@@ -2352,6 +2523,135 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	right_vb.add_child(hint)
 
 	_select_range_weapon(0)
+	_switch_weapon_subtab(0)
+
+
+func _switch_weapon_subtab(sub_idx: int) -> void:
+	_weapon_subtab = sub_idx
+	if _muzzle_canvas != null:
+		_muzzle_canvas.visible = (sub_idx == 0)
+		if sub_idx == 0:
+			_muzzle_canvas.queue_redraw()
+	if _range_canvas != null:
+		_range_canvas.visible = (sub_idx == 1)
+		if sub_idx == 1:
+			_range_canvas.queue_redraw()
+	if _subtab_muzzle_btn != null:
+		_subtab_muzzle_btn.set_pressed_no_signal(sub_idx == 0)
+		_subtab_muzzle_btn.modulate = Color(1.0, 0.42, 0.36) if sub_idx == 0 else Color(0.76, 0.82, 0.90)
+	if _subtab_range_btn != null:
+		_subtab_range_btn.set_pressed_no_signal(sub_idx == 1)
+		_subtab_range_btn.modulate = Color(0.45, 0.95, 1.0) if sub_idx == 1 else Color(0.76, 0.82, 0.90)
+
+
+func _get_muzzle_pos_for_wid(wid: int) -> Vector2:
+	var k := str(wid)
+	if _weapon_muzzles.has(k) and _weapon_muzzles[k] is Dictionary:
+		var m: Dictionary = _weapon_muzzles[k] as Dictionary
+		return Vector2(float(m.get("x", 44.0)), float(m.get("y", -3.0)))
+	return PlayerControllerScript.get_weapon_muzzle_local_pos(wid)
+
+
+func _set_muzzle_pos_for_wid(wid: int, pos: Vector2) -> void:
+	var k := str(wid)
+	var clean := Vector2(snappedf(pos.x, 0.1), snappedf(pos.y, 0.1))
+	_weapon_muzzles[k] = {"x": clean.x, "y": clean.y}
+	WeaponData._muzzle_cache[k] = {"x": clean.x, "y": clean.y}
+	WeaponData._muzzle_cache_loaded = true
+	if not _range_syncing and _w_muz_x_spin != null and _w_muz_y_spin != null:
+		_range_syncing = true
+		_w_muz_x_spin.value = clean.x
+		_w_muz_y_spin.value = clean.y
+		_range_syncing = false
+	if _muzzle_canvas != null:
+		_muzzle_canvas.queue_redraw()
+	if _range_status_lbl != null:
+		_range_status_lbl.text = "Gun #%d Muzzle -> (%.1f, %.1f) — click SAVE WEAPONS" % [wid, clean.x, clean.y]
+		_range_status_lbl.modulate = Color(1.0, 0.62, 0.38)
+
+
+func _get_gun_preview_scale_for_wid(wid: int) -> float:
+	match wid:
+		17: return 0.27
+		19: return 0.20
+		20: return 0.21
+		22, 23: return 0.25
+		_: return 0.24
+
+
+func _on_muzzle_canvas_draw() -> void:
+	if _muzzle_canvas == null:
+		return
+	var sz: Vector2 = _muzzle_canvas.size
+	var origin: Vector2 = Vector2(sz.x * 0.36, sz.y * 0.52)
+	var z: float = _muzzle_zoom
+
+	# Blueprint grid
+	var step_px: float = 10.0 * z
+	var gx: float = fmod(origin.x, step_px)
+	while gx < sz.x:
+		_muzzle_canvas.draw_line(Vector2(gx, 0.0), Vector2(gx, sz.y), Color(1, 1, 1, 0.05), 1.0)
+		gx += step_px
+	var gy: float = fmod(origin.y, step_px)
+	while gy < sz.y:
+		_muzzle_canvas.draw_line(Vector2(0.0, gy), Vector2(sz.x, gy), Color(1, 1, 1, 0.05), 1.0)
+		gy += step_px
+	_muzzle_canvas.draw_line(Vector2(origin.x, 0.0), Vector2(origin.x, sz.y), Color(1.0, 0.85, 0.25, 0.20), 1.2)
+	_muzzle_canvas.draw_line(Vector2(0.0, origin.y), Vector2(sz.x, origin.y), Color(1.0, 0.85, 0.25, 0.20), 1.2)
+
+	# Draw weapon sprite at exact PlayerController local offset & scale
+	var wid: int = _range_selected_wid
+	var gun_x: float = 18.0 if wid == 17 else 16.0
+	var gun_sc: float = _get_gun_preview_scale_for_wid(wid)
+	var at: AtlasTexture = WeaponData.get_weapon_atlas_texture(wid, 0)
+	var draw_w: float = 256.0 * gun_sc * z
+	var draw_h: float = 128.0 * gun_sc * z
+	var gun_center: Vector2 = origin + Vector2(gun_x * z, 0.0)
+	var gun_rect := Rect2(gun_center - Vector2(draw_w * 0.5, draw_h * 0.5), Vector2(draw_w, draw_h))
+	_muzzle_canvas.draw_texture_rect(at, gun_rect, false)
+
+	# Weapon pivot marker (0,0)
+	_muzzle_canvas.draw_arc(origin, 7.0, 0.0, TAU, 20, Color(0.35, 0.90, 1.0, 0.85), 1.8)
+	_muzzle_canvas.draw_circle(origin, 2.5, Color(0.35, 0.90, 1.0, 0.95))
+
+	# Muzzle point & red aiming laser
+	var muz_local: Vector2 = _get_muzzle_pos_for_wid(wid)
+	var muz_screen: Vector2 = origin + muz_local * z
+	_muzzle_canvas.draw_line(muz_screen, Vector2(sz.x - 16.0, muz_screen.y), Color(1.0, 0.14, 0.14, 0.88), 2.5)
+	_muzzle_canvas.draw_circle(muz_screen, 6.0, Color(1.0, 0.24, 0.20, 0.95))
+	_muzzle_canvas.draw_arc(muz_screen, 13.0, 0.0, TAU, 24, Color(1.0, 0.88, 0.25, 0.95), 2.0)
+	_muzzle_canvas.draw_line(muz_screen + Vector2(-18.0, 0.0), muz_screen + Vector2(18.0, 0.0), Color(1.0, 0.35, 0.25, 0.95), 1.6)
+	_muzzle_canvas.draw_line(muz_screen + Vector2(0.0, -18.0), muz_screen + Vector2(0.0, 18.0), Color(1.0, 0.35, 0.25, 0.95), 1.6)
+
+	var font := ThemeDB.fallback_font
+	if font != null:
+		var wd := WeaponData.get_base_weapon(wid)
+		_muzzle_canvas.draw_string(font, origin + Vector2(10.0, -10.0), "PIVOT (0,0)", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.45, 0.92, 1.0, 0.85))
+		_muzzle_canvas.draw_string(font, muz_screen + Vector2(16.0, -14.0), "MUZZLE (%.1f, %.1f)" % [muz_local.x, muz_local.y], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.88, 0.30))
+		_muzzle_canvas.draw_string(font, Vector2(16.0, sz.y - 16.0), "#%d %s  |  Drag anywhere to place Muzzle / Aim Point  |  Scroll to zoom (%.1fx)" % [wid, wd.display_name, z], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.82, 0.90, 0.98))
+
+
+func _on_muzzle_canvas_gui_input(event: InputEvent) -> void:
+	if _muzzle_canvas == null:
+		return
+	var origin: Vector2 = Vector2(_muzzle_canvas.size.x * 0.36, _muzzle_canvas.size.y * 0.52)
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_muzzle_dragging = mb.pressed
+			if mb.pressed:
+				var local_p: Vector2 = (mb.position - origin) / _muzzle_zoom
+				_set_muzzle_pos_for_wid(_range_selected_wid, local_p)
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_muzzle_zoom = clampf(_muzzle_zoom + 0.8, 3.5, 16.0)
+			_muzzle_canvas.queue_redraw()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_muzzle_zoom = clampf(_muzzle_zoom - 0.8, 3.5, 16.0)
+			_muzzle_canvas.queue_redraw()
+	elif event is InputEventMouseMotion and _muzzle_dragging:
+		var mm := event as InputEventMouseMotion
+		var local_p: Vector2 = (mm.position - origin) / _muzzle_zoom
+		_set_muzzle_pos_for_wid(_range_selected_wid, local_p)
 
 
 func _on_weapon_stat_changed() -> void:
@@ -2380,6 +2680,8 @@ func _select_range_weapon(wid: int) -> void:
 	_sync_range_inspector()
 	if _range_canvas != null:
 		_range_canvas.queue_redraw()
+	if _muzzle_canvas != null:
+		_muzzle_canvas.queue_redraw()
 
 
 func _sync_range_inspector() -> void:
@@ -2390,6 +2692,11 @@ func _sync_range_inspector() -> void:
 	var sd := _get_stat_dict(_range_selected_wid)
 	if _range_gun_lbl != null:
 		_range_gun_lbl.text = "#%d %s (%s)" % [_range_selected_wid, wd.display_name, wd.category]
+	var cur_muz: Vector2 = _get_muzzle_pos_for_wid(_range_selected_wid)
+	if _w_muz_x_spin != null:
+		_w_muz_x_spin.value = cur_muz.x
+	if _w_muz_y_spin != null:
+		_w_muz_y_spin.value = cur_muz.y
 	var r_val := maxf(float(_weapon_ranges.get(str(_range_selected_wid), sd.get("bullet_range", 860.0))), 80.0)
 	_range_spin.value = r_val
 	_range_slider.set_value_no_signal(r_val)
@@ -2622,7 +2929,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	top_bar.add_child(top_h)
 
 	var hdr := Label.new()
-	hdr.text = "COIN ECONOMY & SKIN / AGENT PRICE EDITOR"
+	hdr.text = "NCC ECONOMY & SKIN / AGENT PRICE EDITOR"
 	hdr.add_theme_font_size_override("font_size", 16)
 	hdr.modulate = Color(1.0, 0.86, 0.30)
 	hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2634,13 +2941,13 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	reset_btn.pressed.connect(func():
 		ProfileManager.reset_economy_defaults()
 		_sync_coin_economy_ui()
-		_coin_status_lbl.text = "Reset coin rewards & prices to defaults (click Save to write file)."
+		_coin_status_lbl.text = "Reset NCC rewards & prices to defaults (click Save to write file)."
 		_coin_status_lbl.modulate = Color(1.0, 0.84, 0.35)
 	)
 	top_h.add_child(reset_btn)
 
 	var save_btn := Button.new()
-	save_btn.text = "SAVE COIN ECONOMY"
+	save_btn.text = "SAVE NCC ECONOMY"
 	save_btn.custom_minimum_size = Vector2(180, 32)
 	save_btn.modulate = Color(0.42, 1.0, 0.62)
 	save_btn.pressed.connect(func():
@@ -2667,11 +2974,11 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	lv.add_theme_constant_override("separation", 10)
 	left_panel.add_child(lv)
 
-	var rw_hdr := _make_section_label("MATCH COIN REWARDS")
+	var rw_hdr := _make_section_label("MATCH NCC REWARDS")
 	rw_hdr.modulate = Color(1.0, 0.86, 0.32)
 	lv.add_child(rw_hdr)
 
-	_coin_kill_spin = _add_coin_spin_row(lv, "Coins / Kill:", 0, 10000, 5)
+	_coin_kill_spin = _add_coin_spin_row(lv, "NCC / Kill:", 0, 10000, 5)
 	_coin_kill_spin.value_changed.connect(func(v: float):
 		if _coin_syncing: return
 		ProfileManager.kill_reward = int(v)
@@ -2708,7 +3015,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	ag_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ag_note.add_theme_font_size_override("font_size", 11)
 	ag_note.modulate = Color(0.72, 0.80, 0.90)
-	ag_note.text = "Starter agents are unlocked by default. All remaining agents share this coin price in normal modes (all agents are free in Practice Mode)."
+	ag_note.text = "Starter agents are unlocked by default. All remaining agents share this NCC price in normal modes (all agents are free in Practice Mode)."
 	lv.add_child(ag_note)
 
 	lv.add_child(HSeparator.new())
@@ -2755,6 +3062,63 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	)
 	bal_row.add_child(rst_bal)
 
+	var bal_row_big := HBoxContainer.new()
+	bal_row_big.add_theme_constant_override("separation", 6)
+	lv.add_child(bal_row_big)
+
+	for spec in [
+		{"label": "+50K", "amt": 50000, "col": Color.WHITE},
+		{"label": "+100K", "amt": 100000, "col": Color.WHITE},
+		{"label": "+1M", "amt": 1000000, "col": Color(1.0, 0.88, 0.32)}
+	]:
+		var btn := Button.new()
+		var amt: int = int(spec["amt"])
+		btn.text = str(spec["label"])
+		btn.modulate = spec["col"] as Color
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(func():
+			ProfileManager.add_coins(amt)
+			_sync_coin_economy_ui()
+		)
+		bal_row_big.add_child(btn)
+
+	var custom_bal_row := HBoxContainer.new()
+	custom_bal_row.add_theme_constant_override("separation", 6)
+	lv.add_child(custom_bal_row)
+
+	var custom_spin := SpinBox.new()
+	custom_spin.min_value = 0
+	custom_spin.max_value = 100000000
+	custom_spin.step = 1000
+	custom_spin.value = 1000000
+	custom_spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	custom_bal_row.add_child(custom_spin)
+
+	var add_custom_btn := Button.new()
+	add_custom_btn.text = "Add"
+	add_custom_btn.pressed.connect(func():
+		ProfileManager.add_coins(int(custom_spin.value))
+		_sync_coin_economy_ui()
+	)
+	custom_bal_row.add_child(add_custom_btn)
+
+	var set_custom_btn := Button.new()
+	set_custom_btn.text = "Set"
+	set_custom_btn.pressed.connect(func():
+		ProfileManager.coins = maxi(0, int(custom_spin.value))
+		ProfileManager.save_profile()
+		ProfileManager.coins_changed.emit(ProfileManager.coins)
+		_sync_coin_economy_ui()
+	)
+	custom_bal_row.add_child(set_custom_btn)
+
+	var rst_full_btn := Button.new()
+	rst_full_btn.text = "RESET FULL PLAYER DATA"
+	rst_full_btn.custom_minimum_size = Vector2(0, 32)
+	rst_full_btn.modulate = Color(1.0, 0.45, 0.42)
+	rst_full_btn.pressed.connect(_prompt_reset_player_data)
+	lv.add_child(rst_full_btn)
+
 	var sp_v := Control.new()
 	sp_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lv.add_child(sp_v)
@@ -2763,7 +3127,7 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	_coin_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_coin_status_lbl.add_theme_font_size_override("font_size", 12)
 	_coin_status_lbl.modulate = Color(0.75, 0.85, 0.95)
-	_coin_status_lbl.text = "Adjust any reward or individual gun skin price, then click SAVE COIN ECONOMY."
+	_coin_status_lbl.text = "Adjust any reward or individual gun skin price, then click SAVE NCC ECONOMY."
 	lv.add_child(_coin_status_lbl)
 
 	# MIDDLE COLUMN: Gun Selector
@@ -2879,7 +3243,7 @@ func _add_coin_spin_row(parent: Control, label_txt: String, min_v: int, max_v: i
 	sb.max_value = max_v
 	sb.step = step_v
 	sb.rounded = true
-	sb.suffix = " coins"
+	sb.suffix = " NCC"
 	sb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(sb)
 	return sb
@@ -2903,7 +3267,7 @@ func _sync_coin_economy_ui() -> void:
 	if is_instance_valid(_coin_agent_spin):
 		_coin_agent_spin.value = ProfileManager.agent_unlock_price
 	if is_instance_valid(_coin_bal_lbl):
-		_coin_bal_lbl.text = "Current Balance: %s COINS" % ProfileManager.format_coins(ProfileManager.coins)
+		_coin_bal_lbl.text = "Current Balance: %s NCC" % ProfileManager.format_coins(ProfileManager.coins)
 	_coin_syncing = false
 	_refresh_coin_skin_rows()
 
@@ -2928,8 +3292,8 @@ func _refresh_coin_skin_rows() -> void:
 
 	for sdef in ProfileManager.GUN_SKIN_CATALOG:
 		var skey: String = str(sdef["key"])
-		var sname: String = str(sdef["name"])
-		var badge: Color = sdef["badge"] as Color
+		var sname: String = ProfileManager.get_gun_skin_name(wid, skey)
+		var badge: Color = ProfileManager.get_gun_skin_badge(wid, skey)
 		var tint: Color = ProfileManager.get_gun_skin_tint(wid, skey)
 		var cur_price: int = ProfileManager.get_gun_skin_price(wid, skey)
 
@@ -2982,7 +3346,7 @@ func _refresh_coin_skin_rows() -> void:
 		sb.max_value = 50000
 		sb.step = 25
 		sb.rounded = true
-		sb.suffix = " coins"
+		sb.suffix = " NCC"
 		sb.custom_minimum_size = Vector2(150, 32)
 		sb.value = cur_price
 		if skey == "default":
@@ -2994,3 +3358,558 @@ func _refresh_coin_skin_rows() -> void:
 			)
 		row.add_child(sb)
 		_coin_skin_spins[skey] = sb
+
+
+# ==============================================================================
+# ACHIEVEMENTS (100) & CRATE LOOT TABLES EDITOR TAB
+# ==============================================================================
+
+func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
+	_ach_crate_root = VBoxContainer.new()
+	_ach_crate_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ach_crate_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_ach_crate_root.add_theme_constant_override("separation", 0)
+	_ach_crate_root.visible = false
+	main_vbox.add_child(_ach_crate_root)
+
+	# Sub-tab bar
+	var top_bar := PanelContainer.new()
+	top_bar.add_theme_stylebox_override("panel", _make_dock_style(Color(0.10, 0.13, 0.19), 10))
+	_ach_crate_root.add_child(top_bar)
+
+	var top_h := HBoxContainer.new()
+	top_h.add_theme_constant_override("separation", 10)
+	top_bar.add_child(top_h)
+
+	var hdr := Label.new()
+	hdr.text = "ACHIEVEMENTS & CRATES EDITOR"
+	hdr.add_theme_font_size_override("font_size", 16)
+	hdr.modulate = Color(0.86, 0.64, 1.0)
+	top_h.add_child(hdr)
+
+	_ac_sub_ach_btn = Button.new()
+	_ac_sub_ach_btn.text = "Achievements (100)"
+	_ac_sub_ach_btn.toggle_mode = true
+	_ac_sub_ach_btn.custom_minimum_size = Vector2(165, 32)
+	_ac_sub_ach_btn.pressed.connect(func(): _switch_ac_subtab(0))
+	top_h.add_child(_ac_sub_ach_btn)
+
+	_ac_sub_crate_btn = Button.new()
+	_ac_sub_crate_btn.text = "Crate Loot Tables"
+	_ac_sub_crate_btn.toggle_mode = true
+	_ac_sub_crate_btn.custom_minimum_size = Vector2(165, 32)
+	_ac_sub_crate_btn.pressed.connect(func(): _switch_ac_subtab(1))
+	top_h.add_child(_ac_sub_crate_btn)
+
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_h.add_child(sp)
+
+	var save_all_btn := Button.new()
+	save_all_btn.text = "SAVE ACHIEVEMENTS & CRATES"
+	save_all_btn.custom_minimum_size = Vector2(230, 32)
+	save_all_btn.modulate = Color(0.42, 1.0, 0.62)
+	save_all_btn.pressed.connect(func():
+		var ok1: bool = AchievementManager.save_config(true)
+		var ok2: bool = ProfileManager.save_crate_tables(true)
+		if is_instance_valid(_ac_ach_status_lbl):
+			_ac_ach_status_lbl.text = "Saved achievements_config.json & crate_tables.json!" if (ok1 and ok2) else "Saved to user://!"
+			_ac_ach_status_lbl.modulate = Color(0.42, 1.0, 0.62)
+		if is_instance_valid(_ac_crate_status_lbl):
+			_ac_crate_status_lbl.text = "Saved crate_tables.json & achievements_config.json!" if (ok1 and ok2) else "Saved to user://!"
+			_ac_crate_status_lbl.modulate = Color(0.42, 1.0, 0.62)
+	)
+	top_h.add_child(save_all_btn)
+
+	# --- SUB-TAB 0: ACHIEVEMENTS (100) ---
+	var ach_split := HBoxContainer.new()
+	ach_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ach_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ach_split.add_theme_constant_override("separation", 0)
+	_ach_crate_root.add_child(ach_split)
+	_ac_ach_panel = ach_split
+
+	var al_panel := PanelContainer.new()
+	al_panel.custom_minimum_size = Vector2(360, 0)
+	al_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 10))
+	ach_split.add_child(al_panel)
+
+	var al_sc := ScrollContainer.new()
+	al_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	al_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	al_panel.add_child(al_sc)
+
+	var al_vb := VBoxContainer.new()
+	al_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	al_vb.add_theme_constant_override("separation", 4)
+	al_sc.add_child(al_vb)
+
+	_ac_ach_btns.clear()
+	for idx in range(AchievementManager.definitions.size()):
+		var d: Dictionary = AchievementManager.definitions[idx]
+		var aid: String = str(d["id"])
+		var is_sub: bool = not str(d.get("parent", "")).is_empty()
+		var b := Button.new()
+		b.text = "%d. %s%s" % [idx + 1, ("  ↳ " if is_sub else ""), str(d["title"])]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size = Vector2(0, 28)
+		b.pressed.connect(func(): _select_ac_achievement(aid))
+		al_vb.add_child(b)
+		_ac_ach_btns[aid] = b
+
+	var ar_panel := PanelContainer.new()
+	ar_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ar_panel.add_theme_stylebox_override("panel", _make_dock_style(Color(0.09, 0.12, 0.18), 16))
+	ach_split.add_child(ar_panel)
+
+	var ar_vb := VBoxContainer.new()
+	ar_vb.add_theme_constant_override("separation", 12)
+	ar_panel.add_child(ar_vb)
+
+	_ac_ach_title_lbl = Label.new()
+	_ac_ach_title_lbl.add_theme_font_size_override("font_size", 20)
+	_ac_ach_title_lbl.modulate = Color(1.0, 0.88, 0.34)
+	ar_vb.add_child(_ac_ach_title_lbl)
+
+	_ac_ach_desc_lbl = Label.new()
+	_ac_ach_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ac_ach_desc_lbl.modulate = Color(0.76, 0.86, 0.96)
+	ar_vb.add_child(_ac_ach_desc_lbl)
+
+	ar_vb.add_child(HSeparator.new())
+
+	_ac_ach_coins_spin = _add_coin_spin_row(ar_vb, "NCC Reward:", 0, 100000, 50)
+	_ac_ach_coins_spin.value_changed.connect(func(v: float):
+		if _ac_syncing: return
+		var d: Dictionary = _get_selected_ac_def()
+		if not d.is_empty():
+			d["reward_coins"] = int(v)
+	)
+
+	_ac_ach_target_spin = _add_coin_spin_row(ar_vb, "Target Count:", 1, 10000, 1)
+	_ac_ach_target_spin.suffix = ""
+	_ac_ach_target_spin.value_changed.connect(func(v: float):
+		if _ac_syncing: return
+		var d: Dictionary = _get_selected_ac_def()
+		if not d.is_empty():
+			d["target"] = maxi(1, int(v))
+	)
+
+	var sk_row := HBoxContainer.new()
+	sk_row.add_theme_constant_override("separation", 8)
+	ar_vb.add_child(sk_row)
+
+	var sk_lbl := Label.new()
+	sk_lbl.text = "Reward Skin:"
+	sk_lbl.custom_minimum_size = Vector2(130, 0)
+	sk_row.add_child(sk_lbl)
+
+	_ac_ach_weapon_opt = OptionButton.new()
+	_ac_ach_weapon_opt.add_item("None (NCC Only)", -1)
+	for wid in ProfileManager.SHOP_WEAPON_IDS:
+		if not ProfileManager.NO_SKIN_WEAPONS.has(wid):
+			_ac_ach_weapon_opt.add_item("%d: %s" % [wid, WeaponData.get_weapon(wid, 0, 0).display_name], wid)
+	_ac_ach_weapon_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ac_ach_weapon_opt.item_selected.connect(func(_i: int): _apply_ac_skin_dropdowns())
+	sk_row.add_child(_ac_ach_weapon_opt)
+
+	_ac_ach_skin_opt = OptionButton.new()
+	for sdef in ProfileManager.GUN_SKIN_CATALOG:
+		var sk: String = str(sdef["key"])
+		if sk != "default":
+			_ac_ach_skin_opt.add_item(str(sdef["name"]))
+			_ac_ach_skin_opt.set_item_metadata(_ac_ach_skin_opt.item_count - 1, sk)
+	_ac_ach_skin_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ac_ach_skin_opt.item_selected.connect(func(_i: int): _apply_ac_skin_dropdowns())
+	sk_row.add_child(_ac_ach_skin_opt)
+
+	_ac_ach_excl_cb = CheckBox.new()
+	_ac_ach_excl_cb.text = "Achievement-Exclusive Skin (Cannot buy in Weapons Shop or drop from Crates)"
+	_ac_ach_excl_cb.modulate = Color(1.0, 0.72, 0.98)
+	_ac_ach_excl_cb.toggled.connect(func(on: bool):
+		if _ac_syncing: return
+		var d: Dictionary = _get_selected_ac_def()
+		if not d.is_empty():
+			d["exclusive_skin"] = on
+	)
+	ar_vb.add_child(_ac_ach_excl_cb)
+
+	var rst_ach_btn := Button.new()
+	rst_ach_btn.text = "Reset All 100 Achievements to Default Rewards"
+	rst_ach_btn.custom_minimum_size = Vector2(0, 32)
+	rst_ach_btn.pressed.connect(func():
+		AchievementManager.reset_config_defaults()
+		_select_ac_achievement(_ac_selected_ach_id)
+		_ac_ach_status_lbl.text = "Reset all 100 achievements to default rewards (click SAVE to persist)."
+		_ac_ach_status_lbl.modulate = Color(1.0, 0.84, 0.35)
+	)
+	ar_vb.add_child(rst_ach_btn)
+
+	_ac_ach_status_lbl = Label.new()
+	_ac_ach_status_lbl.text = "Select any of the 100 achievements on the left to edit its NCC reward, target, or exclusive rare skin."
+	_ac_ach_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ac_ach_status_lbl.modulate = Color(0.75, 0.85, 0.95)
+	ar_vb.add_child(_ac_ach_status_lbl)
+
+	# --- SUB-TAB 1: CRATE LOOT TABLES (Supply & Premium Crates) ---
+	var cr_root := VBoxContainer.new()
+	cr_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cr_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cr_root.add_theme_constant_override("separation", 10)
+	_ach_crate_root.add_child(cr_root)
+	_ac_crate_panel = cr_root
+
+	var cr_pad := PanelContainer.new()
+	cr_pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cr_pad.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cr_pad.add_theme_stylebox_override("panel", _make_dock_style(Color(0.07, 0.10, 0.15), 14))
+	cr_root.add_child(cr_pad)
+
+	var cr_vb := VBoxContainer.new()
+	cr_vb.add_theme_constant_override("separation", 10)
+	cr_pad.add_child(cr_vb)
+
+	var cr_sel_row := HBoxContainer.new()
+	cr_sel_row.add_theme_constant_override("separation", 10)
+	cr_vb.add_child(cr_sel_row)
+
+	_ac_crate_std_btn = Button.new()
+	_ac_crate_std_btn.text = "Supply Crate (1,000 NCC / 1 Free Daily)"
+	_ac_crate_std_btn.toggle_mode = true
+	_ac_crate_std_btn.custom_minimum_size = Vector2(280, 34)
+	_ac_crate_std_btn.pressed.connect(func():
+		_ac_crate_key = "standard"
+		_refresh_ac_crate_list()
+	)
+	cr_sel_row.add_child(_ac_crate_std_btn)
+
+	_ac_crate_prem_btn = Button.new()
+	_ac_crate_prem_btn.text = "Premium Crate (2,000 NCC)"
+	_ac_crate_prem_btn.toggle_mode = true
+	_ac_crate_prem_btn.custom_minimum_size = Vector2(240, 34)
+	_ac_crate_prem_btn.pressed.connect(func():
+		_ac_crate_key = "premium"
+		_refresh_ac_crate_list()
+	)
+	cr_sel_row.add_child(_ac_crate_prem_btn)
+
+	_ac_crate_total_lbl = Label.new()
+	_ac_crate_total_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ac_crate_total_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ac_crate_total_lbl.add_theme_font_size_override("font_size", 15)
+	_ac_crate_total_lbl.modulate = Color(1.0, 0.88, 0.34)
+	cr_sel_row.add_child(_ac_crate_total_lbl)
+
+	var rst_cr_btn := Button.new()
+	rst_cr_btn.text = "Reset Crate Defaults"
+	rst_cr_btn.pressed.connect(func():
+		ProfileManager.crate_tables = ProfileManager.get_default_crate_tables()
+		_refresh_ac_crate_list()
+		_ac_crate_status_lbl.text = "Reset both crate loot tables to defaults (click SAVE to persist)."
+		_ac_crate_status_lbl.modulate = Color(1.0, 0.84, 0.35)
+	)
+	cr_sel_row.add_child(rst_cr_btn)
+
+	# Add Item Bar
+	var add_row := HBoxContainer.new()
+	add_row.add_theme_constant_override("separation", 8)
+	cr_vb.add_child(add_row)
+
+	_ac_add_type_opt = OptionButton.new()
+	_ac_add_type_opt.add_item("NCC Drop", 0)
+	_ac_add_type_opt.add_item("Random Premium Skin (5000+)", 1)
+	_ac_add_type_opt.add_item("Random Basic Skin", 2)
+	_ac_add_type_opt.add_item("Specific Gun Skin", 3)
+	_ac_add_type_opt.add_item("2x NCC (Double Balance)", 4)
+	_ac_add_type_opt.add_item("Random Locked Agent Unlock", 5)
+	_ac_add_type_opt.add_item("Random Character Accessory / Cosmetic", 6)
+	_ac_add_type_opt.item_selected.connect(func(_i: int): _sync_ac_add_controls())
+	add_row.add_child(_ac_add_type_opt)
+
+	_ac_add_coins_spin = SpinBox.new()
+	_ac_add_coins_spin.min_value = 50
+	_ac_add_coins_spin.max_value = 50000
+	_ac_add_coins_spin.step = 50
+	_ac_add_coins_spin.value = 300
+	_ac_add_coins_spin.suffix = " NCC"
+	_ac_add_coins_spin.custom_minimum_size = Vector2(130, 30)
+	add_row.add_child(_ac_add_coins_spin)
+
+	_ac_add_weapon_opt = OptionButton.new()
+	for wid in ProfileManager.SHOP_WEAPON_IDS:
+		if not ProfileManager.NO_SKIN_WEAPONS.has(wid):
+			_ac_add_weapon_opt.add_item("%d: %s" % [wid, WeaponData.get_weapon(wid, 0, 0).display_name], wid)
+	_ac_add_weapon_opt.visible = false
+	add_row.add_child(_ac_add_weapon_opt)
+
+	_ac_add_skin_opt = OptionButton.new()
+	for sdef in ProfileManager.GUN_SKIN_CATALOG:
+		var sk: String = str(sdef["key"])
+		if sk != "default":
+			_ac_add_skin_opt.add_item(str(sdef["name"]))
+			_ac_add_skin_opt.set_item_metadata(_ac_add_skin_opt.item_count - 1, sk)
+	_ac_add_skin_opt.visible = false
+	add_row.add_child(_ac_add_skin_opt)
+
+	_ac_add_chance_spin = SpinBox.new()
+	_ac_add_chance_spin.min_value = 0.1
+	_ac_add_chance_spin.max_value = 100.0
+	_ac_add_chance_spin.step = 0.5
+	_ac_add_chance_spin.value = 5.0
+	_ac_add_chance_spin.suffix = " %"
+	_ac_add_chance_spin.custom_minimum_size = Vector2(105, 30)
+	add_row.add_child(_ac_add_chance_spin)
+
+	var add_btn := Button.new()
+	add_btn.text = "+ ADD TO CRATE"
+	add_btn.modulate = Color(0.45, 1.0, 0.65)
+	add_btn.pressed.connect(_on_ac_add_crate_item)
+	add_row.add_child(add_btn)
+
+	cr_vb.add_child(HSeparator.new())
+
+	var cr_sc := ScrollContainer.new()
+	cr_sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	cr_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	cr_vb.add_child(cr_sc)
+
+	_ac_crate_list_box = VBoxContainer.new()
+	_ac_crate_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ac_crate_list_box.add_theme_constant_override("separation", 6)
+	cr_sc.add_child(_ac_crate_list_box)
+
+	_ac_crate_status_lbl = Label.new()
+	_ac_crate_status_lbl.text = "Add or adjust crate item drop rates (%), then click SAVE ACHIEVEMENTS & CRATES."
+	_ac_crate_status_lbl.modulate = Color(0.75, 0.86, 0.96)
+	cr_vb.add_child(_ac_crate_status_lbl)
+
+	if not AchievementManager.definitions.is_empty():
+		_select_ac_achievement(str(AchievementManager.definitions[0]["id"]))
+	_switch_ac_subtab(0)
+	_refresh_ac_crate_list()
+
+
+func _switch_ac_subtab(idx: int) -> void:
+	_ac_subtab = idx
+	if is_instance_valid(_ac_ach_panel):
+		_ac_ach_panel.visible = (idx == 0)
+	if is_instance_valid(_ac_crate_panel):
+		_ac_crate_panel.visible = (idx == 1)
+	if is_instance_valid(_ac_sub_ach_btn):
+		_ac_sub_ach_btn.set_pressed_no_signal(idx == 0)
+		_ac_sub_ach_btn.modulate = Color(0.86, 0.64, 1.0) if idx == 0 else Color(0.75, 0.80, 0.88)
+	if is_instance_valid(_ac_sub_crate_btn):
+		_ac_sub_crate_btn.set_pressed_no_signal(idx == 1)
+		_ac_sub_crate_btn.modulate = Color(1.0, 0.84, 0.28) if idx == 1 else Color(0.75, 0.80, 0.88)
+
+
+func _get_selected_ac_def() -> Dictionary:
+	for d in AchievementManager.definitions:
+		if str(d["id"]) == _ac_selected_ach_id:
+			return d
+	return {}
+
+
+func _select_ac_achievement(aid: String) -> void:
+	_ac_selected_ach_id = aid
+	for k in _ac_ach_btns.keys():
+		var b: Button = _ac_ach_btns[k] as Button
+		if is_instance_valid(b):
+			b.modulate = Color(1.0, 0.88, 0.34) if str(k) == aid else Color(0.82, 0.86, 0.94)
+	var d: Dictionary = _get_selected_ac_def()
+	if d.is_empty():
+		return
+	_ac_syncing = true
+	_ac_ach_title_lbl.text = "%s  [%s]" % [str(d["title"]), str(d["category"])]
+	_ac_ach_desc_lbl.text = "%s  (ID: %s | Stat: %s)" % [str(d["desc"]), aid, str(d["stat"])]
+	_ac_ach_coins_spin.value = int(d["reward_coins"])
+	_ac_ach_target_spin.value = int(d["target"])
+	_ac_ach_excl_cb.button_pressed = bool(d.get("exclusive_skin", false))
+	var sk_pair: String = str(d.get("reward_skin", ""))
+	if sk_pair.contains(":"):
+		var parts: PackedStringArray = sk_pair.split(":")
+		var wid: int = int(parts[0])
+		var skey: String = parts[1]
+		var w_idx: int = _ac_ach_weapon_opt.get_item_index(wid)
+		_ac_ach_weapon_opt.select(w_idx if w_idx >= 0 else 0)
+		_ac_ach_skin_opt.disabled = false
+		for si in range(_ac_ach_skin_opt.item_count):
+			if str(_ac_ach_skin_opt.get_item_metadata(si)) == skey:
+				_ac_ach_skin_opt.select(si)
+				break
+	else:
+		_ac_ach_weapon_opt.select(0)
+		_ac_ach_skin_opt.disabled = true
+	_ac_syncing = false
+
+
+func _apply_ac_skin_dropdowns() -> void:
+	if _ac_syncing:
+		return
+	var d: Dictionary = _get_selected_ac_def()
+	if d.is_empty():
+		return
+	var wid: int = _ac_ach_weapon_opt.get_selected_id()
+	if wid < 0:
+		d["reward_skin"] = ""
+		_ac_ach_skin_opt.disabled = true
+	else:
+		_ac_ach_skin_opt.disabled = false
+		var skey: String = str(_ac_ach_skin_opt.get_item_metadata(_ac_ach_skin_opt.selected))
+		d["reward_skin"] = "%d:%s" % [wid, skey]
+
+
+func _sync_ac_add_controls() -> void:
+	var t_id: int = _ac_add_type_opt.get_selected_id()
+	_ac_add_coins_spin.visible = (t_id == 0)
+	_ac_add_weapon_opt.visible = (t_id == 3)
+	_ac_add_skin_opt.visible = (t_id == 3)
+
+
+func _on_ac_add_crate_item() -> void:
+	var t_id: int = _ac_add_type_opt.get_selected_id()
+	var ch: float = snappedf(_ac_add_chance_spin.value, 0.1)
+	var item: Dictionary = {"chance": ch}
+	match t_id:
+		0:
+			item["type"] = "coins"
+			item["coins"] = int(_ac_add_coins_spin.value)
+		1:
+			item["type"] = "premium_skin"
+		2:
+			item["type"] = "basic_skin"
+		3:
+			item["type"] = "specific_skin"
+			item["weapon_id"] = _ac_add_weapon_opt.get_selected_id()
+			item["skin_key"] = str(_ac_add_skin_opt.get_item_metadata(_ac_add_skin_opt.selected))
+		4:
+			item["type"] = "double_coins"
+		5:
+			item["type"] = "unlock_agent"
+		6:
+			item["type"] = "dummy_gear"
+	if not ProfileManager.crate_tables.has(_ac_crate_key) or not (ProfileManager.crate_tables[_ac_crate_key] is Array):
+		ProfileManager.crate_tables[_ac_crate_key] = []
+	(ProfileManager.crate_tables[_ac_crate_key] as Array).append(item)
+	_refresh_ac_crate_list()
+
+
+func _refresh_ac_crate_list() -> void:
+	if not is_instance_valid(_ac_crate_list_box):
+		return
+	if is_instance_valid(_ac_crate_std_btn):
+		_ac_crate_std_btn.set_pressed_no_signal(_ac_crate_key == "standard")
+		_ac_crate_std_btn.modulate = Color(0.45, 0.90, 1.0) if _ac_crate_key == "standard" else Color(0.75, 0.80, 0.88)
+	if is_instance_valid(_ac_crate_prem_btn):
+		_ac_crate_prem_btn.set_pressed_no_signal(_ac_crate_key == "premium")
+		_ac_crate_prem_btn.modulate = Color(1.0, 0.84, 0.28) if _ac_crate_key == "premium" else Color(0.75, 0.80, 0.88)
+
+	for c in _ac_crate_list_box.get_children():
+		c.queue_free()
+
+	var arr: Array = ProfileManager.crate_tables.get(_ac_crate_key, []) as Array
+	var total_ch: float = 0.0
+	for i in range(arr.size()):
+		var entry: Dictionary = arr[i] as Dictionary
+		var ch: float = float(entry.get("chance", 0.0))
+		total_ch += ch
+
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var csb := StyleBoxFlat.new()
+		csb.bg_color = Color(0.10, 0.14, 0.22, 0.96)
+		csb.border_color = Color(0.30, 0.45, 0.68)
+		csb.set_border_width_all(1)
+		csb.set_corner_radius_all(8)
+		csb.set_content_margin_all(8)
+		card.add_theme_stylebox_override("panel", csb)
+		_ac_crate_list_box.add_child(card)
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		card.add_child(row)
+
+		var lbl := Label.new()
+		var etype: String = str(entry.get("type", "coins"))
+		if etype == "premium_skin":
+			lbl.text = "★ Random Premium Skin (5000+)"
+			lbl.modulate = Color(1.0, 0.84, 0.26)
+		elif etype == "basic_skin":
+			lbl.text = "◆ Random Basic Gun Skin"
+			lbl.modulate = Color(0.38, 0.90, 1.0)
+		elif etype == "specific_skin":
+			var wid: int = int(entry.get("weapon_id", 0))
+			var sk: String = str(entry.get("skin_key", "gold"))
+			lbl.text = "★ Specific Skin: %s — %s" % [WeaponData.get_weapon(wid, 0, 0).display_name, ProfileManager.get_gun_skin_name(wid, sk)]
+			lbl.modulate = Color(1.0, 0.72, 0.98)
+		elif etype == "double_coins":
+			lbl.text = "★ 2x NCC Crate (Double Your NCC!)"
+			lbl.modulate = Color(0.32, 1.0, 0.60)
+		elif etype == "unlock_agent":
+			lbl.text = "★ Random Locked Agent Unlock"
+			lbl.modulate = Color(0.86, 0.50, 1.0)
+		elif etype == "dummy_gear":
+			lbl.text = "★ Random Character Accessory / Cosmetic"
+			lbl.modulate = Color(0.98, 0.56, 0.92)
+		else:
+			lbl.text = "● NCC Drop: +%d NCC" % int(entry.get("coins", 200))
+			lbl.modulate = Color(0.55, 1.0, 0.68)
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl.add_theme_font_size_override("font_size", 14)
+		row.add_child(lbl)
+
+		var ch_sb := SpinBox.new()
+		ch_sb.min_value = 0.1
+		ch_sb.max_value = 100.0
+		ch_sb.step = 0.5
+		ch_sb.suffix = " %"
+		ch_sb.custom_minimum_size = Vector2(120, 30)
+		ch_sb.value = ch
+		var idx_cap: int = i
+		ch_sb.value_changed.connect(func(v: float):
+			(arr[idx_cap] as Dictionary)["chance"] = snappedf(v, 0.1)
+			_update_ac_crate_total_label()
+		)
+		row.add_child(ch_sb)
+
+		var del_btn := Button.new()
+		del_btn.text = "✕"
+		del_btn.custom_minimum_size = Vector2(34, 30)
+		del_btn.modulate = Color(1.0, 0.42, 0.38)
+		del_btn.pressed.connect(func():
+			arr.remove_at(idx_cap)
+			_refresh_ac_crate_list()
+		)
+		row.add_child(del_btn)
+
+	_update_ac_crate_total_label()
+
+
+func _update_ac_crate_total_label() -> void:
+	if not is_instance_valid(_ac_crate_total_lbl):
+		return
+	var arr: Array = ProfileManager.crate_tables.get(_ac_crate_key, []) as Array
+	var tot: float = 0.0
+	for e in arr:
+		if e is Dictionary:
+			tot += float((e as Dictionary).get("chance", 0.0))
+	_ac_crate_total_lbl.text = "Total Drop Weight: %.1f%% (%d items)" % [tot, arr.size()]
+
+
+func _prompt_reset_player_data() -> void:
+	if is_instance_valid(_reset_player_dlg):
+		_reset_player_dlg.popup_centered()
+
+
+func _on_confirm_reset_player_data() -> void:
+	ProfileManager.reset_full_player_data()
+	_sync_coin_economy_ui()
+	var msg: String = "Reset full player data (NCC, skins, cosmetics, agents, daily states & achievements)!"
+	if is_instance_valid(_status_lbl):
+		_status_lbl.text = msg
+	if is_instance_valid(_coin_status_lbl):
+		_coin_status_lbl.text = msg
+	if is_instance_valid(_ac_ach_status_lbl):
+		_ac_ach_status_lbl.text = msg
+	if is_instance_valid(_ac_crate_status_lbl):
+		_ac_crate_status_lbl.text = msg

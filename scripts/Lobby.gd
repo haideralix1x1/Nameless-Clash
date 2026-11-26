@@ -1074,7 +1074,7 @@ func _refresh_agent_draft_ui() -> void:
 			(lock_node as Control).visible = not is_unl
 			if not is_unl:
 				btn.disabled = true
-				btn.text = "%s\n%d COINS" % [str(ag["agent_name"]), ProfileManager.get_agent_unlock_price()]
+				btn.text = "%s\n%d NCC" % [str(ag["agent_name"]), ProfileManager.get_agent_unlock_price()]
 				_style_button(btn, Color(0.09, 0.09, 0.12, 0.78), Color(0.42, 0.34, 0.22))
 			else:
 				btn.disabled = my_locked

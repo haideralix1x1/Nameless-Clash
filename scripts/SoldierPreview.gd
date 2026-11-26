@@ -59,11 +59,14 @@ func _apply_preview_weapon(w_id: int) -> void:
 		_weapon_pivot.visible = false
 		return
 	_weapon_pivot.visible = true
-	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, ProfileManager.weapon_skin_id)
+	var eq_key: String = ProfileManager.get_equipped_gun_skin(w_id)
+	var eq_row: int = ProfileManager.get_equipped_gun_skin_row(w_id)
+	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, eq_row)
 	_gun_p.texture = spec["tex"] as Texture2D
 	_gun_p.hframes = int(spec["hframes"])
 	_gun_p.vframes = int(spec["vframes"])
 	_gun_p.frame = int(spec["frame"])
+	_gun_p.modulate = ProfileManager.get_gun_skin_tint(w_id, eq_key)
 
 
 func _process(delta: float) -> void:
@@ -90,7 +93,8 @@ func _process(delta: float) -> void:
 		return
 	var active_w: int = _preview_weapon_id if (shuffle_guns and _preview_weapon_id >= 0) else ProfileManager.primary_weapon_id
 	var stance: String = ModularCharacter.get_weapon_stance(active_w)
-	var ov: Dictionary = ModularCharacter.get_pose_override(ProfileManager.head_id, stance, _modular._current_anim)
+	var pose_pid: int = ProfileManager.head_id if ProfileManager.head_id >= 0 else ProfileManager.skin_id
+	var ov: Dictionary = ModularCharacter.get_pose_override(pose_pid, stance, _modular._current_anim)
 	var w_ov: Dictionary = ov.get("weapon", {})
 	var base_wy: float = 11.0 if anim_mode == 3 else (7.0 if anim_mode == 2 else 9.0)
 	var idle_sway: float = sin(_timer * 2.0) * 0.08

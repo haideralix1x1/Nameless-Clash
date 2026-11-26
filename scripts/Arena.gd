@@ -1122,6 +1122,8 @@ func _on_interact_requested(inter_idx: int) -> void:
 			for p in get_tree().get_nodes_in_group("players"):
 				if is_instance_valid(p) and p.get("is_local_human") == true and p.has_method("is_alive") and p.is_alive():
 					ProfileManager.add_coins(ProfileManager.get_treasure_reward())
+					if has_node("/root/AchievementManager"):
+						get_node("/root/AchievementManager").record_treasure_open()
 					if p.has_method("set_nearby_interactable"):
 						p.set_nearby_interactable(-1, "")
 					break
@@ -1672,11 +1674,13 @@ func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool
 
 
 func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
-	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, 0)
+	var eq_key: String = ProfileManager.get_equipped_gun_skin(w_id)
+	var spec: Dictionary = WeaponData.get_weapon_sprite_spec(w_id, ProfileManager.get_equipped_gun_skin_row(w_id))
 	w_spr.texture = spec["tex"] as Texture2D
 	w_spr.hframes = int(spec["hframes"])
 	w_spr.vframes = int(spec["vframes"])
 	w_spr.frame = int(spec["frame"])
+	w_spr.modulate = ProfileManager.get_gun_skin_tint(w_id, eq_key)
 	w_spr.scale = Vector2(0.313, 0.313) if w_id == 17 else Vector2(0.278, 0.278)
 
 

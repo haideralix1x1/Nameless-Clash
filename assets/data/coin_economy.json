@@ -37,6 +37,14 @@
 	},
 	"kill_reward": 25,
 	"match_reward": 30,
+	"premium_gun_skins": {
+		"0": {
+			"arctic": true,
+			"crimson_royal": true,
+			"gold": true,
+			"magma": true
+		}
+	},
 	"treasure_reward": 15,
 	"win_reward": 100
 }

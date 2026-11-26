@@ -13,13 +13,13 @@
 	"1": {
 		"bullet_range": 950.0,
 		"bullet_speed": 1500.0,
-		"damage": 19,
-		"fire_interval": 0.5,
-		"mag_size": 30,
-		"pellet_count": 1,
-		"recoil_impulse": 30.0,
+		"damage": 18.0,
+		"fire_interval": 0.3,
+		"mag_size": 30.0,
+		"pellet_count": 1.0,
+		"recoil_impulse": 35.0,
 		"reload_time": 1.4,
-		"spread_deg": 1.6
+		"spread_deg": 2.0
 	},
 	"10": {
 		"bullet_range": 2600.0,
@@ -111,13 +111,13 @@
 	},
 	"18": {
 		"bullet_range": 820.0,
-		"bullet_speed": 680.0,
-		"damage": 68.0,
+		"bullet_speed": 675.0,
+		"damage": 110,
 		"fire_interval": 0.72,
-		"mag_size": 3.0,
-		"pellet_count": 1.0,
+		"mag_size": 3,
+		"pellet_count": 1,
 		"recoil_impulse": 110.0,
-		"reload_time": 1.85,
+		"reload_time": 1.9,
 		"spread_deg": 2.0
 	},
 	"19": {
@@ -140,7 +140,7 @@
 		"pellet_count": 1.0,
 		"recoil_impulse": 80.0,
 		"reload_time": 1.7,
-		"spread_deg": 1.8
+		"spread_deg": 1.6
 	},
 	"20": {
 		"bullet_range": 680.0,
@@ -190,7 +190,7 @@
 		"bullet_range": 650.0,
 		"bullet_speed": 1800.0,
 		"damage": 14.0,
-		"fire_interval": 0.07,
+		"fire_interval": 0.08,
 		"mag_size": 32.0,
 		"pellet_count": 1.0,
 		"recoil_impulse": 20.0,
@@ -201,7 +201,7 @@
 		"bullet_range": 450.0,
 		"bullet_speed": 2200.0,
 		"damage": 12.0,
-		"fire_interval": 0.05,
+		"fire_interval": 0.04,
 		"mag_size": 25.0,
 		"pellet_count": 1.0,
 		"recoil_impulse": 15.0,
@@ -232,7 +232,7 @@
 	},
 	"7": {
 		"bullet_range": 2600.0,
-		"bullet_speed": 4000.0,
+		"bullet_speed": 6000.0,
 		"damage": 250.0,
 		"fire_interval": 1.45,
 		"mag_size": 5.0,
@@ -253,14 +253,14 @@
 		"spread_deg": 0.4
 	},
 	"9": {
-		"bullet_range": 700.0,
+		"bullet_range": 550.0,
 		"bullet_speed": 2000.0,
-		"damage": 80.0,
-		"fire_interval": 0.85,
-		"mag_size": 7.0,
+		"damage": 10.0,
+		"fire_interval": 0.05,
+		"mag_size": 21.0,
 		"pellet_count": 1.0,
-		"recoil_impulse": 65.0,
-		"reload_time": 1.2,
-		"spread_deg": 1.0
+		"recoil_impulse": 16.0,
+		"reload_time": 1.1,
+		"spread_deg": 2.8
 	}
 }

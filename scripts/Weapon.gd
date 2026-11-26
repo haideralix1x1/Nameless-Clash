@@ -28,6 +28,8 @@ const WEAPON_RANGES_PATH: String = "res://assets/data/weapon_ranges.json"
 const USER_WEAPON_RANGES_PATH: String = "user://weapon_ranges.json"
 const WEAPON_STATS_PATH: String = "res://assets/data/weapon_stats.json"
 const USER_WEAPON_STATS_PATH: String = "user://weapon_stats.json"
+const WEAPON_MUZZLES_PATH: String = "res://assets/data/weapon_muzzles.json"
+const USER_WEAPON_MUZZLES_PATH: String = "user://weapon_muzzles.json"
 const TEX_SELECTION_SHEET: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 const TEX_FLOOR_SHEET: Texture2D = preload("res://assets/sprites/weapons_floor_sheet.png")
 const TEX_AGENT_SHEET: Texture2D = preload("res://assets/sprites/weapons_agent_sheet.png")
@@ -96,6 +98,69 @@ static var _range_cache_loaded: bool = false
 static var _range_cache: Dictionary = {}
 static var _stats_cache_loaded: bool = false
 static var _stats_cache: Dictionary = {}
+static var _muzzle_cache_loaded: bool = false
+static var _muzzle_cache: Dictionary = {}
+
+
+static func load_weapon_muzzles() -> Dictionary:
+	if _muzzle_cache_loaded:
+		return _muzzle_cache
+	_muzzle_cache_loaded = true
+	_muzzle_cache = {}
+	for path in [WEAPON_MUZZLES_PATH, USER_WEAPON_MUZZLES_PATH]:
+		if not FileAccess.file_exists(path):
+			continue
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if parsed is Dictionary:
+			var d: Dictionary = parsed as Dictionary
+			for k in d.keys():
+				if d[k] is Dictionary:
+					var entry: Dictionary = d[k] as Dictionary
+					if entry.has("x") and entry.has("y"):
+						_muzzle_cache[str(k)] = {"x": float(entry["x"]), "y": float(entry["y"])}
+	return _muzzle_cache
+
+
+static func reload_weapon_muzzles() -> void:
+	_muzzle_cache_loaded = false
+	load_weapon_muzzles()
+
+
+static func get_weapon_muzzle_override(weapon_id: int) -> Dictionary:
+	var cache: Dictionary = load_weapon_muzzles()
+	var k := str(weapon_id)
+	if cache.has(k) and cache[k] is Dictionary:
+		return cache[k] as Dictionary
+	return {}
+
+
+static func save_weapon_muzzles(data: Dictionary, save_to_project: bool = true) -> bool:
+	var clean: Dictionary = {}
+	for k in data.keys():
+		if data[k] is Dictionary:
+			var entry: Dictionary = data[k] as Dictionary
+			if entry.has("x") and entry.has("y"):
+				clean[str(k)] = {
+					"x": snappedf(float(entry["x"]), 0.1),
+					"y": snappedf(float(entry["y"]), 0.1)
+				}
+	_muzzle_cache = clean.duplicate(true)
+	_muzzle_cache_loaded = true
+	var txt: String = JSON.stringify(clean, "\t")
+	var ok_any: bool = false
+	var uf := FileAccess.open(USER_WEAPON_MUZZLES_PATH, FileAccess.WRITE)
+	if uf != null:
+		uf.store_string(txt)
+		uf.close()
+		ok_any = true
+	if save_to_project:
+		var abs_path: String = ProjectSettings.globalize_path(WEAPON_MUZZLES_PATH)
+		var pf := FileAccess.open(abs_path, FileAccess.WRITE)
+		if pf != null:
+			pf.store_string(txt)
+			pf.close()
+			ok_any = true
+	return ok_any
 @export var min_damage_ratio: float = 1.0
 @export var move_speed_multiplier: float = 1.0
 @export var scope_zoom: float = 1.05
@@ -142,7 +207,7 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "medium",
 		"helmet_hp": 30,
 		"helmet_reduce": 0.25,
-		"desc": "AK47 + Deagle + 3 Frag • Med Shield & Helmet",
+		"desc": "AK47 + Glock 21 + 3 Frag • Med Shield & Helmet",
 		"accent": "green"
 	},
 	{
@@ -175,8 +240,8 @@ const GUN_PRESETS: Array[Dictionary] = [
 	},
 	{
 		"name": "Breacher CQB",
-		"primary": 5,
-		"secondary": 3,
+		"primary": 3,
+		"secondary": 4,
 		"bombs": 3,
 		"bomb_type": "sticky",
 		"shield_tier": "heavy",
@@ -184,7 +249,7 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "heavy",
 		"helmet_hp": 50,
 		"helmet_reduce": 0.35,
-		"desc": "Shotgun + SMG + 3 Sticky • Heavy Shield & Helmet",
+		"desc": "SMG + Uzi + 3 Sticky • Heavy Shield & Helmet",
 		"accent": "purple"
 	},
 	{
@@ -198,7 +263,7 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "medium",
 		"helmet_hp": 30,
 		"helmet_reduce": 0.25,
-		"desc": "Shotgun + Deagle + 3 Frag • Heavy Shield / Med Helmet",
+		"desc": "Shotgun + Glock 21 + 3 Frag • Heavy Shield / Med Helmet",
 		"accent": "purple"
 	},
 	{
@@ -240,7 +305,7 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "light",
 		"helmet_hp": 20,
 		"helmet_reduce": 0.15,
-		"desc": "Bazooka + Deagle + 4 Cluster • Heavy Shield / Light Helmet",
+		"desc": "Bazooka + Glock 21 + 4 Cluster • Heavy Shield / Light Helmet",
 		"accent": "red"
 	},
 	{
@@ -712,7 +777,7 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.code_name = "m416"
 			w.display_name = "M416"
 			w.category = "Assault Rifle"
-			w.description = "PUBG-style versatile full-auto 5.56 assault rifle with fast fire rate and ultra-stable recoil."
+			w.description = "Versatile full-auto 5.56 assault rifle with fast fire rate and ultra-stable recoil."
 			w.damage = 21
 			w.fire_interval = 0.086
 			w.mag_size = 30

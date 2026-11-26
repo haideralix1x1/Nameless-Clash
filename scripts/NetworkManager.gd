@@ -886,6 +886,20 @@ func _apply_kill(killer_id: int, victim_id: int, weapon_name: String, killer_lab
 	player_list_updated.emit()
 	killfeed_event.emit(killer_label, victim_label, weapon_name)
 	kill_scored.emit(killer_id, victim_id)
+	var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
+	if killer_id == my_id and killer_id != victim_id and has_node("/root/AchievementManager"):
+		var wid_match: int = -1
+		var wn_clean: String = weapon_name.replace(" (HS)", "").strip_edges().to_lower()
+		for tw in range(WeaponData.get_total_weapon_count()):
+			if not WeaponData.is_weapon_removed(tw):
+				var wd := WeaponData.get_base_weapon(tw)
+				if wd.display_name.to_lower() == wn_clean:
+					wid_match = tw
+					break
+		var k_kills: int = int(kp.get("kills", 0)) if not kp.is_empty() else 1
+		var k_streak: int = int(kp.get("combo_streak", 1)) if not kp.is_empty() else 1
+		var is_hs: bool = weapon_name.contains("(HS)") or weapon_name.to_lower().contains("headshot")
+		get_node("/root/AchievementManager").record_kill(wid_match, weapon_name, is_agent_clash_mode(), is_hs, k_streak, k_kills)
 
 
 func reset_match_state() -> void:
@@ -1017,6 +1031,8 @@ func _apply_match_end(winner_text: String, rankings: Array) -> void:
 		var my_id: int = multiplayer.get_unique_id() if is_network_active() else 1
 		var local_won: bool = (not rankings.is_empty()) and int((rankings[0] as Dictionary).get("id", -1)) == my_id
 		ProfileManager.add_coins(ProfileManager.get_win_reward() if local_won else ProfileManager.get_match_reward())
+		if has_node("/root/AchievementManager"):
+			get_node("/root/AchievementManager").record_match_end(local_won)
 	match_ended.emit(winner_text, rankings)
 
 
@@ -1098,6 +1114,8 @@ func sync_mine_event_rpc(action: String, mine_id: int, pos: Vector2) -> void:
 
 
 func go_to_arena() -> void:
+	if not is_test_mode() and not ProfileManager.is_agent_unlocked(ProfileManager.archetype_id, false):
+		ProfileManager.apply_archetype_preset(0, false)
 	stop_lan_discovery()
 	get_tree().change_scene_to_file("res://scenes/Arena.tscn")
 

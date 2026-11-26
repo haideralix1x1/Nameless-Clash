@@ -193,3 +193,67 @@ static func style_layer_button(btn: Button, variant: String = "blue", icon_name:
 			btn.add_theme_color_override("icon_normal_color", Color(0.88, 0.91, 0.95, 0.90))
 			btn.add_theme_color_override("icon_hover_color", Color(0.96, 0.98, 1.0, 0.96))
 			btn.add_theme_color_override("icon_pressed_color", Color(0.76, 0.80, 0.86, 0.90))
+
+
+static func make_inline_new_badge(text: String = "NEW", font_size: int = 10) -> PanelContainer:
+	var badge := PanelContainer.new()
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.92, 0.16, 0.22, 0.98)
+	sb.border_color = Color(1.0, 0.88, 0.34, 0.98)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 7.0
+	sb.content_margin_right = 7.0
+	sb.content_margin_top = 1.5
+	sb.content_margin_bottom = 1.5
+	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	sb.shadow_size = 2
+	badge.add_theme_stylebox_override("panel", sb)
+
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl.add_theme_font_override("font", FONT_MAIN)
+	lbl.add_theme_font_size_override("font_size", font_size)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.98, 0.86))
+	lbl.add_theme_color_override("font_outline_color", Color(0.18, 0.02, 0.04, 0.95))
+	lbl.add_theme_constant_override("outline_size", 2)
+	badge.add_child(lbl)
+	return badge
+
+
+static func attach_new_badge(parent: Control, badge_name: String = "NewBadge", text: String = "NEW", offset_right: float = -6.0, offset_top: float = 6.0, font_size: int = 11) -> PanelContainer:
+	var existing: PanelContainer = parent.get_node_or_null(badge_name) as PanelContainer
+	if existing != null:
+		return existing
+	var badge := make_inline_new_badge(text, font_size)
+	badge.name = badge_name
+	badge.z_index = 4
+	badge.anchor_left = 1.0
+	badge.anchor_right = 1.0
+	badge.anchor_top = 0.0
+	badge.anchor_bottom = 0.0
+	badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	badge.grow_vertical = Control.GROW_DIRECTION_END
+	badge.offset_left = offset_right
+	badge.offset_right = offset_right
+	badge.offset_top = offset_top
+	badge.offset_bottom = offset_top
+	parent.add_child(badge)
+	return badge
+
+
+static func set_new_badge_visible(parent: Control, is_visible: bool, badge_name: String = "NewBadge", offset_right: float = -6.0, offset_top: float = 6.0, font_size: int = 11) -> void:
+	if parent == null:
+		return
+	var badge: PanelContainer = parent.get_node_or_null(badge_name) as PanelContainer
+	if is_visible:
+		if badge == null:
+			badge = attach_new_badge(parent, badge_name, "NEW", offset_right, offset_top, font_size)
+		badge.visible = true
+	elif badge != null:
+		badge.visible = false

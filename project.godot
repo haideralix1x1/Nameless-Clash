@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 SettingsManager="*res://scripts/SettingsManager.gd"
 ProfileManager="*res://scripts/ProfileManager.gd"
 NetworkManager="*res://scripts/NetworkManager.gd"
+AchievementManager="*res://scripts/AchievementManager.gd"
 
 [display]
 
