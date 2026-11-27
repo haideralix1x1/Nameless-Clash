@@ -69,9 +69,7 @@ const AGENT_COL_BY_STYLE: Dictionary = {
 	"stone_hammer": 9,
 	"gun": 10
 }
-## Grimhare's bramble fist (front hand of frame 0 in his modular hand sheet).
-const TEX_GRIMHARE_HAND: Texture2D = preload("res://assets/sprites/modular/bramble_hands.png")
-const GRIMHARE_HAND_REGION: Rect2 = Rect2(157.0, 153.0, 40.0, 29.0)
+const TEX_GRIMHARE_CLAW: Texture2D = preload("res://assets/sprites/grimhare_claw.png")
 
 
 ## Fist-type melee styles: hidden until a punch, then jab forward.

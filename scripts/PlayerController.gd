@@ -122,6 +122,9 @@ var _fire_anim_timer: float = 0.0
 var _hit_flash_timer: float = 0.0
 var _shake_amount: float = 0.0
 var _bot_think_timer: float = 0.0
+var _bot_bomb_timer: float = 4.0
+var _bot_target_id: int = 0
+var _bot_target_lock_timer: float = 0.0
 var _bot_strafe_dir: float = 1.0
 var _bot_want_jetpack: bool = false
 var _bot_allow_fire: bool = true
@@ -1055,7 +1058,7 @@ func _process_alive(delta: float) -> void:
 			stick_y = -stick_y
 
 		want_jump = Input.is_action_just_pressed("jump")
-		want_crouch = Input.is_action_pressed("crouch") or (stick_y > 0.55)
+		want_crouch = Input.is_action_pressed("crouch") or (stick_y > 0.45)
 		var hold_jump_midair: bool = Input.is_action_pressed("jump") and not is_on_floor() and velocity.y > -60.0
 		want_jet = Input.is_action_pressed("jetpack") or hold_jump_midair or virtual_jetpack or (stick_y < -0.45)
 
@@ -1226,8 +1229,10 @@ func _process_alive(delta: float) -> void:
 	else:
 		is_jetpacking = false
 		velocity.y += grav_eff * delta
-		if not is_on_floor() and want_crouch and NetworkManager.gravity_scale < 0.25:
-			velocity.y = minf(velocity.y + 420.0 * delta, 320.0)
+		if not is_on_floor() and want_crouch:
+			var down_mult: float = clampf(NetworkManager.jet_speed_scale, 0.1, 1.0)
+			var max_down_spd: float = absf(JETPACK_MAX_UP_SPEED) * down_mult * (0.35 if slow_mo_timer > 0.0 else 1.0)
+			velocity.y = minf(velocity.y + JETPACK_THRUST * down_mult * act_delta, maxf(velocity.y, max_down_spd))
 		if NetworkManager.unlimited_jetpack:
 			jetpack_fuel = MAX_FUEL
 		elif _fuel_recharge_delay > 0.0:
@@ -1595,7 +1600,7 @@ func apply_gun_preset(preset_idx: int) -> void:
 	_secondary_saved_ammo = -1
 	_burst_shots_left = 0
 	bomb_type = str(preset.get("bomb_type", "frag"))
-	max_bombs = int(preset.get("bombs", 3))
+	max_bombs = int(preset.get("bombs", 3)) if NetworkManager.allow_explosives else 0
 	bomb_count = max_bombs
 	bomb_inventory.clear()
 	if max_bombs > 0:
@@ -1922,8 +1927,23 @@ static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) 
 func _sync_muzzle_positions(ref_aim_angle: float) -> void:
 	if _muzzle_primary == null or _muzzle_secondary == null or _muzzle_flash == null:
 		return
-	var spr_f: int = _weapon.sprite_frame if _weapon != null else clampi(current_weapon_id, 0, 10)
-	var base_muz: Vector2 = get_weapon_muzzle_local_pos(current_weapon_id, spr_f)
+	var base_muz: Vector2
+	if _is_agent_logic_active():
+		var bw_style: String = str(AgentData.get_agent(archetype_id).get("base_weapon", {}).get("style", "sword"))
+		match bw_style:
+			"deagle":
+				base_muz = Vector2(44.0, -6.5)
+			"bruski_revolver":
+				base_muz = Vector2(36.0, -6.5)
+			"gun":
+				base_muz = Vector2(44.0, -2.0)
+			"bow":
+				base_muz = Vector2(28.0, 0.0)
+			_:
+				base_muz = Vector2(30.0, 0.0)
+	else:
+		var spr_f: int = _weapon.sprite_frame if _weapon != null else clampi(current_weapon_id, 0, 10)
+		base_muz = get_weapon_muzzle_local_pos(current_weapon_id, spr_f)
 	var flip_gun: bool = cos(ref_aim_angle) < 0.0
 	var muz_y: float = -base_muz.y if flip_gun else base_muz.y
 	_muzzle_primary.position = Vector2(base_muz.x, muz_y)
@@ -2889,8 +2909,12 @@ func _compute_bot_input(delta: float) -> Dictionary:
 
 	var diff: int = clampi(NetworkManager.bot_difficulty, 0, 2)
 	_bot_think_timer -= delta
+	_bot_bomb_timer = maxf(0.0, _bot_bomb_timer - delta)
+	_bot_target_lock_timer = maxf(0.0, _bot_target_lock_timer - delta)
 	var nearest_target: Node2D = null
 	var nearest_dist: float = 99999.0
+	var locked_target: Node2D = null
+	var locked_dist: float = 99999.0
 
 	for node in get_tree().get_nodes_in_group("players"):
 		if node == self or not is_instance_valid(node):
@@ -2902,9 +2926,21 @@ func _compute_bot_input(delta: float) -> Dictionary:
 		if float(node.get("invis_timer")) > 0.0:
 			continue
 		var d: float = global_position.distance_to(node.global_position)
+		if int(node.get("peer_id")) == _bot_target_id:
+			locked_target = node as Node2D
+			locked_dist = d
 		if d < nearest_dist:
 			nearest_dist = d
 			nearest_target = node as Node2D
+
+	if locked_target != null and _bot_target_lock_timer > 0.0 and locked_dist <= nearest_dist / 0.72:
+		nearest_target = locked_target
+		nearest_dist = locked_dist
+	elif nearest_target != null:
+		_bot_target_id = int(nearest_target.get("peer_id"))
+		_bot_target_lock_timer = randf_range(1.2, 2.4)
+	else:
+		_bot_target_id = 0
 
 	if _bot_think_timer <= 0.0:
 		if diff == 0:
@@ -3016,6 +3052,12 @@ func _compute_bot_input(delta: float) -> Dictionary:
 					want_fire = (not is_melee_agent) or dist < 135.0
 				else:
 					want_fire = true
+					if NetworkManager.allow_explosives and bomb_count > 0 and _bomb_cooldown <= 0.0 and _bot_bomb_timer <= 0.0 and stun_timer <= 0.0 and dist >= 120.0 and dist <= 480.0:
+						var bomb_chance: float = 0.35 if diff == 0 else (0.50 if diff == 1 else 0.65)
+						_bot_bomb_timer = randf_range(6.5, 11.5) if diff == 0 else (randf_range(4.8, 8.8) if diff == 1 else randf_range(3.6, 6.8))
+						if randf() < bomb_chance:
+							aim_angle = desired_angle - 0.16 * signf(cos(desired_angle))
+							throw_bomb()
 
 	# Steer toward freshly opened treasure loot, or smartly toward nearby orbs / weapons / health
 	if bool(pickup_obj.get("found", false)):
@@ -5916,7 +5958,7 @@ class AgentWeaponVisual extends Node2D:
 			"boxing_glove":
 				draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-14.0, -16.0, 64.0, 32.0), WeaponData.get_agent_weapon_region("boxing_glove"))
 			"grimhare_hand":
-				draw_texture_rect_region(WeaponData.TEX_GRIMHARE_HAND, Rect2(-4.0, -14.0, 38.0, 27.5), WeaponData.GRIMHARE_HAND_REGION)
+				draw_texture_rect(WeaponData.TEX_GRIMHARE_CLAW, Rect2(-10.0, -15.5, 62.0, 31.0), false)
 			"greatsword":
 				draw_line(Vector2(4, 0), Vector2(44, 0), weapon_color, 7.0)
 				draw_colored_polygon(PackedVector2Array([Vector2(42, -5), Vector2(54, 0), Vector2(42, 5)]), Color.WHITE)
@@ -6386,7 +6428,7 @@ class BoxingFistVfx extends Node2D:
 		var a: float = clampf(1.0 - maxf(0.0, (_age - slam_time) / _hold_fade), 0.0, 1.0)
 		draw_circle(Vector2(2.0, 0.0), 26.0, Color(0.28, 0.62, 1.0, 0.24 * a) if not use_grimhare_hand else Color(0.92, 0.22, 0.30, 0.24 * a))
 		if use_grimhare_hand:
-			draw_texture_rect_region(WeaponData.TEX_GRIMHARE_HAND, Rect2(-36.0, -26.0, 72.0, 52.0), WeaponData.GRIMHARE_HAND_REGION, Color(1.0, 1.0, 1.0, a))
+			draw_texture_rect(WeaponData.TEX_GRIMHARE_CLAW, Rect2(-52.0, -26.0, 104.0, 52.0), false, Color(1.0, 1.0, 1.0, a))
 		else:
 			draw_texture_rect_region(WeaponData.TEX_AGENT_SHEET, Rect2(-52.0, -26.0, 104.0, 52.0), WeaponData.get_agent_weapon_region("boxing_glove"), Color(1.0, 1.0, 1.0, a))
 

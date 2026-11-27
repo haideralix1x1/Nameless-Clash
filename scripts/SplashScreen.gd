@@ -154,11 +154,8 @@ func _process(delta: float) -> void:
 			return
 		var packed: PackedScene = _loaded_menu_scene if _loaded_menu_scene != null else (load(MAIN_MENU_PATH) as PackedScene)
 		_attach_main_menu(packed)
-		return
-
-	_menu_frames += 1
-	if not _fading_out and _menu_frames >= 1:
 		_start_reveal_fade()
+		return
 
 
 func _on_video_finished() -> void:
@@ -217,16 +214,10 @@ func _start_reveal_fade() -> void:
 	_fading_out = true
 	if is_instance_valid(_overlay):
 		_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var reveal_sec: float = 0.15 if _skip_requested else 0.25
-		var tw := create_tween()
-		tw.tween_property(_overlay, "modulate:a", 0.0, reveal_sec)
-		if is_instance_valid(_audio_player) and _audio_player.playing:
-			tw.parallel().tween_property(_audio_player, "volume_db", -40.0, reveal_sec)
-		tw.finished.connect(queue_free)
-	else:
-		if is_instance_valid(_audio_player) and _audio_player.playing:
-			_audio_player.stop()
-		queue_free()
+		_overlay.visible = false
+	if is_instance_valid(_audio_player) and _audio_player.playing:
+		_audio_player.stop()
+	queue_free()
 
 
 func _load_splash_video() -> VideoStream:

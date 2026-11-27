@@ -75,6 +75,7 @@ const BGM_MENU_PATH: String = "res://assets/audio/menu_music.ogg"
 const BGM_ARENA_PATH: String = "res://assets/audio/Stage Music.ogg"
 const UI_CLICK_SFX_PATH: String = "res://assets/audio/Click 1.ogg"
 const UI_PURCHASE_SFX_PATH: String = "res://assets/audio/click 2.ogg"
+const UI_UNLOCKED_SFX_PATH: String = "res://assets/audio/Unlocked.ogg"
 
 var _bgm_player: AudioStreamPlayer
 var _bgm_track_key: String = ""
@@ -82,8 +83,15 @@ var _bgm_tween: Tween = null
 var _bgm_target_db: float = -6.0
 var _ui_click_player: AudioStreamPlayer
 var _ui_purchase_player: AudioStreamPlayer
+var _ui_unlocked_player: AudioStreamPlayer
 var _last_ui_click_msec: int = 0
 var _last_ui_purchase_msec: int = 0
+var _last_ui_unlocked_msec: int = 0
+var _drag_scroll: ScrollContainer = null
+var _drag_touch_idx: int = -2
+var _drag_start_pos: Vector2 = Vector2.ZERO
+var _drag_last_pos: Vector2 = Vector2.ZERO
+var _drag_active: bool = false
 
 
 func _ready() -> void:
@@ -347,6 +355,15 @@ func _setup_ui_click_sfx() -> void:
 	_ui_purchase_player.stream = _load_sfx_stream(UI_PURCHASE_SFX_PATH)
 	add_child(_ui_purchase_player)
 
+	_ui_unlocked_player = AudioStreamPlayer.new()
+	_ui_unlocked_player.name = "UIUnlockedPlayer"
+	_ui_unlocked_player.bus = "SFX"
+	_ui_unlocked_player.max_polyphony = 4
+	_ui_unlocked_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_ui_unlocked_player.volume_db = 0.0
+	_ui_unlocked_player.stream = _load_sfx_stream(UI_UNLOCKED_SFX_PATH)
+	add_child(_ui_unlocked_player)
+
 
 func play_ui_click() -> void:
 	if DisplayServer.get_name() == "headless":
@@ -374,7 +391,22 @@ func play_ui_purchase() -> void:
 	_ui_purchase_player.play()
 
 
+func play_unlocked() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if not is_instance_valid(_ui_unlocked_player) or _ui_unlocked_player.stream == null:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now - _last_ui_unlocked_msec < 65:
+		return
+	_last_ui_unlocked_msec = now
+	_ui_unlocked_player.pitch_scale = 1.0
+	_ui_unlocked_player.play()
+
+
 func _input(event: InputEvent) -> void:
+	if _handle_scroll_drag(event):
+		return
 	var is_touch_or_click: bool = false
 	if event is InputEventScreenTouch:
 		is_touch_or_click = (event as InputEventScreenTouch).pressed
@@ -396,6 +428,135 @@ func _input(event: InputEvent) -> void:
 		if not tree.paused and not _is_arena_ui_open(cur_scene):
 			return
 	play_ui_click()
+
+
+func _handle_scroll_drag(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.pressed:
+			var sc := _find_scrollable_under(st.position)
+			if sc != null:
+				_drag_scroll = sc
+				_drag_touch_idx = st.index
+				_drag_start_pos = st.position
+				_drag_last_pos = st.position
+				_drag_active = false
+		elif st.index == _drag_touch_idx:
+			var was_active := _drag_active
+			_drag_scroll = null
+			_drag_touch_idx = -2
+			_drag_active = false
+			if was_active:
+				get_viewport().set_input_as_handled()
+				return true
+		return false
+
+	if event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		if sd.index == _drag_touch_idx and is_instance_valid(_drag_scroll):
+			return _process_scroll_drag_move(sd.position)
+		return false
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.device != InputEvent.DEVICE_ID_EMULATION:
+			if mb.pressed:
+				var sc := _find_scrollable_under(mb.position)
+				if sc != null:
+					_drag_scroll = sc
+					_drag_touch_idx = -1
+					_drag_start_pos = mb.position
+					_drag_last_pos = mb.position
+					_drag_active = false
+			elif _drag_touch_idx == -1:
+				var was_active := _drag_active
+				_drag_scroll = null
+				_drag_touch_idx = -2
+				_drag_active = false
+				if was_active:
+					get_viewport().set_input_as_handled()
+					return true
+		return false
+
+	if event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _drag_touch_idx == -1 and mm.device != InputEvent.DEVICE_ID_EMULATION and is_instance_valid(_drag_scroll):
+			if (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+				return _process_scroll_drag_move(mm.position)
+			else:
+				_drag_scroll = null
+				_drag_touch_idx = -2
+				_drag_active = false
+		return false
+
+	return false
+
+
+func _process_scroll_drag_move(pos: Vector2) -> bool:
+	if not is_instance_valid(_drag_scroll) or not _drag_scroll.is_visible_in_tree():
+		_drag_scroll = null
+		_drag_touch_idx = -2
+		_drag_active = false
+		return false
+	if not _drag_active:
+		if pos.distance_to(_drag_start_pos) < 10.0:
+			return false
+		_drag_active = true
+		_cancel_pressed_buttons(_drag_scroll)
+	var delta := pos - _drag_last_pos
+	_drag_last_pos = pos
+	if _drag_scroll.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		_drag_scroll.scroll_horizontal -= int(round(delta.x))
+	if _drag_scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED:
+		_drag_scroll.scroll_vertical -= int(round(delta.y))
+	get_viewport().set_input_as_handled()
+	return true
+
+
+func _cancel_pressed_buttons(node: Node) -> void:
+	if node is BaseButton:
+		var btn := node as BaseButton
+		if not btn.disabled:
+			btn.disabled = true
+			btn.disabled = false
+	for ch in node.get_children():
+		_cancel_pressed_buttons(ch)
+
+
+func _find_scrollable_under(pos: Vector2) -> ScrollContainer:
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return null
+	var hovered: Control = get_viewport().gui_get_hovered_control()
+	if hovered != null and (hovered is Slider or hovered is ScrollBar or hovered is LineEdit or hovered is TextEdit):
+		return null
+	var hits: Array[ScrollContainer] = []
+	_collect_scrollables_at(tree.root, pos, hits)
+	if hits.is_empty():
+		return null
+	return hits[hits.size() - 1]
+
+
+func _collect_scrollables_at(node: Node, pos: Vector2, out: Array[ScrollContainer]) -> void:
+	if node is CanvasItem and not (node as CanvasItem).is_visible_in_tree():
+		return
+	if node is ScrollContainer:
+		var sc := node as ScrollContainer
+		if sc.get_global_rect().has_point(pos) and _can_scroll_container(sc):
+			out.append(sc)
+	for ch in node.get_children():
+		_collect_scrollables_at(ch, pos, out)
+
+
+func _can_scroll_container(sc: ScrollContainer) -> bool:
+	for ch in sc.get_children():
+		if ch is Control and not (ch is ScrollBar):
+			var c := ch as Control
+			var can_v := sc.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED and c.size.y > sc.size.y + 1.0
+			var can_h := sc.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED and c.size.x > sc.size.x + 1.0
+			if can_v or can_h:
+				return true
+	return false
 
 
 func _is_arena_ui_open(arena_scene: Node) -> bool:

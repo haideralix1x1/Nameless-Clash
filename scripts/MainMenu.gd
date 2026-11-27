@@ -893,13 +893,28 @@ func _build_agent_select_overlay() -> void:
 		if not _agent_select_for_practice and not ProfileManager.is_agent_unlocked(_agent_preview_idx, false):
 			if ProfileManager.buy_agent(_agent_preview_idx):
 				ProfileManager.apply_archetype_preset(_agent_preview_idx, true)
-				SettingsManager.play_ui_purchase()
+				SettingsManager.play_unlocked()
 				if is_instance_valid(_coin_pill_lbl):
 					_coin_pill_lbl.text = ProfileManager.format_coins(ProfileManager.coins)
 				if is_instance_valid(_preview):
 					_preview.refresh_from_profile()
 				_update_loadout_label()
 				_refresh_agent_select_ui()
+				var ag: Dictionary = AgentData.get_agent(_agent_preview_idx)
+				var ag_name: String = str(ag.get("agent_name", "Agent"))
+				var ag_title: String = str(ag.get("title", ""))
+				_show_big_win_spotlight([{
+					"kind": "agent_unlock",
+					"agent_id": _agent_preview_idx,
+					"agent_name": ag_name,
+					"agent_title": ag_title,
+					"is_duplicate": false,
+					"coins_won": 0,
+					"item_value": ProfileManager.get_agent_unlock_price(),
+					"label": "%s (%s)" % [ag_name, ag_title] if not ag_title.is_empty() else ag_name,
+					"short_label": ag_name,
+					"color": Color(0.86, 0.48, 1.0),
+				}])
 			return
 		if _agent_select_for_practice:
 			ProfileManager.apply_archetype_preset(_agent_preview_idx, false)
@@ -2962,7 +2977,7 @@ func _refresh_shop_skins() -> void:
 					_shop_preview_skin_key = skey
 					_shop_status_lbl.text = "Purchased & equipped %s for %s NC!" % [sname, ProfileManager.format_coins(price)]
 					_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
-					SettingsManager.play_ui_purchase()
+					SettingsManager.play_unlocked()
 					_refresh_shop_skins()
 				else:
 					_shop_status_lbl.text = "Not enough NC! Need %s NC." % ProfileManager.format_coins(price)

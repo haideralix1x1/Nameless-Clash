@@ -744,6 +744,25 @@ func _snap_to_floor(raw_pos: Vector2, half_h: float = 14.0, avoid_items: bool = 
 	return Vector2(base_x, _snap_floor_y_at(base_x, raw_pos.y) - half_h)
 
 
+func _snap_to_open_floor(raw_pos: Vector2, half_h: float = 20.0, headroom_h: float = 56.0, avoid_items: bool = true) -> Vector2:
+	var base_x: float = clampf(raw_pos.x, 88.0, arena_width - 88.0)
+	for off_x in [0.0, 96.0, -96.0, 192.0, -192.0, 288.0, -288.0, 384.0, -384.0, 480.0, -480.0]:
+		var cx: float = clampf(base_x + off_x, 88.0, arena_width - 88.0)
+		var fy: float = _snap_floor_y_at(cx, raw_pos.y)
+		var cand := Vector2(cx, fy - half_h)
+		if not _is_spot_clear(cand, 32.0, half_h, avoid_items):
+			continue
+		var headroom_rect := Rect2(cand.x - 36.0, fy - half_h * 2.0 - headroom_h, 72.0, headroom_h)
+		var blocked_above: bool = false
+		for rect in _static_platform_rects:
+			if rect.intersects(headroom_rect):
+				blocked_above = true
+				break
+		if not blocked_above:
+			return cand
+	return _snap_to_floor(raw_pos, half_h, avoid_items)
+
+
 func _build_pickup_crates() -> void:
 	var crate_specs: Array[Dictionary] = []
 	if NetworkManager.is_agent_clash_mode():
@@ -1021,7 +1040,7 @@ func _build_interactables() -> void:
 
 	var tbox := InteractableTreasureBox.new()
 	tbox.inter_idx = _interactables.size()
-	tbox.position = _snap_to_floor(Vector2(arena_width * 0.50, arena_height * 0.42), 20.0, true)
+	tbox.position = _snap_to_open_floor(Vector2(arena_width * 0.50, arena_height * 0.42), 20.0, 56.0, true)
 	_world_geometry.add_child(tbox)
 	_interactables.append(tbox)
 
@@ -1950,8 +1969,11 @@ func _spawn_bot(bot_index: int) -> void:
 	)
 	bot.global_position = spawn_pos
 	_players_container.add_child(bot)
-	if not NetworkManager.is_agent_clash_mode() and not NetworkManager.random_guns_mode and bot.has_method("apply_gun_preset"):
-		bot.apply_gun_preset(randi() % WeaponData.GUN_PRESETS.size())
+	if not NetworkManager.is_agent_clash_mode():
+		if not NetworkManager.random_guns_mode and bot.has_method("apply_gun_preset"):
+			bot.apply_gun_preset(randi() % WeaponData.GUN_PRESETS.size())
+		elif NetworkManager.random_guns_mode and bot.has_method("assign_random_loadout"):
+			bot.assign_random_loadout()
 
 
 func _get_active_bots() -> Array[Node]:
