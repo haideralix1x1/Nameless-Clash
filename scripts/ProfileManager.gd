@@ -15,7 +15,8 @@ const DEFAULT_AGENT_UNLOCK_PRICE: int = 5000
 const DAILY_BONUS_COINS: int = 100
 const STANDARD_CRATE_PRICE: int = 1000
 const PREMIUM_CRATE_PRICE: int = 2000
-const PREMIUM_SKIN_PRICE_THRESHOLD: int = 5000
+const RARE_SKIN_PRICE_THRESHOLD: int = 4000
+const PREMIUM_SKIN_PRICE_THRESHOLD: int = 6000
 
 const COIN_SHOP_PACKS: Array[Dictionary] = [
 	{"sku": "coins_pack_starter", "name": "Pouch of NC",       "coins": 1200,   "bonus_coins": 0,     "price_usd": "$0.99",  "tag": "STARTER",    "tier": 0, "accent": Color(0.42, 0.84, 1.0)},
@@ -78,13 +79,17 @@ const WEAPON_SKIN_META_OVERRIDES: Dictionary = {
 	"23": {
 		"desert_camo": {"name": "Wasteland Rust", "badge": Color(0.86, 0.52, 0.28), "bullet": Color(1.0, 0.62, 0.30)},
 		"ocean_wave":  {"name": "Sapphire Sovereign", "badge": Color(0.34, 0.60, 1.0), "bullet": Color(0.40, 0.70, 1.0)}
+	},
+	"24": {
+		"ocean_wave":    {"name": "Sapphire Sovereign", "badge": Color(0.32, 0.56, 1.0), "bullet": Color(0.38, 0.68, 1.0)},
+		"crimson_royal": {"name": "Tiger Striker", "badge": Color(1.0, 0.54, 0.14), "bullet": Color(1.0, 0.58, 0.18)}
 	}
 }
 # Weapons whose columns in weapons_selection_sheet.png contain dedicated custom art for all 10 skin rows (no extra tint needed)
-const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23]
+const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23, 24]
 # Weapons that never get skins (always shown with the base/default art)
 const NO_SKIN_WEAPONS: Array[int] = [19]
-const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23, 22]
+const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 23, 24, 22, 3, 4, 5, 6, 7, 8, 9, 20, 10, 18]
 
 const PROFILE_PATH: String = "user://player_profile.cfg"
 
@@ -349,7 +354,7 @@ const CUSTOM_DUMMIES: Array[Dictionary] = [
 
 const WEAPON_NAMES: Array[String] = [
 	"AK47", "M16A4", "SCAR-L", "SMG", "Uzi",
-	"Shotgun", "Pump Shotgun", "Sniper", "Auto Sniper", "Glock 21", "Bazooka"
+	"Shotgun", "Pump Shotgun", "Sniper", "Auto Sniper", "Glock 21", "RPG 7"
 ]
 
 const WEAPON_SKIN_NAMES: Array[String] = ["Digital Camo", "Solid Matte", "Neon Tracer"]
@@ -529,6 +534,7 @@ var match_reward: int = 30
 var agent_unlock_price: int = DEFAULT_AGENT_UNLOCK_PRICE
 var gun_skin_prices: Dictionary = {}
 var premium_gun_skins: Dictionary = {}
+var coin_shop_packs: Array[Dictionary] = []
 var crate_tables: Dictionary = {}
 
 
@@ -1135,7 +1141,11 @@ func load_economy_config() -> void:
 	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
 	gun_skin_prices = {}
 	premium_gun_skins = {}
-	for path in [ECONOMY_CONFIG_PATH, USER_ECONOMY_CONFIG_PATH]:
+	coin_shop_packs = get_default_coin_shop_packs()
+	var econ_paths: Array[String] = [ECONOMY_CONFIG_PATH]
+	if OS.has_feature("editor"):
+		econ_paths.append(USER_ECONOMY_CONFIG_PATH)
+	for path in econ_paths:
 		if not FileAccess.file_exists(path):
 			continue
 		var txt: String = FileAccess.get_file_as_string(path)
@@ -1171,9 +1181,53 @@ func load_economy_config() -> void:
 						for sk in (pg[wk] as Dictionary).keys():
 							if bool((pg[wk] as Dictionary)[sk]):
 								(premium_gun_skins[wkey] as Dictionary)[str(sk)] = true
+			if d.has("coin_shop_packs") and d["coin_shop_packs"] is Array and not (d["coin_shop_packs"] as Array).is_empty():
+				var parsed_packs: Array[Dictionary] = []
+				var raw_packs: Array = d["coin_shop_packs"] as Array
+				for pi in range(raw_packs.size()):
+					if not (raw_packs[pi] is Dictionary):
+						continue
+					var pd: Dictionary = raw_packs[pi] as Dictionary
+					var def_p: Dictionary = COIN_SHOP_PACKS[clampi(pi, 0, COIN_SHOP_PACKS.size() - 1)]
+					var tier_i: int = clampi(int(pd.get("tier", def_p.get("tier", pi))), 0, COIN_SHOP_PACKS.size() - 1)
+					var def_col: Color = def_p.get("accent", Color(1.0, 0.84, 0.24)) as Color
+					var col_val: Color = def_col
+					if pd.has("accent_hex"):
+						var hx: String = str(pd["accent_hex"]).strip_edges()
+						if not hx.is_empty():
+							col_val = Color.html(hx)
+					parsed_packs.append({
+						"sku": str(pd.get("sku", def_p.get("sku", "coins_pack_%d" % pi))),
+						"name": str(pd.get("name", def_p.get("name", "NC Pack"))),
+						"coins": maxi(0, int(pd.get("coins", def_p.get("coins", 1000)))),
+						"bonus_coins": maxi(0, int(pd.get("bonus_coins", def_p.get("bonus_coins", 0)))),
+						"price_usd": str(pd.get("price_usd", def_p.get("price_usd", "$0.99"))),
+						"tag": str(pd.get("tag", "")),
+						"tier": tier_i,
+						"accent": col_val
+					})
+				if not parsed_packs.is_empty():
+					coin_shop_packs = parsed_packs
+	_rebuild_premium_flags_from_prices()
 
 
 func save_economy_config(save_to_project: bool = true) -> bool:
+	if not OS.has_feature("editor"):
+		return false
+	_rebuild_premium_flags_from_prices()
+	var serialized_packs: Array[Dictionary] = []
+	for p in get_coin_shop_packs():
+		var col: Color = p.get("accent", Color(1.0, 0.84, 0.24)) as Color
+		serialized_packs.append({
+			"sku": str(p.get("sku", "")),
+			"name": str(p.get("name", "NC Pack")),
+			"coins": maxi(0, int(p.get("coins", 0))),
+			"bonus_coins": maxi(0, int(p.get("bonus_coins", 0))),
+			"price_usd": str(p.get("price_usd", "$0.99")),
+			"tag": str(p.get("tag", "")),
+			"tier": int(p.get("tier", 0)),
+			"accent_hex": col.to_html(false)
+		})
 	var payload: Dictionary = {
 		"kill_reward": kill_reward,
 		"treasure_reward": treasure_reward,
@@ -1181,7 +1235,8 @@ func save_economy_config(save_to_project: bool = true) -> bool:
 		"match_reward": match_reward,
 		"agent_unlock_price": agent_unlock_price,
 		"gun_skin_prices": gun_skin_prices,
-		"premium_gun_skins": premium_gun_skins
+		"premium_gun_skins": premium_gun_skins,
+		"coin_shop_packs": serialized_packs
 	}
 	var json_txt: String = JSON.stringify(payload, "\t")
 	var ok_any: bool = false
@@ -1209,7 +1264,67 @@ func reset_economy_defaults() -> void:
 	agent_unlock_price = DEFAULT_AGENT_UNLOCK_PRICE
 	gun_skin_prices.clear()
 	premium_gun_skins.clear()
+	coin_shop_packs = get_default_coin_shop_packs()
 	economy_config_changed.emit()
+
+
+static func get_skin_tier_for_price(price: int) -> String:
+	if price >= PREMIUM_SKIN_PRICE_THRESHOLD:
+		return "premium"
+	if price >= RARE_SKIN_PRICE_THRESHOLD:
+		return "rare"
+	return "common"
+
+
+static func get_skin_tier_label(tier_key: String) -> String:
+	match tier_key:
+		"premium": return "PREMIUM"
+		"rare": return "RARE"
+		_: return "COMMON"
+
+
+static func get_skin_tier_color(tier_key: String) -> Color:
+	match tier_key:
+		"premium": return Color(1.0, 0.82, 0.22)
+		"rare": return Color(0.76, 0.48, 1.0)
+		_: return Color(0.56, 0.82, 0.98)
+
+
+func get_gun_skin_tier(weapon_id: int, skin_key: String) -> String:
+	if skin_key == "default" or skin_key.is_empty():
+		return "common"
+	return get_skin_tier_for_price(get_gun_skin_price(weapon_id, skin_key))
+
+
+func get_default_coin_shop_packs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for p in COIN_SHOP_PACKS:
+		out.append((p as Dictionary).duplicate(true))
+	return out
+
+
+func get_coin_shop_packs() -> Array[Dictionary]:
+	if coin_shop_packs.is_empty():
+		coin_shop_packs = get_default_coin_shop_packs()
+	return coin_shop_packs
+
+
+func reset_coin_shop_defaults() -> void:
+	coin_shop_packs = get_default_coin_shop_packs()
+	economy_config_changed.emit()
+
+
+func _rebuild_premium_flags_from_prices() -> void:
+	premium_gun_skins.clear()
+	for wid in SHOP_WEAPON_IDS:
+		if NO_SKIN_WEAPONS.has(wid):
+			continue
+		for sdef in GUN_SKIN_CATALOG:
+			var skey: String = str(sdef["key"])
+			if skey == "default":
+				continue
+			if get_gun_skin_price(wid, skey) >= PREMIUM_SKIN_PRICE_THRESHOLD:
+				set_gun_skin_premium(wid, skey, true)
 
 
 func get_kill_reward() -> int:
@@ -1246,19 +1361,18 @@ func get_gun_skin_price(weapon_id: int, skin_key: String) -> int:
 func set_gun_skin_price(weapon_id: int, skin_key: String, price: int) -> void:
 	if skin_key == "default" or skin_key.is_empty():
 		return
+	var clean_p: int = maxi(0, price)
 	var wk := str(weapon_id)
 	if not gun_skin_prices.has(wk) or not (gun_skin_prices[wk] is Dictionary):
 		gun_skin_prices[wk] = {}
-	(gun_skin_prices[wk] as Dictionary)[skin_key] = maxi(0, price)
+	(gun_skin_prices[wk] as Dictionary)[skin_key] = clean_p
+	set_gun_skin_premium(weapon_id, skin_key, clean_p >= PREMIUM_SKIN_PRICE_THRESHOLD)
 
 
 func is_gun_skin_premium(weapon_id: int, skin_key: String) -> bool:
 	if skin_key == "default" or skin_key.is_empty():
 		return false
-	var wk := str(weapon_id)
-	if premium_gun_skins.has(wk) and premium_gun_skins[wk] is Dictionary:
-		return bool((premium_gun_skins[wk] as Dictionary).get(skin_key, false))
-	return false
+	return get_gun_skin_price(weapon_id, skin_key) >= PREMIUM_SKIN_PRICE_THRESHOLD
 
 
 func set_gun_skin_premium(weapon_id: int, skin_key: String, is_premium: bool) -> void:
@@ -1271,6 +1385,8 @@ func set_gun_skin_premium(weapon_id: int, skin_key: String, is_premium: bool) ->
 		(premium_gun_skins[wk] as Dictionary)[skin_key] = true
 	else:
 		(premium_gun_skins[wk] as Dictionary).erase(skin_key)
+		if (premium_gun_skins[wk] as Dictionary).is_empty():
+			premium_gun_skins.erase(wk)
 
 
 func is_agent_unlocked(arch_idx: int, allow_practice: bool = false) -> bool:
@@ -1421,8 +1537,8 @@ static func _trim_compact_num(val: float, decimals: int) -> String:
 	return s
 
 
-static func get_coin_pack_by_sku(sku: String) -> Dictionary:
-	for p in COIN_SHOP_PACKS:
+func get_coin_pack_by_sku(sku: String) -> Dictionary:
+	for p in get_coin_shop_packs():
 		if str(p.get("sku", "")) == sku:
 			return p
 	return {}
@@ -1635,7 +1751,10 @@ func get_default_crate_tables() -> Dictionary:
 
 func load_crate_tables() -> void:
 	crate_tables = get_default_crate_tables()
-	for path in [CRATE_TABLES_PATH, USER_CRATE_TABLES_PATH]:
+	var crate_paths: Array[String] = [CRATE_TABLES_PATH]
+	if OS.has_feature("editor"):
+		crate_paths.append(USER_CRATE_TABLES_PATH)
+	for path in crate_paths:
 		if not FileAccess.file_exists(path):
 			continue
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -1647,6 +1766,8 @@ func load_crate_tables() -> void:
 
 
 func save_crate_tables(save_to_project: bool = true) -> bool:
+	if not OS.has_feature("editor"):
+		return false
 	var txt: String = JSON.stringify(crate_tables, "\t")
 	var ok_any: bool = false
 	var uf := FileAccess.open(USER_CRATE_TABLES_PATH, FileAccess.WRITE)
@@ -1682,6 +1803,8 @@ func can_open_free_daily_crate() -> bool:
 
 func get_crate_skin_pools() -> Dictionary:
 	var prem_pool: Array[Dictionary] = []
+	var rare_pool: Array[Dictionary] = []
+	var common_pool: Array[Dictionary] = []
 	var basic_pool: Array[Dictionary] = []
 	var ach_mgr: Node = get_node_or_null("/root/AchievementManager")
 	for wid in SHOP_WEAPON_IDS:
@@ -1694,16 +1817,24 @@ func get_crate_skin_pools() -> Dictionary:
 			if ach_mgr != null and ach_mgr.is_skin_achievement_exclusive(wid, skey):
 				continue
 			var price: int = get_gun_skin_price(wid, skey)
-			var entry: Dictionary = {"weapon_id": wid, "skin_key": skey, "price": price}
-			if price >= PREMIUM_SKIN_PRICE_THRESHOLD or is_gun_skin_premium(wid, skey):
+			var tier_key: String = get_skin_tier_for_price(price)
+			var entry: Dictionary = {"weapon_id": wid, "skin_key": skey, "price": price, "tier": tier_key}
+			if tier_key == "premium":
 				prem_pool.append(entry)
-			else:
+			elif tier_key == "rare":
+				rare_pool.append(entry)
 				basic_pool.append(entry)
+			else:
+				common_pool.append(entry)
+				basic_pool.append(entry)
+	if prem_pool.is_empty():
+		for e in rare_pool:
+			prem_pool.append(e)
 	if prem_pool.is_empty():
 		for e in basic_pool:
 			if str(e["skin_key"]) in ["gold", "crimson_royal", "nebula"]:
 				prem_pool.append(e)
-	return {"premium": prem_pool, "basic": basic_pool}
+	return {"premium": prem_pool, "rare": rare_pool, "common": common_pool, "basic": basic_pool}
 
 
 func open_crate(is_premium_crate: bool, use_free_daily: bool = false) -> Dictionary:
@@ -1763,7 +1894,7 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 				eff_w = 0.0
 			else:
 				eff_w = base_w / rare_divisor
-		elif etype in ["basic_skin", "specific_skin", "unlock_agent", "dummy_gear", "double_coins"]:
+		elif etype in ["rare_skin", "basic_skin", "specific_skin", "unlock_agent", "dummy_gear", "double_coins"]:
 			if etype == "unlock_agent" and not is_premium_crate:
 				eff_w = 0.0
 			else:
@@ -1799,6 +1930,8 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 
 	var pools: Dictionary = get_crate_skin_pools()
 	var prem_pool: Array = pools["premium"] as Array
+	var rare_pool: Array = pools["rare"] as Array
+	var common_pool: Array = pools["common"] as Array
 	var basic_pool: Array = pools["basic"] as Array
 	var ctype: String = str(chosen.get("type", "coins"))
 	if not is_premium_crate and ctype == "premium_skin":
@@ -1934,25 +2067,37 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 			"color": Color(0.86, 0.48, 1.0)
 		}
 
-	if ctype == "specific_skin" or ctype == "premium_skin" or ctype == "basic_skin":
+	if ctype == "specific_skin" or ctype == "premium_skin" or ctype == "rare_skin" or ctype == "basic_skin":
 		var wid: int = -1
 		var skey: String = ""
+		var tier_key: String = "common"
 		var is_prem_drop: bool = (ctype == "premium_skin")
 		if ctype == "specific_skin":
 			wid = int(chosen.get("weapon_id", 0))
 			skey = str(chosen.get("skin_key", "gold"))
 			var ach_m: Node = get_node_or_null("/root/AchievementManager")
-			is_prem_drop = (get_gun_skin_price(wid, skey) >= PREMIUM_SKIN_PRICE_THRESHOLD or is_gun_skin_premium(wid, skey))
+			tier_key = get_gun_skin_tier(wid, skey)
+			is_prem_drop = (tier_key == "premium")
 			if (ach_m != null and ach_m.is_skin_achievement_exclusive(wid, skey)) or (is_prem_drop and (daily_premium_skin_won or not is_premium_crate)):
 				ctype = "coins"
 		else:
-			var pool: Array = prem_pool if ctype == "premium_skin" else basic_pool
+			var pool: Array = common_pool if not common_pool.is_empty() else basic_pool
+			if ctype == "premium_skin":
+				pool = prem_pool
+				tier_key = "premium"
+			elif ctype == "rare_skin":
+				pool = rare_pool if not rare_pool.is_empty() else basic_pool
+				tier_key = "rare"
+			else:
+				tier_key = "common"
 			if pool.is_empty():
 				ctype = "coins"
 			else:
 				var pick: Dictionary = pool[randi() % pool.size()] as Dictionary
 				wid = int(pick["weapon_id"])
 				skey = str(pick["skin_key"])
+				tier_key = str(pick.get("tier", tier_key))
+				is_prem_drop = (tier_key == "premium")
 		if ctype != "coins" and wid >= 0 and not skey.is_empty():
 			var wd := WeaponData.get_weapon(wid, 0, 0)
 			var sname: String = get_gun_skin_name(wid, skey)
@@ -1969,13 +2114,19 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 				grant_gun_skin(wid, skey)
 			if has_node("/root/AchievementManager"):
 				get_node("/root/AchievementManager").record_crate_opened(is_premium_crate)
+			var out_kind: String = "basic_skin"
+			if tier_key == "premium":
+				out_kind = "premium_skin"
+			elif tier_key == "rare":
+				out_kind = "rare_skin"
 			return {
 				"ok": true,
-				"kind": "premium_skin" if is_prem_drop else "basic_skin",
+				"kind": out_kind,
 				"weapon_id": wid,
 				"weapon_name": wd.display_name,
 				"skin_key": skey,
 				"skin_name": sname,
+				"skin_tier": tier_key,
 				"agent_id": -1,
 				"agent_name": "",
 				"agent_title": "",
@@ -1988,7 +2139,7 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 				"item_value": skin_val,
 				"label": "%s — %s" % [wd.display_name, sname],
 				"short_label": sname,
-				"color": Color(1.0, 0.78, 0.18) if is_prem_drop else Color(0.32, 0.86, 1.0)
+				"color": get_skin_tier_color(tier_key)
 			}
 
 	var won: int = maxi(50, int(chosen.get("coins", 400 if is_premium_crate else 200)))

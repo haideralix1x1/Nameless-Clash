@@ -107,7 +107,8 @@ func _make_style(bg: Color, border: Color, _corner: int = 12, margin_h: int = 14
 
 
 func _style_button(btn: Button, _bg: Color, border: Color, _corner: int = 10) -> void:
-	UIStyle.style_layer_button(btn, _variant_for_color(border), "", 14, 10)
+	var icon_name: String = "" if btn.icon != null else UIStyle.infer_icon_for_text(btn.text)
+	UIStyle.style_layer_button(btn, _variant_for_color(border), icon_name, 14, 10)
 
 
 func _build_ui() -> void:
@@ -137,7 +138,7 @@ func _build_ui() -> void:
 
 	var menu_btn := Button.new()
 	menu_btn.text = "< MENU"
-	menu_btn.custom_minimum_size = Vector2(126, 50)
+	menu_btn.custom_minimum_size = Vector2(158, 50)
 	menu_btn.add_theme_font_size_override("font_size", 18)
 	_style_button(menu_btn, Color(0.14, 0.18, 0.26, 0.95), Color(0.55, 0.72, 0.95))
 	menu_btn.pressed.connect(func(): NetworkManager.go_to_main_menu())
@@ -152,7 +153,7 @@ func _build_ui() -> void:
 
 	var garage_btn := Button.new()
 	garage_btn.text = "CUSTOMIZE HERO"
-	garage_btn.custom_minimum_size = Vector2(190, 50)
+	garage_btn.custom_minimum_size = Vector2(228, 50)
 	garage_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(garage_btn, Color(0.20, 0.12, 0.30, 0.95), Color(0.82, 0.48, 1.0))
 	garage_btn.pressed.connect(func(): NetworkManager.go_to_avatar_garage())

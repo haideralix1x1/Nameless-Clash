@@ -101,7 +101,10 @@ static var _pose_overrides_loaded: bool = false
 static func reload_pose_overrides() -> void:
 	_pose_overrides = {"stances": {}, "agents": {}}
 	_pose_overrides_loaded = true
-	for path in ["res://assets/data/pose_overrides.json", "user://pose_overrides.json"]:
+	var pose_paths: Array[String] = ["res://assets/data/pose_overrides.json"]
+	if OS.has_feature("editor"):
+		pose_paths.append("user://pose_overrides.json")
+	for path in pose_paths:
 		if FileAccess.file_exists(path):
 			var txt := FileAccess.get_file_as_string(path)
 			var parsed: Variant = JSON.parse_string(txt)

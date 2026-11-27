@@ -89,7 +89,8 @@ func _style_button(btn: Button, base_bg: Color, accent: Color, _corner: int = 10
 		btn.add_theme_stylebox_override("hover", UIStyle.make_button_stylebox(tex, base_bg.lightened(0.14), 10, 8))
 		btn.add_theme_stylebox_override("pressed", UIStyle.make_button_stylebox(tex, base_bg.darkened(0.22), 10, 8))
 		return
-	UIStyle.style_layer_button(btn, _variant_for_color(accent), "", 12, 8)
+	var icon_name: String = "" if btn.icon != null else UIStyle.infer_icon_for_text(btn.text)
+	UIStyle.style_layer_button(btn, _variant_for_color(accent), icon_name, 12, 8)
 
 
 func _build_ui() -> void:
@@ -119,7 +120,7 @@ func _build_ui() -> void:
 
 	var menu_btn := Button.new()
 	menu_btn.text = "< MENU"
-	menu_btn.custom_minimum_size = Vector2(124, 50)
+	menu_btn.custom_minimum_size = Vector2(158, 50)
 	menu_btn.add_theme_font_size_override("font_size", 18)
 	_style_button(menu_btn, Color(0.14, 0.18, 0.26, 0.95), Color(0.55, 0.72, 0.95))
 	menu_btn.pressed.connect(func(): NetworkManager.go_to_main_menu())
@@ -148,7 +149,7 @@ func _build_ui() -> void:
 
 	var lobby_btn := Button.new()
 	lobby_btn.text = "WIFI LOBBY"
-	lobby_btn.custom_minimum_size = Vector2(146, 50)
+	lobby_btn.custom_minimum_size = Vector2(182, 50)
 	lobby_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(lobby_btn, Color(0.10, 0.22, 0.36, 0.95), Color(0.28, 0.72, 1.0))
 	lobby_btn.pressed.connect(func(): NetworkManager.go_to_lobby())
@@ -156,7 +157,7 @@ func _build_ui() -> void:
 
 	var play_btn := Button.new()
 	play_btn.text = "GUNFIGHT"
-	play_btn.custom_minimum_size = Vector2(148, 50)
+	play_btn.custom_minimum_size = Vector2(184, 50)
 	play_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(play_btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.28, 0.92, 0.45))
 	play_btn.pressed.connect(func():

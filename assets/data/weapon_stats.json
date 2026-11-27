@@ -112,10 +112,10 @@
 	"18": {
 		"bullet_range": 820.0,
 		"bullet_speed": 675.0,
-		"damage": 110,
+		"damage": 110.0,
 		"fire_interval": 0.72,
-		"mag_size": 3,
-		"pellet_count": 1,
+		"mag_size": 3.0,
+		"pellet_count": 1.0,
 		"recoil_impulse": 110.0,
 		"reload_time": 1.9,
 		"spread_deg": 2.0
@@ -185,6 +185,17 @@
 		"recoil_impulse": 24.0,
 		"reload_time": 1.35,
 		"spread_deg": 1.5
+	},
+	"24": {
+		"bullet_range": 1350.0,
+		"bullet_speed": 1675.0,
+		"damage": 31,
+		"fire_interval": 0.18,
+		"mag_size": 20,
+		"pellet_count": 1,
+		"recoil_impulse": 55.0,
+		"reload_time": 1.7,
+		"spread_deg": 1.4
 	},
 	"3": {
 		"bullet_range": 650.0,

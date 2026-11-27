@@ -35,16 +35,16 @@ const TEX_FLOOR_SHEET: Texture2D = preload("res://assets/sprites/weapons_floor_s
 const TEX_AGENT_SHEET: Texture2D = preload("res://assets/sprites/weapons_agent_sheet.png")
 const SELECTION_COLS: int = 16
 const SELECTION_ROWS: int = 10
-const FLOOR_COLS: int = 6
+const FLOOR_COLS: int = 8
 const AGENT_COLS: int = 11
 
 const SELECTION_COL_BY_ID: Dictionary = {
 	0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10,
-	12: 10, 14: 2,
-	18: 11, 19: 12, 20: 13, 21: 14, 23: 15
+	14: 2,
+	18: 11, 20: 13, 21: 14, 23: 15, 24: 12
 }
 const FLOOR_COL_BY_ID: Dictionary = {
-	11: 0, 13: 1, 15: 2, 16: 3, 17: 4, 22: 5
+	11: 0, 13: 1, 15: 2, 16: 3, 17: 4, 22: 5, 12: 6, 19: 7
 }
 const AGENT_COL_BY_STYLE: Dictionary = {
 	"scythe": 0,
@@ -116,7 +116,10 @@ static func load_weapon_muzzles() -> Dictionary:
 		return _muzzle_cache
 	_muzzle_cache_loaded = true
 	_muzzle_cache = {}
-	for path in [WEAPON_MUZZLES_PATH, USER_WEAPON_MUZZLES_PATH]:
+	var muzzle_paths: Array[String] = [WEAPON_MUZZLES_PATH]
+	if OS.has_feature("editor"):
+		muzzle_paths.append(USER_WEAPON_MUZZLES_PATH)
+	for path in muzzle_paths:
 		if not FileAccess.file_exists(path):
 			continue
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -144,6 +147,8 @@ static func get_weapon_muzzle_override(weapon_id: int) -> Dictionary:
 
 
 static func save_weapon_muzzles(data: Dictionary, save_to_project: bool = true) -> bool:
+	if not OS.has_feature("editor"):
+		return false
 	var clean: Dictionary = {}
 	for k in data.keys():
 		if data[k] is Dictionary:
@@ -204,6 +209,74 @@ const RESOURCE_PATHS: Array[String] = [
 	"res://assets/weapons/weapon_10_rpg7.tres"
 ]
 
+const WEAPON_CATEGORY_GROUPS: Array[Dictionary] = [
+	{"key": "rifles",     "label": "RIFLES",          "color": Color(0.45, 0.90, 0.56), "ids": [0, 1, 2, 23, 24, 22]},
+	{"key": "smgs",       "label": "SMGS",            "color": Color(0.95, 0.72, 0.32), "ids": [3, 4]},
+	{"key": "shotguns",   "label": "SHOTGUNS",        "color": Color(0.84, 0.54, 1.00), "ids": [5, 6]},
+	{"key": "snipers",    "label": "SNIPERS",         "color": Color(0.42, 0.84, 1.00), "ids": [7, 8]},
+	{"key": "pistols",    "label": "PISTOLS",         "color": Color(0.76, 0.86, 0.96), "ids": [9, 20]},
+	{"key": "explosives", "label": "EXPLOSIVES",      "color": Color(1.00, 0.48, 0.42), "ids": [10, 18, 12]},
+	{"key": "special",    "label": "SPECIAL / FLOOR", "color": Color(0.98, 0.84, 0.36), "ids": [17, 11, 13, 15, 16, 19, 14]}
+]
+
+
+static func get_weapon_category_groups(filter_ids: Array = []) -> Array[Dictionary]:
+	var use_filter: bool = not filter_ids.is_empty()
+	var seen: Dictionary = {}
+	var out: Array[Dictionary] = []
+	for grp in WEAPON_CATEGORY_GROUPS:
+		var kept: Array[int] = []
+		for wid_v in (grp["ids"] as Array):
+			var wid: int = int(wid_v)
+			if is_weapon_removed(wid):
+				continue
+			if use_filter and not filter_ids.has(wid):
+				continue
+			kept.append(wid)
+			seen[wid] = true
+		if not kept.is_empty():
+			out.append({
+				"key": str(grp["key"]),
+				"label": str(grp["label"]),
+				"color": grp["color"],
+				"ids": kept
+			})
+	var extra: Array[int] = []
+	var pool: Array = []
+	if use_filter:
+		pool = filter_ids
+	else:
+		pool = range(get_total_weapon_count())
+	for wid_v in pool:
+		var wid: int = int(wid_v)
+		if is_weapon_removed(wid) or seen.has(wid):
+			continue
+		seen[wid] = true
+		extra.append(wid)
+	if not extra.is_empty():
+		out.append({
+			"key": "other",
+			"label": "OTHER",
+			"color": Color(0.75, 0.82, 0.90),
+			"ids": extra
+		})
+	return out
+
+
+static func get_weapon_category_label(weapon_id: int) -> String:
+	for grp in WEAPON_CATEGORY_GROUPS:
+		if (grp["ids"] as Array).has(weapon_id):
+			return str(grp["label"])
+	return "OTHER"
+
+
+static func get_weapon_category_color(weapon_id: int) -> Color:
+	for grp in WEAPON_CATEGORY_GROUPS:
+		if (grp["ids"] as Array).has(weapon_id):
+			return grp["color"] as Color
+	return Color(0.75, 0.82, 0.90)
+
+
 const GUN_PRESETS: Array[Dictionary] = [
 	{
 		"name": "Assault Specialist",
@@ -246,6 +319,34 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_reduce": 0.15,
 		"desc": "SCAR-L + Uzi + 3 Cluster • Med Shield / Light Helmet",
 		"accent": "orange"
+	},
+	{
+		"name": "M416 Commando",
+		"primary": 23,
+		"secondary": 20,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"shield_tier": "light",
+		"shield_hp": 35,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "M416 + Suppressed Pistol + 3 Frag • Light Shield / Med Helmet",
+		"accent": "blue"
+	},
+	{
+		"name": "G3 Vanguard",
+		"primary": 24,
+		"secondary": 9,
+		"bombs": 3,
+		"bomb_type": "frag",
+		"shield_tier": "medium",
+		"shield_hp": 50,
+		"helmet_tier": "medium",
+		"helmet_hp": 30,
+		"helmet_reduce": 0.25,
+		"desc": "G3 + Glock 21 + 3 Frag • Med Shield & Helmet",
+		"accent": "green"
 	},
 	{
 		"name": "Breacher CQB",
@@ -314,13 +415,13 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "light",
 		"helmet_hp": 20,
 		"helmet_reduce": 0.15,
-		"desc": "Bazooka + Glock 21 + 4 Cluster • Heavy Shield / Light Helmet",
+		"desc": "RPG 7 + Glock 21 + 4 Cluster • Heavy Shield / Light Helmet",
 		"accent": "red"
 	},
 	{
 		"name": "Tactical Disruptor",
 		"primary": 18,
-		"secondary": 19,
+		"secondary": 20,
 		"bombs": 2,
 		"bomb_type": "frag",
 		"shield_tier": "medium",
@@ -328,22 +429,8 @@ const GUN_PRESETS: Array[Dictionary] = [
 		"helmet_tier": "medium",
 		"helmet_hp": 30,
 		"helmet_reduce": 0.25,
-		"desc": "Nade Gun (3/3) + Stun Gun (4s) + 2 Frag • Med Shield & Helmet",
+		"desc": "Nade Gun (3/3) + Suppressed Pistol + 2 Frag • Med Shield & Helmet",
 		"accent": "sky"
-	},
-	{
-		"name": "M416 Commando",
-		"primary": 23,
-		"secondary": 20,
-		"bombs": 3,
-		"bomb_type": "frag",
-		"shield_tier": "light",
-		"shield_hp": 35,
-		"helmet_tier": "medium",
-		"helmet_hp": 30,
-		"helmet_reduce": 0.25,
-		"desc": "M416 + Suppressed Pistol + 3 Frag • Light Shield / Med Helmet",
-		"accent": "blue"
 	}
 ]
 
@@ -398,7 +485,7 @@ static func sanitize_weapon_id(weapon_id: int) -> int:
 		return 11
 	if weapon_id == 21:
 		return 5 if is_weapon_allowed(5) else 9
-	if weapon_id >= 11 and weapon_id <= 23:
+	if weapon_id >= 11 and weapon_id <= 24:
 		var nm: Node = _get_network_manager()
 		if (weapon_id == 12 or weapon_id == 18) and nm != null and not bool(nm.get("allow_explosives")):
 			return 11
@@ -411,12 +498,7 @@ static func sanitize_weapon_id(weapon_id: int) -> int:
 
 
 static func get_pickup_weapon_ids() -> Array[int]:
-	var out: Array[int] = [11, 13, 15, 16]
-	var nm: Node = _get_network_manager()
-	var exp_ok: bool = true if nm == null else bool(nm.get("allow_explosives"))
-	if exp_ok:
-		out.append(12)
-	return out
+	return [11, 13, 15, 16, 19]
 
 
 static func get_effective_preset(preset_idx: int) -> Dictionary:
@@ -451,7 +533,7 @@ static func get_builtin_default_ranges() -> Dictionary:
 		"5": 340.0, "6": 360.0, "7": 1500.0, "8": 1350.0, "9": 620.0,
 		"10": 1100.0, "11": 280.0, "12": 1250.0, "13": 1050.0,
 		"14": 820.0, "15": 950.0, "16": 750.0, "17": 860.0,
-		"18": 820.0, "19": 580.0, "20": 680.0, "21": 380.0, "22": 920.0, "23": 950.0,
+		"18": 820.0, "19": 580.0, "20": 680.0, "21": 380.0, "22": 920.0, "23": 950.0, "24": 1120.0,
 	}
 
 
@@ -459,7 +541,10 @@ static func load_weapon_ranges_dict() -> Dictionary:
 	if _range_cache_loaded and not _range_cache.is_empty():
 		return _range_cache.duplicate()
 	var out: Dictionary = get_builtin_default_ranges()
-	for path in [WEAPON_RANGES_PATH, USER_WEAPON_RANGES_PATH]:
+	var range_paths: Array[String] = [WEAPON_RANGES_PATH]
+	if OS.has_feature("editor"):
+		range_paths.append(USER_WEAPON_RANGES_PATH)
+	for path in range_paths:
 		if FileAccess.file_exists(path):
 			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 			if parsed is Dictionary:
@@ -480,7 +565,10 @@ static func load_weapon_stats_dict() -> Dictionary:
 	if _stats_cache_loaded:
 		return _stats_cache.duplicate(true)
 	var out: Dictionary = {}
-	for path in [WEAPON_STATS_PATH, USER_WEAPON_STATS_PATH]:
+	var stats_paths: Array[String] = [WEAPON_STATS_PATH]
+	if OS.has_feature("editor"):
+		stats_paths.append(USER_WEAPON_STATS_PATH)
+	for path in stats_paths:
 		if FileAccess.file_exists(path):
 			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 			if parsed is Dictionary:
@@ -501,12 +589,12 @@ static func reload_weapon_stats() -> void:
 
 
 static func get_total_weapon_count() -> int:
-	return 24
+	return 25
 
 
 static func get_base_weapon(weapon_id: int) -> WeaponData:
 	var ranges: Dictionary = get_builtin_default_ranges()
-	if weapon_id >= 11 and weapon_id <= 23:
+	if weapon_id >= 11 and weapon_id <= 24:
 		var sw: WeaponData = _get_special_weapon(weapon_id)
 		sw.bullet_range = float(ranges.get(str(weapon_id), sw.bullet_range if sw.bullet_range > 0.0 else 800.0))
 		return sw
@@ -535,7 +623,7 @@ static func _apply_stat_overrides(w: WeaponData, key: String, ranges: Dictionary
 static func get_weapon(weapon_id: int, skin_id: int = 0, rail_mod: int = 0) -> WeaponData:
 	var ranges: Dictionary = load_weapon_ranges_dict()
 	var stats: Dictionary = load_weapon_stats_dict()
-	if weapon_id >= 11 and weapon_id <= 23:
+	if weapon_id >= 11 and weapon_id <= 24:
 		var sw: WeaponData = _get_special_weapon(weapon_id)
 		_apply_stat_overrides(sw, str(weapon_id), ranges, stats)
 		return sw
@@ -597,7 +685,7 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 		12:
 			w.code_name = "homing_rpg"
 			w.display_name = "Follow Rocket"
-			w.description = "Homing missile that tracks enemies! Pickup only."
+			w.description = "Homing missile that tracks enemies! Treasure Box exclusive."
 			w.damage = 78
 			w.fire_interval = 1.25
 			w.mag_size = 1
@@ -730,7 +818,7 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.code_name = "stun_gun"
 			w.display_name = "Stun Gun"
 			w.category = "Tactical"
-			w.description = "Electric taser pistol that stuns hit players for 4 seconds."
+			w.description = "Electric taser pistol that stuns hit players for 4 seconds. Pickup only."
 			w.damage = 12
 			w.stun_duration = 4.0
 			w.fire_interval = 0.65
@@ -802,4 +890,24 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.bullet_color = Color(1.0, 0.88, 0.36)
 			w.sound_path = "res://assets/audio/shoot_m4a1.wav"
 			w.sprite_frame = 1
+		24:
+			w.code_name = "g3"
+			w.display_name = "G3"
+			w.category = "Battle Rifle"
+			w.description = "Hard-hitting 7.62 battle rifle with long reach, crisp accuracy, and punchy recoil."
+			w.damage = 31
+			w.fire_interval = 0.125
+			w.mag_size = 20
+			w.initial_reserve = -1
+			w.reload_time = 1.65
+			w.recoil_impulse = 56.0
+			w.vertical_recoil_bias = 0.018
+			w.bullet_speed = 1680.0
+			w.spread_deg = 1.4
+			w.max_zoom_level = 4
+			w.move_speed_multiplier = 0.99
+			w.muzzle_flash_scale = 1.05
+			w.bullet_color = Color(1.0, 0.80, 0.28)
+			w.sound_path = "res://assets/audio/shoot_ak47.wav"
+			w.sprite_frame = 2
 	return w

@@ -1165,7 +1165,10 @@ func _on_interactable_toggled(inter_idx: int, new_state: bool) -> void:
 				_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(42.0, 0.0), 12.0, false), "abil_orb", slots[1])
 		else:
 			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(-58.0, 0.0), 15.0, false), "health", 100)
-			var tb_weapon_id: int = 22 if (randi() % 2 == 0) else 17
+			var tb_pool: Array[int] = [22, 17]
+			if NetworkManager.allow_explosives:
+				tb_pool.append(12)
+			var tb_weapon_id: int = tb_pool[randi() % tb_pool.size()]
 			_spawn_treasure_drop(origin_p, _snap_to_floor(origin_p + Vector2(58.0, 0.0), 12.0, false), "weapon", tb_weapon_id)
 			if NetworkManager.allow_explosives:
 				var b_type_str: String = "frag"
@@ -1459,9 +1462,9 @@ func _try_bot_pickup_weapon_crate(crate_idx: int, bot: Node2D) -> bool:
 	if val == cur_w:
 		return false
 	var cd: float = float(bot.get("_bot_weapon_pickup_cd")) if "_bot_weapon_pickup_cd" in bot else 0.0
-	var is_treasure_gun: bool = bool(entry.get("from_treasure", false)) or val == 17 or val == 22
+	var is_treasure_gun: bool = bool(entry.get("from_treasure", false)) or val == 17 or val == 22 or val == 12
 	if is_treasure_gun:
-		# High chance to pick up Treasure Box exclusive weapons (Groza / Machine Gun)
+		# High chance to pick up Treasure Box exclusive weapons (Groza / Machine Gun / Follow Rocket)
 		if randf() > 0.90:
 			if "_bot_weapon_pickup_cd" in bot:
 				bot.set("_bot_weapon_pickup_cd", 3.0)
@@ -1647,7 +1650,7 @@ func get_bot_pickup_target(bot: Node2D, max_dist: float = 520.0, in_combat: bool
 					base_pri = 105.0
 			"weapon":
 				if not agent_mode and val != cur_w:
-					var is_treasure_gun: bool = bool(c.get("from_treasure", false)) or val == 17 or val == 22
+					var is_treasure_gun: bool = bool(c.get("from_treasure", false)) or val == 17 or val == 22 or val == 12
 					if is_treasure_gun:
 						if not in_combat or d <= 220.0:
 							base_pri = 138.0
@@ -1681,7 +1684,7 @@ func _apply_pickup_weapon_sprite(w_spr: Sprite2D, w_id: int) -> void:
 	w_spr.vframes = int(spec["vframes"])
 	w_spr.frame = int(spec["frame"])
 	w_spr.modulate = ProfileManager.get_gun_skin_tint(w_id, eq_key)
-	w_spr.scale = Vector2(0.313, 0.313) if w_id == 17 else Vector2(0.278, 0.278)
+	w_spr.scale = Vector2(0.313, 0.313) if w_id == 17 else (Vector2(0.295, 0.295) if w_id == 12 else Vector2(0.278, 0.278))
 
 
 func _pick_safest_spawn() -> Vector2:

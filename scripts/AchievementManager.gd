@@ -55,10 +55,10 @@ func _build_default_100() -> void:
 	# 2. GUNMASTER (17: 1 Main + 16 Subs)
 	_add_ach("gun_master", "GunMaster", "Complete all 16 GunMaster weapon sub-achievements.", "GunMaster", "gunmaster_subs_done", 16, 5000, "", "23:nebula", true)
 	var gm_guns: Array[Array] = [
-		[0, "AK47"], [1, "M16A4"], [2, "SCAR-L"], [3, "SMG"],
-		[4, "Uzi"], [5, "Shotgun"], [6, "Pump Shotgun"], [7, "Sniper"],
-		[8, "Auto Sniper"], [9, "Glock 21"], [10, "Bazooka"], [11, "Flamethrower"],
-		[13, "Plasma Cannon"], [18, "Nade Gun"], [20, "Suppressed Pistol"], [23, "M416"]
+		[0, "AK47"], [1, "M16A4"], [2, "SCAR-L"], [23, "M416"],
+		[3, "SMG"], [4, "Uzi"], [5, "Shotgun"], [6, "Pump Shotgun"],
+		[7, "Sniper"], [8, "Auto Sniper"], [9, "Glock 21"], [20, "Suppressed Pistol"],
+		[10, "RPG 7"], [18, "Nade Gun"], [11, "Flamethrower"], [13, "Plasma Cannon"]
 	]
 	for g in gm_guns:
 		var wid: int = int(g[0])
@@ -152,7 +152,10 @@ func _build_default_100() -> void:
 
 
 func load_config() -> void:
-	for path in [CONFIG_PATH, USER_CONFIG_PATH]:
+	var cfg_paths: Array[String] = [CONFIG_PATH]
+	if OS.has_feature("editor"):
+		cfg_paths.append(USER_CONFIG_PATH)
+	for path in cfg_paths:
 		if not FileAccess.file_exists(path):
 			continue
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -177,6 +180,8 @@ func load_config() -> void:
 
 
 func save_config(save_to_project: bool = true) -> bool:
+	if not OS.has_feature("editor"):
+		return false
 	var out: Dictionary = {}
 	for d in definitions:
 		out[str(d["id"])] = {

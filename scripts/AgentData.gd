@@ -112,11 +112,11 @@ const AGENTS: Array[Dictionary] = [
 			}
 		],
 		"ultimate": {
-			"name": "Target-Follow Bazooka",
+			"name": "Target-Follow RPG 7",
 			"kind": "ult_homing_bazooka",
 			"damage": 100,
 			"color": Color(1.0, 0.35, 0.15),
-			"desc": "Fire a target-tracking bazooka missile that 1-shots on hit."
+			"desc": "Fire a target-tracking RPG 7 missile that 1-shots on hit."
 		}
 	},
 	# 1: Mike Jones // The Explorer

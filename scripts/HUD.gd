@@ -2192,7 +2192,23 @@ func _build_preset_overlay() -> void:
 	scroll.add_child(list_v)
 
 	_preset_cards.clear()
+	var last_cat: String = ""
 	for i in range(WeaponData.GUN_PRESETS.size()):
+		var pri_id: int = int(WeaponData.GUN_PRESETS[i].get("primary", 0))
+		var cat_lbl: String = WeaponData.get_weapon_category_label(pri_id)
+		if cat_lbl != last_cat:
+			var hdr_lbl := Label.new()
+			hdr_lbl.text = cat_lbl
+			hdr_lbl.add_theme_font_size_override("font_size", 12)
+			hdr_lbl.modulate = WeaponData.get_weapon_category_color(pri_id)
+			if not last_cat.is_empty():
+				var pad := MarginContainer.new()
+				pad.add_theme_constant_override("margin_top", 6)
+				pad.add_child(hdr_lbl)
+				list_v.add_child(pad)
+			else:
+				list_v.add_child(hdr_lbl)
+			last_cat = cat_lbl
 		var card := Button.new()
 		card.custom_minimum_size = Vector2(0, 74)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL

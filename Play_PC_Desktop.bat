@@ -6,4 +6,4 @@ if not exist "%GODOT_EXE%" (
     pause
     exit /b 1
 )
-start "" "%GODOT_EXE%" --path "%~dp0." -w --resolution 1280x720
+start "" "%GODOT_EXE%" --path "%~dp0." -w --resolution 1920x1080

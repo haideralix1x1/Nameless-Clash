@@ -10,7 +10,7 @@ const STANCE_LABELS: Array[String] = [
 	"Main Menu / Unarmed (none)",
 	"Rifle Stance",
 	"Pistol Stance",
-	"Bazooka Stance",
+	"RPG 7 Stance",
 	"Throw Bomb Stance"
 ]
 const ANIMS: Array[String] = ["idle", "run", "jetpack", "firing", "agent_idle", "agent_attack", "dead"]
@@ -125,11 +125,13 @@ var _tab_pose_btn: Button
 var _tab_ui_btn: Button
 var _tab_range_btn: Button
 var _tab_coin_btn: Button
+var _tab_nc_shop_btn: Button
 var _tab_ach_crate_btn: Button
 var _pose_mode_root: VBoxContainer
 var _ui_setter_root: VBoxContainer
 var _range_mode_root: VBoxContainer
 var _coin_mode_root: VBoxContainer
+var _nc_shop_root: VBoxContainer
 var _ach_crate_root: VBoxContainer
 
 var _ac_subtab: int = 0
@@ -176,6 +178,9 @@ var _coin_gun_title_lbl: Label
 var _coin_gun_preview: TextureRect
 var _coin_skin_list_box: VBoxContainer
 var _coin_syncing: bool = false
+var _nc_shop_list_box: GridContainer
+var _nc_shop_status_lbl: Label
+var _nc_shop_pack_editors: Array[Dictionary] = []
 
 const BUNKER_W: float = 2240.0
 const BUNKER_H: float = 1248.0
@@ -255,6 +260,10 @@ var _ui_drag_start_elem: Dictionary = {}
 
 
 func _ready() -> void:
+	if not OS.has_feature("editor"):
+		push_error("Nameless Studio is editor-only and unavailable in exported builds.")
+		get_tree().quit()
+		return
 	_load_pose_data()
 	_weapon_muzzles = WeaponData.load_weapon_muzzles().duplicate(true)
 	_load_ui_layout_data()
@@ -377,6 +386,13 @@ func _build_ui() -> void:
 	_tab_coin_btn.pressed.connect(func(): _switch_editor_tab(3))
 	tab_hbox.add_child(_tab_coin_btn)
 
+	_tab_nc_shop_btn = Button.new()
+	_tab_nc_shop_btn.text = "NC Shop"
+	_tab_nc_shop_btn.toggle_mode = true
+	_tab_nc_shop_btn.custom_minimum_size = Vector2(106, 30)
+	_tab_nc_shop_btn.pressed.connect(func(): _switch_editor_tab(5))
+	tab_hbox.add_child(_tab_nc_shop_btn)
+
 	_tab_ach_crate_btn = Button.new()
 	_tab_ach_crate_btn.text = "Achievements & Crates"
 	_tab_ach_crate_btn.toggle_mode = true
@@ -471,11 +487,10 @@ func _build_ui() -> void:
 	top_hbox.add_child(_make_section_label("Weapon:"))
 	_weapon_opt = OptionButton.new()
 	_weapon_opt.custom_minimum_size = Vector2(110, 0)
-	for w_idx in range(WeaponData.get_total_weapon_count()):
-		if WeaponData.is_weapon_removed(w_idx):
-			continue
-		var wd := WeaponData.get_weapon(w_idx, 0, false)
-		_weapon_opt.add_item("%d: %s" % [w_idx, wd.display_name], w_idx)
+	_populate_grouped_weapon_option(_weapon_opt)
+	var def_w_idx: int = _weapon_opt.get_item_index(0)
+	if def_w_idx >= 0:
+		_weapon_opt.select(def_w_idx)
 	_weapon_opt.item_selected.connect(func(idx: int):
 		_clear_temp_preview()
 		_preview_weapon_id = _weapon_opt.get_item_id(idx)
@@ -899,6 +914,7 @@ func _build_ui() -> void:
 	_build_ui_setter_tab(main_vbox)
 	_build_range_editor_tab(main_vbox)
 	_build_coin_economy_tab(main_vbox)
+	_build_nc_shop_tab(main_vbox)
 	_build_ach_and_crate_tab(main_vbox)
 	_switch_editor_tab(0)
 
@@ -909,6 +925,33 @@ func _make_section_label(txt: String) -> Label:
 	l.add_theme_font_size_override("font_size", 14)
 	l.modulate = Color(0.86, 0.90, 0.96)
 	return l
+
+
+func _make_weapon_group_header(title: String, col: Color, top_pad: int = 6) -> Control:
+	var lbl := Label.new()
+	lbl.text = title
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.modulate = col
+	if top_pad <= 0:
+		return lbl
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_top", top_pad)
+	pad.add_child(lbl)
+	return pad
+
+
+func _populate_grouped_weapon_option(opt: OptionButton, filter_ids: Array = [], exclude_ids: Array = []) -> void:
+	for grp in WeaponData.get_weapon_category_groups(filter_ids):
+		var added_sep: bool = false
+		for wid_v in (grp["ids"] as Array):
+			var wid: int = int(wid_v)
+			if exclude_ids.has(wid):
+				continue
+			if not added_sep:
+				opt.add_separator(str(grp["label"]))
+				added_sep = true
+			var wd := WeaponData.get_weapon(wid, 0, 0)
+			opt.add_item("%d: %s" % [wid, wd.display_name], wid)
 
 
 func _add_spin_row(parent: Control, label_txt: String, min_v: float, max_v: float, step_v: float) -> SpinBox:
@@ -1008,12 +1051,13 @@ func _open_copy_to_guns_dialog() -> void:
 	vb.add_child(quick_hb)
 
 	var gun_cbs: Array[CheckBox] = []
+	var gun_cb_wids: Array[int] = []
 	var btn_rifles := Button.new()
 	btn_rifles.text = "Rifles"
 	btn_rifles.pressed.connect(func():
 		for i in range(gun_cbs.size()):
 			if not gun_cbs[i].disabled:
-				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(i) == "rifle")
+				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(gun_cb_wids[i]) == "rifle")
 	)
 	quick_hb.add_child(btn_rifles)
 
@@ -1022,7 +1066,7 @@ func _open_copy_to_guns_dialog() -> void:
 	btn_pistols.pressed.connect(func():
 		for i in range(gun_cbs.size()):
 			if not gun_cbs[i].disabled:
-				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(i) == "pistol")
+				gun_cbs[i].button_pressed = (ModularCharacter.get_weapon_stance(gun_cb_wids[i]) == "pistol")
 	)
 	quick_hb.add_child(btn_pistols)
 
@@ -1043,29 +1087,42 @@ func _open_copy_to_guns_dialog() -> void:
 	)
 	quick_hb.add_child(btn_none)
 
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 4)
-	vb.add_child(grid)
+	var gun_scroll := ScrollContainer.new()
+	gun_scroll.custom_minimum_size = Vector2(0, 260)
+	gun_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gun_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.add_child(gun_scroll)
 
-	for w_idx in range(WeaponData.get_total_weapon_count()):
-		var wd := WeaponData.get_weapon(w_idx, 0, false)
-		var cb := CheckBox.new()
-		var is_src: bool = (_per_weapon_scope and w_idx == _preview_weapon_id)
-		cb.text = ("%d: %s (Source)" % [w_idx, wd.display_name]) if is_src else ("%d: %s" % [w_idx, wd.display_name])
-		cb.disabled = is_src
-		if WeaponData.is_weapon_removed(w_idx):
-			cb.disabled = true
-			cb.visible = false
-		grid.add_child(cb)
-		gun_cbs.append(cb)
+	var gun_groups_vb := VBoxContainer.new()
+	gun_groups_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gun_groups_vb.add_theme_constant_override("separation", 4)
+	gun_scroll.add_child(gun_groups_vb)
+
+	var dlg_groups: Array[Dictionary] = WeaponData.get_weapon_category_groups()
+	for g_idx in range(dlg_groups.size()):
+		var grp: Dictionary = dlg_groups[g_idx]
+		gun_groups_vb.add_child(_make_weapon_group_header(str(grp["label"]), grp["color"] as Color, 6 if g_idx > 0 else 0))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 4)
+		gun_groups_vb.add_child(grid)
+		for wid_v in (grp["ids"] as Array):
+			var w_idx: int = int(wid_v)
+			var wd := WeaponData.get_weapon(w_idx, 0, 0)
+			var cb := CheckBox.new()
+			var is_src: bool = (_per_weapon_scope and w_idx == _preview_weapon_id)
+			cb.text = ("%d: %s (Source)" % [w_idx, wd.display_name]) if is_src else ("%d: %s" % [w_idx, wd.display_name])
+			cb.disabled = is_src
+			grid.add_child(cb)
+			gun_cbs.append(cb)
+			gun_cb_wids.append(w_idx)
 
 	dlg.confirmed.connect(func():
 		var target_ids: Array[int] = []
 		for i in range(gun_cbs.size()):
 			if gun_cbs[i].button_pressed and not gun_cbs[i].disabled:
-				target_ids.append(i)
+				target_ids.append(gun_cb_wids[i])
 		if target_ids.is_empty():
 			if is_instance_valid(_status_lbl):
 				_status_lbl.text = "No target guns selected."
@@ -1635,6 +1692,8 @@ func _switch_editor_tab(tab_idx: int) -> void:
 		_range_mode_root.visible = (tab_idx == 2)
 	if _coin_mode_root != null:
 		_coin_mode_root.visible = (tab_idx == 3)
+	if _nc_shop_root != null:
+		_nc_shop_root.visible = (tab_idx == 5)
 	if _ach_crate_root != null:
 		_ach_crate_root.visible = (tab_idx == 4)
 	if _tab_pose_btn != null:
@@ -1649,11 +1708,16 @@ func _switch_editor_tab(tab_idx: int) -> void:
 	if _tab_coin_btn != null:
 		_tab_coin_btn.set_pressed_no_signal(tab_idx == 3)
 		_tab_coin_btn.modulate = Color(1.0, 0.86, 0.28) if tab_idx == 3 else Color(0.75, 0.80, 0.88)
+	if _tab_nc_shop_btn != null:
+		_tab_nc_shop_btn.set_pressed_no_signal(tab_idx == 5)
+		_tab_nc_shop_btn.modulate = Color(0.38, 1.0, 0.58) if tab_idx == 5 else Color(0.75, 0.80, 0.88)
 	if _tab_ach_crate_btn != null:
 		_tab_ach_crate_btn.set_pressed_no_signal(tab_idx == 4)
 		_tab_ach_crate_btn.modulate = Color(0.84, 0.58, 1.0) if tab_idx == 4 else Color(0.75, 0.80, 0.88)
 	if tab_idx == 3:
 		_sync_coin_economy_ui()
+	if tab_idx == 5:
+		_refresh_nc_shop_editor()
 	if tab_idx == 4:
 		_refresh_ac_crate_list()
 	if tab_idx != 0:
@@ -2376,19 +2440,21 @@ func _build_range_editor_tab(main_vbox: VBoxContainer) -> void:
 	left_vb.add_theme_constant_override("separation", 5)
 	left_scroll.add_child(left_vb)
 
-	left_vb.add_child(_make_section_label("All Weapons (0..23)"))
-	for wid in range(WeaponData.get_total_weapon_count()):
-		if WeaponData.is_weapon_removed(wid):
-			continue
-		var wd := WeaponData.get_weapon(wid, 0, 0)
-		var btn := Button.new()
-		btn.text = "%d: %s" % [wid, wd.display_name]
-		btn.toggle_mode = true
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.custom_minimum_size = Vector2(0, 30)
-		btn.pressed.connect(func(): _select_range_weapon(wid))
-		left_vb.add_child(btn)
-		_range_gun_btns[wid] = btn
+	var studio_groups: Array[Dictionary] = WeaponData.get_weapon_category_groups()
+	for g_idx in range(studio_groups.size()):
+		var grp: Dictionary = studio_groups[g_idx]
+		left_vb.add_child(_make_weapon_group_header(str(grp["label"]), grp["color"] as Color, 6 if g_idx > 0 else 2))
+		for wid_v in (grp["ids"] as Array):
+			var wid: int = int(wid_v)
+			var wd := WeaponData.get_weapon(wid, 0, 0)
+			var btn := Button.new()
+			btn.text = "%d: %s" % [wid, wd.display_name]
+			btn.toggle_mode = true
+			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			btn.custom_minimum_size = Vector2(0, 30)
+			btn.pressed.connect(func(): _select_range_weapon(wid))
+			left_vb.add_child(btn)
+			_range_gun_btns[wid] = btn
 
 	# 2B. CENTER: Interactive Bunker Base Map Canvas
 	var stage_panel := Panel.new()
@@ -2569,7 +2635,7 @@ func _get_gun_preview_scale_for_wid(wid: int) -> float:
 		17: return 0.27
 		19: return 0.20
 		20: return 0.21
-		22, 23: return 0.25
+		22, 23, 24: return 0.25
 		_: return 0.24
 
 
@@ -2938,6 +3004,13 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	save_btn.custom_minimum_size = Vector2(165, 32)
 	save_btn.modulate = Color(0.42, 1.0, 0.62)
 	save_btn.pressed.connect(func():
+		for sp in [_coin_kill_spin, _coin_treasure_spin, _coin_win_spin, _coin_match_spin, _coin_agent_spin]:
+			if is_instance_valid(sp):
+				(sp as SpinBox).apply()
+		for k in _coin_skin_spins.keys():
+			var s_box = _coin_skin_spins[k]
+			if is_instance_valid(s_box):
+				(s_box as SpinBox).apply()
 		var ok: bool = ProfileManager.save_economy_config(true)
 		_coin_status_lbl.text = "Saved assets/data/coin_economy.json!" if ok else "Failed to save coin_economy.json"
 		_coin_status_lbl.modulate = Color(0.40, 1.0, 0.58) if ok else Color(1.0, 0.42, 0.38)
@@ -3148,15 +3221,20 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	gun_scroll.add_child(gun_list)
 
 	_coin_gun_btns.clear()
-	for wid in ProfileManager.SHOP_WEAPON_IDS:
-		var wd := WeaponData.get_weapon(wid, 0, 0)
-		var b := Button.new()
-		b.text = "%d: %s" % [wid, wd.display_name]
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(0, 32)
-		b.pressed.connect(func(): _select_coin_gun(wid))
-		gun_list.add_child(b)
-		_coin_gun_btns[wid] = b
+	var coin_groups: Array[Dictionary] = WeaponData.get_weapon_category_groups(ProfileManager.SHOP_WEAPON_IDS)
+	for g_idx in range(coin_groups.size()):
+		var grp: Dictionary = coin_groups[g_idx]
+		gun_list.add_child(_make_weapon_group_header(str(grp["label"]), grp["color"] as Color, 6 if g_idx > 0 else 0))
+		for wid_v in (grp["ids"] as Array):
+			var wid: int = int(wid_v)
+			var wd := WeaponData.get_weapon(wid, 0, 0)
+			var b := Button.new()
+			b.text = "%d: %s" % [wid, wd.display_name]
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.custom_minimum_size = Vector2(0, 32)
+			b.pressed.connect(func(): _select_coin_gun(wid))
+			gun_list.add_child(b)
+			_coin_gun_btns[wid] = b
 
 	# RIGHT COLUMN: Individual Skin Prices for Selected Gun
 	var right_panel := PanelContainer.new()
@@ -3191,6 +3269,12 @@ func _build_coin_economy_tab(main_vbox: VBoxContainer) -> void:
 	_coin_gun_title_lbl.add_theme_font_size_override("font_size", 18)
 	_coin_gun_title_lbl.modulate = Color(1.0, 0.90, 0.36)
 	gt_v.add_child(_coin_gun_title_lbl)
+
+	var tier_rule_lbl := Label.new()
+	tier_rule_lbl.text = "Auto Category:  COMMON (< 4,000 NC)  •  RARE (4,000–5,999 NC)  •  PREMIUM (6,000+ NC)"
+	tier_rule_lbl.add_theme_font_size_override("font_size", 11)
+	tier_rule_lbl.modulate = Color(0.76, 0.86, 0.98)
+	gt_v.add_child(tier_rule_lbl)
 
 	var apply_all_btn := Button.new()
 	apply_all_btn.text = "Copy This Gun's Skin Prices To ALL Guns"
@@ -3322,24 +3406,45 @@ func _refresh_coin_skin_rows() -> void:
 		nl.modulate = badge.lightened(0.25)
 		row.add_child(nl)
 
-		var prem_cb := CheckBox.new()
-		prem_cb.text = "Premium"
-		prem_cb.button_pressed = ProfileManager.is_gun_skin_premium(wid, skey)
-		prem_cb.modulate = Color(1.0, 0.86, 0.32) if prem_cb.button_pressed else Color(0.82, 0.86, 0.92)
-		if skey == "default":
-			prem_cb.disabled = true
-			prem_cb.button_pressed = false
-		else:
-			prem_cb.toggled.connect(func(on: bool):
-				ProfileManager.set_gun_skin_premium(wid, skey, on)
-				prem_cb.modulate = Color(1.0, 0.86, 0.32) if on else Color(0.82, 0.86, 0.92)
-			)
-		row.add_child(prem_cb)
+		var tier_pill := PanelContainer.new()
+		tier_pill.custom_minimum_size = Vector2(98, 28)
+		tier_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var tp_sb := StyleBoxFlat.new()
+		tp_sb.set_border_width_all(1)
+		tp_sb.set_corner_radius_all(6)
+		tp_sb.content_margin_left = 8.0
+		tp_sb.content_margin_right = 8.0
+		tp_sb.content_margin_top = 2.0
+		tp_sb.content_margin_bottom = 2.0
+		tier_pill.add_theme_stylebox_override("panel", tp_sb)
+		var tier_lbl := Label.new()
+		tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tier_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		tier_lbl.add_theme_font_size_override("font_size", 11)
+		tier_pill.add_child(tier_lbl)
+		row.add_child(tier_pill)
+
+		var update_tier_pill := func(p_val: int) -> void:
+			if skey == "default":
+				tier_lbl.text = "DEFAULT"
+				var dc := Color(0.72, 0.78, 0.86)
+				tier_lbl.modulate = dc
+				tp_sb.border_color = dc
+				tp_sb.bg_color = dc.darkened(0.78)
+				return
+			var tk: String = ProfileManager.get_skin_tier_for_price(p_val)
+			var tc: Color = ProfileManager.get_skin_tier_color(tk)
+			tier_lbl.text = ProfileManager.get_skin_tier_label(tk)
+			tier_lbl.modulate = tc.lightened(0.18)
+			tp_sb.border_color = tc
+			tp_sb.bg_color = tc.darkened(0.75)
+
+		update_tier_pill.call(cur_price)
 
 		var sb := SpinBox.new()
 		sb.min_value = 0
 		sb.max_value = 50000
-		sb.step = 25
+		sb.step = 1
 		sb.rounded = true
 		sb.suffix = " NC"
 		sb.custom_minimum_size = Vector2(150, 32)
@@ -3349,10 +3454,237 @@ func _refresh_coin_skin_rows() -> void:
 			sb.value = 0
 		else:
 			sb.value_changed.connect(func(v: float):
-				ProfileManager.set_gun_skin_price(wid, skey, int(v))
+				var iv: int = int(v)
+				ProfileManager.set_gun_skin_price(wid, skey, iv)
+				update_tier_pill.call(iv)
 			)
+			var le: LineEdit = sb.get_line_edit()
+			if le != null:
+				le.text_changed.connect(func(raw_txt: String):
+					var clean_txt: String = raw_txt.replace(",", "").replace("NC", "").replace("nc", "").strip_edges()
+					if clean_txt.is_valid_int():
+						var iv: int = clampi(int(clean_txt), 0, 50000)
+						ProfileManager.set_gun_skin_price(wid, skey, iv)
+						update_tier_pill.call(iv)
+				)
 		row.add_child(sb)
 		_coin_skin_spins[skey] = sb
+
+
+func _build_nc_shop_tab(main_vbox: VBoxContainer) -> void:
+	_nc_shop_root = VBoxContainer.new()
+	_nc_shop_root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_nc_shop_root.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_nc_shop_root.add_theme_constant_override("separation", 0)
+	_nc_shop_root.visible = false
+	main_vbox.add_child(_nc_shop_root)
+
+	var top_h := _make_flow_bar(_nc_shop_root, Color(0.10, 0.13, 0.19), 8, 10, 6)
+
+	var hdr := Label.new()
+	hdr.text = "NC SHOP PACKS EDITOR"
+	hdr.add_theme_font_size_override("font_size", 16)
+	hdr.modulate = Color(0.38, 1.0, 0.58)
+	top_h.add_child(hdr)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset Shop Defaults"
+	reset_btn.custom_minimum_size = Vector2(155, 32)
+	reset_btn.pressed.connect(func():
+		ProfileManager.reset_coin_shop_defaults()
+		_refresh_nc_shop_editor()
+		if is_instance_valid(_nc_shop_status_lbl):
+			_nc_shop_status_lbl.text = "Reset NC Shop packs to defaults (click SAVE NC SHOP to write file)."
+			_nc_shop_status_lbl.modulate = Color(1.0, 0.84, 0.35)
+	)
+	top_h.add_child(reset_btn)
+
+	var save_btn := Button.new()
+	save_btn.text = "SAVE NC SHOP"
+	save_btn.custom_minimum_size = Vector2(150, 32)
+	save_btn.modulate = Color(0.42, 1.0, 0.62)
+	save_btn.pressed.connect(func():
+		for ed in _nc_shop_pack_editors:
+			var b_sb: SpinBox = ed.get("base_sb") as SpinBox
+			var bon_sb: SpinBox = ed.get("bonus_sb") as SpinBox
+			if is_instance_valid(b_sb):
+				b_sb.apply()
+			if is_instance_valid(bon_sb):
+				bon_sb.apply()
+		var ok: bool = ProfileManager.save_economy_config(true)
+		if is_instance_valid(_nc_shop_status_lbl):
+			_nc_shop_status_lbl.text = "Saved NC Shop packs to assets/data/coin_economy.json!" if ok else "Failed to save coin_economy.json"
+			_nc_shop_status_lbl.modulate = Color(0.40, 1.0, 0.58) if ok else Color(1.0, 0.42, 0.38)
+	)
+	top_h.add_child(save_btn)
+
+	_nc_shop_status_lbl = Label.new()
+	_nc_shop_status_lbl.text = "Edit any pack's name, NC amounts, bonus NC, dollar price, or promo tag, then click SAVE NC SHOP."
+	_nc_shop_status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_nc_shop_status_lbl.add_theme_font_size_override("font_size", 12)
+	_nc_shop_status_lbl.modulate = Color(0.76, 0.86, 0.96)
+	top_h.add_child(_nc_shop_status_lbl)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_nc_shop_root.add_child(scroll)
+
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	scroll.add_child(margin)
+
+	_nc_shop_list_box = GridContainer.new()
+	_nc_shop_list_box.columns = 2
+	_nc_shop_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_nc_shop_list_box.add_theme_constant_override("h_separation", 14)
+	_nc_shop_list_box.add_theme_constant_override("v_separation", 12)
+	margin.add_child(_nc_shop_list_box)
+
+	_refresh_nc_shop_editor()
+
+
+func _refresh_nc_shop_editor() -> void:
+	if not is_instance_valid(_nc_shop_list_box):
+		return
+	for c in _nc_shop_list_box.get_children():
+		c.queue_free()
+	_nc_shop_pack_editors.clear()
+
+	var packs: Array[Dictionary] = ProfileManager.get_coin_shop_packs()
+	for pi in range(packs.size()):
+		var pack: Dictionary = packs[pi]
+		var accent: Color = pack.get("accent", Color(1.0, 0.84, 0.24)) as Color
+
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var csb := StyleBoxFlat.new()
+		csb.bg_color = Color(0.08, 0.12, 0.18, 0.96)
+		csb.border_color = accent
+		csb.set_border_width_all(2)
+		csb.set_corner_radius_all(12)
+		csb.set_content_margin_all(12)
+		card.add_theme_stylebox_override("panel", csb)
+		_nc_shop_list_box.add_child(card)
+
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 8)
+		card.add_child(vb)
+
+		var top_r := HBoxContainer.new()
+		top_r.add_theme_constant_override("separation", 8)
+		vb.add_child(top_r)
+
+		var pack_idx_lbl := Label.new()
+		pack_idx_lbl.text = "PACK #%d" % (pi + 1)
+		pack_idx_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pack_idx_lbl.add_theme_font_size_override("font_size", 15)
+		pack_idx_lbl.modulate = accent.lightened(0.20)
+		top_r.add_child(pack_idx_lbl)
+
+		var total_lbl := Label.new()
+		total_lbl.add_theme_font_size_override("font_size", 14)
+		total_lbl.modulate = Color(1.0, 0.88, 0.30)
+		top_r.add_child(total_lbl)
+
+		var update_total := func() -> void:
+			var tot: int = maxi(0, int(pack.get("coins", 0))) + maxi(0, int(pack.get("bonus_coins", 0)))
+			total_lbl.text = "TOTAL: %s NC" % ProfileManager.format_coins(tot)
+
+		update_total.call()
+
+		var name_le := _add_nc_pack_text_row(vb, "Display Name:", str(pack.get("name", "")))
+		name_le.text_changed.connect(func(txt: String): pack["name"] = txt)
+
+		var sku_le := _add_nc_pack_text_row(vb, "SKU ID:", str(pack.get("sku", "")))
+		sku_le.text_changed.connect(func(txt: String): pack["sku"] = txt.strip_edges())
+
+		var price_le := _add_nc_pack_text_row(vb, "Price Label:", str(pack.get("price_usd", "$0.99")))
+		price_le.text_changed.connect(func(txt: String): pack["price_usd"] = txt)
+
+		var tag_le := _add_nc_pack_text_row(vb, "Promo Tag:", str(pack.get("tag", "")))
+		tag_le.placeholder_text = "e.g. POPULAR, +33% BONUS, empty for none"
+		tag_le.text_changed.connect(func(txt: String): pack["tag"] = txt)
+
+		var base_sb := _add_coin_spin_row(vb, "Base NC:", 0, 10000000, 1)
+		base_sb.value = maxi(0, int(pack.get("coins", 0)))
+		base_sb.value_changed.connect(func(v: float):
+			pack["coins"] = int(v)
+			update_total.call()
+		)
+		var base_le: LineEdit = base_sb.get_line_edit()
+		if base_le != null:
+			base_le.text_changed.connect(func(raw_txt: String):
+				var clean_txt: String = raw_txt.replace(",", "").replace("NC", "").replace("nc", "").strip_edges()
+				if clean_txt.is_valid_int():
+					pack["coins"] = clampi(int(clean_txt), 0, 10000000)
+					update_total.call()
+			)
+
+		var bonus_sb := _add_coin_spin_row(vb, "Bonus NC:", 0, 10000000, 1)
+		bonus_sb.value = maxi(0, int(pack.get("bonus_coins", 0)))
+		bonus_sb.value_changed.connect(func(v: float):
+			pack["bonus_coins"] = int(v)
+			update_total.call()
+		)
+		var bonus_le: LineEdit = bonus_sb.get_line_edit()
+		if bonus_le != null:
+			bonus_le.text_changed.connect(func(raw_txt: String):
+				var clean_txt: String = raw_txt.replace(",", "").replace("NC", "").replace("nc", "").strip_edges()
+				if clean_txt.is_valid_int():
+					pack["bonus_coins"] = clampi(int(clean_txt), 0, 10000000)
+					update_total.call()
+			)
+
+		var tier_row := HBoxContainer.new()
+		tier_row.add_theme_constant_override("separation", 8)
+		vb.add_child(tier_row)
+		var tier_lbl := Label.new()
+		tier_lbl.text = "Visual Tier:"
+		tier_lbl.custom_minimum_size = Vector2(130, 0)
+		tier_lbl.add_theme_font_size_override("font_size", 13)
+		tier_row.add_child(tier_lbl)
+		var tier_opt := OptionButton.new()
+		tier_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for t_i in range(6):
+			tier_opt.add_item("Tier %d" % t_i, t_i)
+		var cur_t: int = clampi(int(pack.get("tier", pi)), 0, 5)
+		tier_opt.select(cur_t)
+		tier_opt.item_selected.connect(func(idx: int):
+			pack["tier"] = tier_opt.get_item_id(idx)
+		)
+		tier_row.add_child(tier_opt)
+
+		_nc_shop_pack_editors.append({
+			"name_le": name_le,
+			"sku_le": sku_le,
+			"price_le": price_le,
+			"tag_le": tag_le,
+			"base_sb": base_sb,
+			"bonus_sb": bonus_sb,
+			"tier_opt": tier_opt
+		})
+
+
+func _add_nc_pack_text_row(parent: Control, label_txt: String, initial_val: String) -> LineEdit:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	parent.add_child(row)
+	var lbl := Label.new()
+	lbl.text = label_txt
+	lbl.custom_minimum_size = Vector2(130, 0)
+	lbl.add_theme_font_size_override("font_size", 13)
+	row.add_child(lbl)
+	var le := LineEdit.new()
+	le.text = initial_val
+	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(le)
+	return le
 
 
 # ==============================================================================
@@ -3495,9 +3827,7 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 
 	_ac_ach_weapon_opt = OptionButton.new()
 	_ac_ach_weapon_opt.add_item("None (NC Only)", -1)
-	for wid in ProfileManager.SHOP_WEAPON_IDS:
-		if not ProfileManager.NO_SKIN_WEAPONS.has(wid):
-			_ac_ach_weapon_opt.add_item("%d: %s" % [wid, WeaponData.get_weapon(wid, 0, 0).display_name], wid)
+	_populate_grouped_weapon_option(_ac_ach_weapon_opt, ProfileManager.SHOP_WEAPON_IDS, ProfileManager.NO_SKIN_WEAPONS)
 	_ac_ach_weapon_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ac_ach_weapon_opt.item_selected.connect(func(_i: int): _apply_ac_skin_dropdowns())
 	sk_row.add_child(_ac_ach_weapon_opt)
@@ -3612,8 +3942,9 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 
 	_ac_add_type_opt = OptionButton.new()
 	_ac_add_type_opt.add_item("NC Drop", 0)
-	_ac_add_type_opt.add_item("Random Premium Skin (5000+)", 1)
-	_ac_add_type_opt.add_item("Random Basic Skin", 2)
+	_ac_add_type_opt.add_item("Random Premium Skin (6000+ NC)", 1)
+	_ac_add_type_opt.add_item("Random Rare Skin (4000-5999 NC)", 7)
+	_ac_add_type_opt.add_item("Random Common Skin (< 4000 NC)", 2)
 	_ac_add_type_opt.add_item("Specific Gun Skin", 3)
 	_ac_add_type_opt.add_item("2x NC (Double Balance)", 4)
 	_ac_add_type_opt.add_item("Random Locked Agent Unlock", 5)
@@ -3631,9 +3962,10 @@ func _build_ach_and_crate_tab(main_vbox: VBoxContainer) -> void:
 	add_row.add_child(_ac_add_coins_spin)
 
 	_ac_add_weapon_opt = OptionButton.new()
-	for wid in ProfileManager.SHOP_WEAPON_IDS:
-		if not ProfileManager.NO_SKIN_WEAPONS.has(wid):
-			_ac_add_weapon_opt.add_item("%d: %s" % [wid, WeaponData.get_weapon(wid, 0, 0).display_name], wid)
+	_populate_grouped_weapon_option(_ac_add_weapon_opt, ProfileManager.SHOP_WEAPON_IDS, ProfileManager.NO_SKIN_WEAPONS)
+	var first_crate_w: int = _ac_add_weapon_opt.get_item_index(0)
+	if first_crate_w >= 0:
+		_ac_add_weapon_opt.select(first_crate_w)
 	_ac_add_weapon_opt.visible = false
 	add_row.add_child(_ac_add_weapon_opt)
 
@@ -3773,6 +4105,8 @@ func _on_ac_add_crate_item() -> void:
 			item["coins"] = int(_ac_add_coins_spin.value)
 		1:
 			item["type"] = "premium_skin"
+		7:
+			item["type"] = "rare_skin"
 		2:
 			item["type"] = "basic_skin"
 		3:
@@ -3829,11 +4163,14 @@ func _refresh_ac_crate_list() -> void:
 		var lbl := Label.new()
 		var etype: String = str(entry.get("type", "coins"))
 		if etype == "premium_skin":
-			lbl.text = "★ Random Premium Skin (5000+)"
+			lbl.text = "★ Random Premium Skin (6000+ NC)"
 			lbl.modulate = Color(1.0, 0.84, 0.26)
+		elif etype == "rare_skin":
+			lbl.text = "◆ Random Rare Skin (4000–5999 NC)"
+			lbl.modulate = Color(0.76, 0.48, 1.0)
 		elif etype == "basic_skin":
-			lbl.text = "◆ Random Basic Gun Skin"
-			lbl.modulate = Color(0.38, 0.90, 1.0)
+			lbl.text = "● Random Common Skin (< 4000 NC)"
+			lbl.modulate = Color(0.45, 0.86, 1.0)
 		elif etype == "specific_skin":
 			var wid: int = int(entry.get("weapon_id", 0))
 			var sk: String = str(entry.get("skin_key", "gold"))

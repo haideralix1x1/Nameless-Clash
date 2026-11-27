@@ -89,6 +89,7 @@ var _customize_btn: Button
 var _agent_mode_btn: Button
 var _coin_shop_top_btn: Button
 var _coin_shop_overlay: Control
+var _coin_shop_grid: GridContainer
 var _coin_shop_coin_lbl: Label
 var _coin_shop_return_overlay: Control = null
 var _coin_purchase_popup: Control
@@ -189,27 +190,26 @@ func _make_style(bg: Color, border: Color, corner: int = 12) -> StyleBox:
 	return UIStyle.make_card_stylebox(variant, tint, mh, mv)
 
 
+func _apply_coin_button_icon(btn: Button, max_w: int = 18) -> void:
+	btn.icon = _get_coin_icon()
+	btn.expand_icon = true
+	btn.add_theme_constant_override("icon_max_width", max_w)
+	btn.remove_theme_color_override("icon_normal_color")
+	btn.remove_theme_color_override("icon_hover_color")
+	btn.remove_theme_color_override("icon_pressed_color")
+
+
 func _make_arcade_button(text_str: String, accent: Color, min_h: float = 54.0, font_sz: int = 18, _fill_bg: Color = Color(0.11, 0.15, 0.22, 0.95)) -> Button:
 	var btn := Button.new()
 	btn.text = text_str
 	btn.custom_minimum_size = Vector2(0, min_h)
-	var upper := text_str.to_upper()
-	var icon_name := ""
-	if upper.contains("SOLO") or upper.contains("BATTLE"):
-		icon_name = "battle"
-	elif upper.contains("AGENT"):
-		icon_name = "thunder"
-	elif upper.contains("WIFI") or upper.contains("HOST") or upper.contains("LOBBY"):
-		icon_name = "wifi"
-	elif upper.contains("CUSTOMIZE"):
-		icon_name = "user"
-	elif upper.contains("SETTINGS"):
-		icon_name = "gear"
-	elif upper.contains("CREDITS"):
-		icon_name = "target"
-	elif upper.contains("QUIT") or upper.contains("CLOSE"):
-		icon_name = "close"
-	UIStyle.style_layer_button(btn, _variant_for_color(accent), icon_name, 16, 10)
+	var upper := text_str.strip_edges().to_upper()
+	var icon_name: String = UIStyle.infer_icon_for_text(text_str)
+	UIStyle.style_layer_button(btn, _variant_for_color(accent), icon_name, 14, 10)
+	if upper == "+ NC":
+		_apply_coin_button_icon(btn, 18)
+	elif upper.begins_with("BUY "):
+		_apply_coin_button_icon(btn, 20)
 	btn.add_theme_font_size_override("font_size", font_sz)
 	return btn
 
@@ -218,29 +218,40 @@ func _make_icon_card_button(title: String, icon_path: String, accent: Color, min
 	var btn := Button.new()
 	btn.text = ""
 	btn.custom_minimum_size = Vector2(0, min_h)
-	UIStyle.style_layer_button(btn, _variant_for_color(accent), "", 16, 10)
+	var is_compact: bool = min_h < 100.0
+	UIStyle.style_layer_button(btn, _variant_for_color(accent), "", 8 if is_compact else 16, 6 if is_compact else 10)
 	var vb := VBoxContainer.new()
 	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	vb.add_theme_constant_override("separation", 6)
+	vb.add_theme_constant_override("separation", 3 if is_compact else 6)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(vb)
+	var tex: Texture2D = null
 	if ResourceLoader.exists(icon_path):
+		tex = load(icon_path) as Texture2D
+	elif icon_path.ends_with("icon_coin.png"):
+		tex = _get_coin_icon()
+	if tex != null:
 		var icon_rect := TextureRect.new()
-		icon_rect.texture = load(icon_path)
+		icon_rect.texture = tex
 		icon_rect.custom_minimum_size = Vector2(icon_sz, icon_sz)
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vb.add_child(icon_rect)
+		btn.set_meta("card_icon", icon_rect)
 	var lbl := Label.new()
 	lbl.text = title
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_override("font", UIStyle.FONT_MAIN)
 	lbl.add_theme_font_size_override("font_size", font_sz)
+	lbl.add_theme_color_override("font_outline_color", Color(0.04, 0.06, 0.09, 0.92))
+	lbl.add_theme_constant_override("outline_size", 2)
 	lbl.modulate = Color(0.97, 0.98, 1.0)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vb.add_child(lbl)
+	btn.set_meta("card_label", lbl)
 	return btn
 
 
@@ -319,7 +330,7 @@ func _build_ui() -> void:
 	)
 
 	_crate_top_btn = _make_arcade_button("CRATES & DAILY", Color(0.35, 0.96, 0.56), 40.0, 14, Color(0.08, 0.24, 0.14, 0.98))
-	_crate_top_btn.custom_minimum_size = Vector2(154, 40)
+	_crate_top_btn.custom_minimum_size = Vector2(194, 40)
 	_crate_top_btn.pressed.connect(_open_crate_overlay)
 	econ_bar.add_child(_crate_top_btn)
 
@@ -339,9 +350,9 @@ func _build_ui() -> void:
 	win_panel_sb.shadow_size = 8
 	win_panel_sb.shadow_offset = Vector2.ZERO
 
-	# Left Side Rail: Achievements, Leaderboards, NC Shop, Weapons
+	# Left Side Rail: Mobile-Friendly Big-Icon Tiles (Achievements, Leaderboards, NC Shop, Weapons, Credits)
 	var left_rail_panel := PanelContainer.new()
-	left_rail_panel.custom_minimum_size = Vector2(168, 0)
+	left_rail_panel.custom_minimum_size = Vector2(180, 0)
 	var lr_sb := StyleBoxFlat.new()
 	lr_sb.bg_color = Color(0.06, 0.09, 0.15, 0.98)
 	lr_sb.border_color = Color(0.32, 0.56, 0.86, 0.85)
@@ -355,30 +366,27 @@ func _build_ui() -> void:
 	left_rail.add_theme_constant_override("separation", 10)
 	left_rail_panel.add_child(left_rail)
 
-	_ach_top_btn = _make_arcade_button("ACHIEVEMENTS", Color(0.76, 0.56, 1.0), 54.0, 14, Color(0.16, 0.10, 0.28, 0.98))
+	_ach_top_btn = _make_icon_card_button("ACHIEVEMENTS", "res://assets/ui/icons/icon_achievements.png", Color(0.76, 0.56, 1.0), 74.0, 14, Color(0.16, 0.10, 0.28, 0.98), 46)
 	_ach_top_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_ach_top_btn.pressed.connect(_open_achievements_overlay)
 	left_rail.add_child(_ach_top_btn)
 
-	var btn_leaderboards := _make_arcade_button("LEADERBOARDS", Color(0.32, 0.88, 1.0), 54.0, 14, Color(0.08, 0.20, 0.30, 0.98))
+	var btn_leaderboards := _make_icon_card_button("LEADERBOARDS", "res://assets/ui/icons/icon_leaderboards.png", Color(0.32, 0.88, 1.0), 74.0, 14, Color(0.08, 0.20, 0.30, 0.98), 46)
 	btn_leaderboards.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_leaderboards.pressed.connect(_open_leaderboard_overlay)
 	left_rail.add_child(btn_leaderboards)
 
-	_coin_shop_top_btn = _make_arcade_button("NC SHOP", Color(0.38, 0.98, 0.58), 54.0, 14, Color(0.08, 0.28, 0.14, 0.98))
-	_coin_shop_top_btn.icon = _get_coin_icon()
-	_coin_shop_top_btn.expand_icon = true
-	_coin_shop_top_btn.add_theme_constant_override("icon_max_width", 20)
+	_coin_shop_top_btn = _make_icon_card_button("NC SHOP", "res://assets/ui/icons/icon_coin.png", Color(0.38, 0.98, 0.58), 74.0, 14, Color(0.08, 0.28, 0.14, 0.98), 46)
 	_coin_shop_top_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_coin_shop_top_btn.pressed.connect(func(): _open_coin_shop())
 	left_rail.add_child(_coin_shop_top_btn)
 
-	_top_shop_btn = _make_arcade_button("WEAPONS", Color(1.0, 0.82, 0.24), 54.0, 15, Color(0.24, 0.17, 0.05, 0.98))
+	_top_shop_btn = _make_icon_card_button("WEAPONS", "res://assets/ui/icons/icon_weapons.png", Color(1.0, 0.82, 0.24), 74.0, 14, Color(0.24, 0.17, 0.05, 0.98), 46)
 	_top_shop_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_top_shop_btn.pressed.connect(_open_gun_shop)
 	left_rail.add_child(_top_shop_btn)
 
-	var btn_credits := _make_arcade_button("CREDITS", Color(0.95, 0.78, 0.25), 54.0, 15)
+	var btn_credits := _make_icon_card_button("CREDITS", "res://assets/ui/icons/icon_credits.png", Color(0.95, 0.78, 0.25), 74.0, 14, Color(0.11, 0.15, 0.22, 0.95), 46)
 	btn_credits.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn_credits.pressed.connect(_open_credits)
 	left_rail.add_child(btn_credits)
@@ -989,15 +997,22 @@ func _refresh_agent_select_ui() -> void:
 	if is_instance_valid(_agent_play_btn):
 		if _agent_select_for_practice:
 			_agent_play_btn.text = "START PRACTICE (AGENT)"
+			_agent_play_btn.icon = UIStyle.get_icon("play")
+			_agent_play_btn.expand_icon = true
+			_agent_play_btn.add_theme_constant_override("icon_max_width", 30)
 			_agent_play_btn.disabled = false
 			_agent_play_btn.modulate = Color.WHITE
 		elif is_sel_unlocked:
 			_agent_play_btn.text = "CONTINUE"
+			_agent_play_btn.icon = UIStyle.get_icon("play")
+			_agent_play_btn.expand_icon = true
+			_agent_play_btn.add_theme_constant_override("icon_max_width", 30)
 			_agent_play_btn.disabled = false
 			_agent_play_btn.modulate = Color.WHITE
 		else:
 			var can_afford: bool = ProfileManager.coins >= unlock_price
 			_agent_play_btn.text = "UNLOCK (%s NC)" % ProfileManager.format_coins(unlock_price)
+			_apply_coin_button_icon(_agent_play_btn, 20)
 			_agent_play_btn.disabled = not can_afford
 			_agent_play_btn.modulate = Color(1.0, 0.88, 0.30) if can_afford else Color(0.60, 0.58, 0.64)
 	var sorted_order: Array[int] = _get_sorted_agent_indices()
@@ -1791,10 +1806,15 @@ func _build_match_settings_overlay() -> void:
 	_ms_guns_menu.flat = false
 	var pop: PopupMenu = _ms_guns_menu.get_popup()
 	pop.hide_on_checkable_item_selection = false
-	for wi in range(WeaponData.get_weapon_count()):
-		var wd: WeaponData = WeaponData.get_weapon(wi)
-		pop.add_check_item(wd.display_name, wi)
-		pop.set_item_checked(wi, NetworkManager.restricted_weapons.has(wi))
+	for grp in WeaponData.get_weapon_category_groups([0, 1, 2, 23, 24, 3, 4, 5, 6, 7, 8, 9, 20, 10, 18]):
+		pop.add_separator(str(grp["label"]))
+		for wid_v in (grp["ids"] as Array):
+			var wi: int = int(wid_v)
+			var wd: WeaponData = WeaponData.get_weapon(wi)
+			pop.add_check_item(wd.display_name, wi)
+			var idx: int = pop.get_item_index(wi)
+			if idx >= 0:
+				pop.set_item_checked(idx, NetworkManager.restricted_weapons.has(wi))
 	pop.id_pressed.connect(func(wid: int):
 		var idx: int = pop.get_item_index(wid)
 		var now_chk: bool = not pop.is_item_checked(idx)
@@ -2380,7 +2400,7 @@ func _build_gun_shop_overlay() -> void:
 	_shop_coin_lbl = _add_coin_icon_label(hdr, ProfileManager.format_coins(ProfileManager.coins), 22, 19, Color(1.0, 0.90, 0.30), false)
 
 	var shop_get_coins := _make_arcade_button("+ NC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
-	shop_get_coins.custom_minimum_size = Vector2(88, 34)
+	shop_get_coins.custom_minimum_size = Vector2(104, 34)
 	shop_get_coins.pressed.connect(func(): _open_coin_shop(_shop_overlay))
 	hdr.add_child(shop_get_coins)
 
@@ -2410,19 +2430,34 @@ func _build_gun_shop_overlay() -> void:
 	left_scroll.add_child(left_vb)
 
 	_shop_gun_btns.clear()
-	for wid in ProfileManager.SHOP_WEAPON_IDS:
-		var wd := WeaponData.get_weapon(wid, 0, 0)
-		var gbtn := Button.new()
-		gbtn.custom_minimum_size = Vector2(0, 44)
-		gbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		gbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		gbtn.text = "  %s" % wd.display_name
-		gbtn.icon = WeaponData.get_weapon_atlas_texture(wid, ProfileManager.get_equipped_gun_skin_row(wid))
-		gbtn.expand_icon = true
-		gbtn.add_theme_font_size_override("font_size", 15)
-		gbtn.pressed.connect(func(): _select_shop_weapon(wid))
-		left_vb.add_child(gbtn)
-		_shop_gun_btns[wid] = gbtn
+	var shop_groups: Array[Dictionary] = WeaponData.get_weapon_category_groups(ProfileManager.SHOP_WEAPON_IDS)
+	for g_idx in range(shop_groups.size()):
+		var grp: Dictionary = shop_groups[g_idx]
+		var cat_lbl := Label.new()
+		cat_lbl.text = str(grp["label"])
+		cat_lbl.add_theme_font_size_override("font_size", 11)
+		cat_lbl.modulate = grp["color"] as Color
+		if g_idx > 0:
+			var pad := MarginContainer.new()
+			pad.add_theme_constant_override("margin_top", 6)
+			pad.add_child(cat_lbl)
+			left_vb.add_child(pad)
+		else:
+			left_vb.add_child(cat_lbl)
+		for wid_v in (grp["ids"] as Array):
+			var wid: int = int(wid_v)
+			var wd := WeaponData.get_weapon(wid, 0, 0)
+			var gbtn := Button.new()
+			gbtn.custom_minimum_size = Vector2(0, 44)
+			gbtn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			gbtn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			gbtn.text = "  %s" % wd.display_name
+			gbtn.icon = WeaponData.get_weapon_atlas_texture(wid, ProfileManager.get_equipped_gun_skin_row(wid))
+			gbtn.expand_icon = true
+			gbtn.add_theme_font_size_override("font_size", 15)
+			gbtn.pressed.connect(func(): _select_shop_weapon(wid))
+			left_vb.add_child(gbtn)
+			_shop_gun_btns[wid] = gbtn
 
 	var right_v := VBoxContainer.new()
 	right_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2673,6 +2708,30 @@ func _refresh_shop_skins() -> void:
 		nl.mouse_filter = Control.MOUSE_FILTER_PASS
 		name_row.add_child(nl)
 
+		if skey != "default":
+			var tk: String = ProfileManager.get_gun_skin_tier(wid, skey)
+			var tc: Color = ProfileManager.get_skin_tier_color(tk)
+			var tpill := PanelContainer.new()
+			tpill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			tpill.mouse_filter = Control.MOUSE_FILTER_PASS
+			var tsb := StyleBoxFlat.new()
+			tsb.bg_color = tc.darkened(0.74)
+			tsb.border_color = tc
+			tsb.set_border_width_all(1)
+			tsb.set_corner_radius_all(5)
+			tsb.content_margin_left = 6.0
+			tsb.content_margin_right = 6.0
+			tsb.content_margin_top = 1.0
+			tsb.content_margin_bottom = 1.0
+			tpill.add_theme_stylebox_override("panel", tsb)
+			var tlbl := Label.new()
+			tlbl.text = ProfileManager.get_skin_tier_label(tk)
+			tlbl.add_theme_font_size_override("font_size", 9)
+			tlbl.modulate = tc.lightened(0.18)
+			tlbl.mouse_filter = Control.MOUSE_FILTER_PASS
+			tpill.add_child(tlbl)
+			name_row.add_child(tpill)
+
 		if ProfileManager.is_gun_skin_new(wid, skey):
 			name_row.add_child(UIStyle.make_inline_new_badge("NEW", 10))
 
@@ -2804,7 +2863,7 @@ func _build_crate_overlay() -> void:
 	_crate_coin_lbl = _add_coin_icon_label(hdr, ProfileManager.format_coins(ProfileManager.coins), 22, 19, Color(1.0, 0.90, 0.30), false)
 
 	var crate_get_coins := _make_arcade_button("+ NC", Color(0.36, 0.98, 0.56), 34.0, 14, Color(0.09, 0.30, 0.16, 0.96))
-	crate_get_coins.custom_minimum_size = Vector2(88, 34)
+	crate_get_coins.custom_minimum_size = Vector2(104, 34)
 	crate_get_coins.pressed.connect(func(): _open_coin_shop(_crate_overlay))
 	hdr.add_child(crate_get_coins)
 
@@ -2844,8 +2903,8 @@ func _build_crate_overlay() -> void:
 	_daily_claim_btn = _make_arcade_button("COLLECT +100", Color(0.35, 0.98, 0.54), 38.0, 15, Color(0.10, 0.34, 0.18, 0.98))
 	_daily_claim_btn.icon = _get_coin_icon()
 	_daily_claim_btn.expand_icon = true
-	_daily_claim_btn.add_theme_constant_override("icon_max_width", 18)
-	_daily_claim_btn.custom_minimum_size = Vector2(215, 38)
+	_daily_claim_btn.add_theme_constant_override("icon_max_width", 22)
+	_daily_claim_btn.custom_minimum_size = Vector2(226, 38)
 	_daily_claim_btn.pressed.connect(func():
 		if ProfileManager.claim_daily_bonus():
 			_play_ui_pickup_sfx()
@@ -2999,7 +3058,7 @@ func _build_crate_screen_page(is_premium: bool, host: Control) -> Dictionary:
 	var open1_btn := _make_arcade_button(open1_text, accent_c, 50.0, 16, Color(0.28, 0.18, 0.06, 0.98) if is_premium else Color(0.10, 0.22, 0.36, 0.98))
 	open1_btn.icon = _get_coin_icon()
 	open1_btn.expand_icon = true
-	open1_btn.add_theme_constant_override("icon_max_width", 20)
+	open1_btn.add_theme_constant_override("icon_max_width", 24)
 	open1_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	open1_btn.pressed.connect(func(): _start_single_crate_open(is_premium, false))
 	btn_row.add_child(open1_btn)
@@ -3008,7 +3067,7 @@ func _build_crate_screen_page(is_premium: bool, host: Control) -> Dictionary:
 	var open10_btn := _make_arcade_button(open10_text, Color(0.88, 0.46, 1.0) if is_premium else Color(1.0, 0.72, 0.24), 50.0, 16, Color(0.24, 0.10, 0.34, 0.98) if is_premium else Color(0.28, 0.16, 0.05, 0.98))
 	open10_btn.icon = _get_coin_icon()
 	open10_btn.expand_icon = true
-	open10_btn.add_theme_constant_override("icon_max_width", 20)
+	open10_btn.add_theme_constant_override("icon_max_width", 24)
 	open10_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	open10_btn.pressed.connect(func(): _start_batch_crate_open(is_premium, 10))
 	btn_row.add_child(open10_btn)
@@ -3251,6 +3310,11 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 		bg_c = Color(0.24, 0.12, 0.05, 0.98)
 		bw = 4
 		tag_txt = "★ PREMIUM SKIN ★"
+	elif kind == "rare_skin":
+		border_c = Color(0.76, 0.48, 1.0)
+		bg_c = Color(0.16, 0.08, 0.26, 0.98)
+		bw = 3
+		tag_txt = "◆ RARE SKIN ◆"
 	elif kind == "agent_unlock":
 		border_c = Color(0.86, 0.46, 1.0)
 		bg_c = Color(0.18, 0.08, 0.28, 0.98)
@@ -3267,10 +3331,10 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 		bw = 3
 		tag_txt = "★ CHARACTER GEAR ★"
 	elif kind == "basic_skin":
-		border_c = Color(0.32, 0.90, 1.0)
+		border_c = Color(0.45, 0.86, 1.0)
 		bg_c = Color(0.06, 0.16, 0.26, 0.98)
 		bw = 3
-		tag_txt = "◆ GUN SKIN ◆"
+		tag_txt = "● COMMON SKIN ●"
 
 	var csb := StyleBoxFlat.new()
 	csb.bg_color = bg_c
@@ -3341,7 +3405,7 @@ func _populate_revealed_card_contents(card: PanelContainer, item: Dictionary, la
 
 		if is_dup:
 			_add_coin_icon_label(vb, "DUPLICATE +%s" % ProfileManager.format_coins(int(item.get("coins_won", 200))), 14 if large else 11, 12 if large else 10, Color(1.0, 0.86, 0.36), true)
-	elif kind == "premium_skin" or kind == "basic_skin":
+	elif kind == "premium_skin" or kind == "rare_skin" or kind == "basic_skin":
 		var wid: int = int(item.get("weapon_id", 0))
 		var skey: String = str(item.get("skin_key", "default"))
 		var sdef: Dictionary = ProfileManager.get_gun_skin_def(skey)
@@ -3683,7 +3747,7 @@ func _build_crate_bigwin_overlay() -> void:
 
 func _is_crate_equipable_item(item: Dictionary) -> bool:
 	var k: String = str(item.get("kind", "coins"))
-	if (k == "premium_skin" or k == "basic_skin") and not bool(item.get("is_duplicate", false)) and int(item.get("weapon_id", -1)) >= 0:
+	if (k == "premium_skin" or k == "rare_skin" or k == "basic_skin") and not bool(item.get("is_duplicate", false)) and int(item.get("weapon_id", -1)) >= 0:
 		return true
 	if k == "agent_unlock" and not bool(item.get("is_duplicate", false)) and int(item.get("agent_id", -1)) >= 0:
 		return true
@@ -3849,7 +3913,7 @@ func _show_single_box_flip_reveal(res: Dictionary, is_premium: bool) -> void:
 
 	_populate_revealed_card_contents(card, res, true)
 	var k: String = str(res.get("kind", "coins"))
-	var is_big: bool = (k == "premium_skin" or k == "basic_skin" or k == "double_coins" or k == "dummy_gear" or k == "agent_unlock")
+	var is_big: bool = (k == "premium_skin" or k == "rare_skin" or k == "basic_skin" or k == "double_coins" or k == "dummy_gear" or k == "agent_unlock")
 	if is_big:
 		_play_crate_chime_sfx()
 	else:
@@ -3969,7 +4033,7 @@ func _run_batch_auto_reveal(cards: Array[PanelContainer], items: Array, start_co
 		var card: PanelContainer = cards[i]
 		var item: Dictionary = items[i] as Dictionary
 		var k: String = str(item.get("kind", "coins"))
-		var is_big: bool = (k == "premium_skin" or k == "basic_skin" or k == "double_coins" or k == "dummy_gear" or k == "agent_unlock")
+		var is_big: bool = (k == "premium_skin" or k == "rare_skin" or k == "basic_skin" or k == "double_coins" or k == "dummy_gear" or k == "agent_unlock")
 
 		var f1 := create_tween()
 		f1.tween_property(card, "scale", Vector2(1.06, 1.06), 0.05)
@@ -4021,7 +4085,7 @@ func _run_batch_auto_reveal(cards: Array[PanelContainer], items: Array, start_co
 	for raw_it in items:
 		var it: Dictionary = raw_it as Dictionary
 		var kk: String = str(it.get("kind", "coins"))
-		if kk == "premium_skin" or kk == "basic_skin" or kk == "double_coins" or kk == "dummy_gear" or kk == "agent_unlock":
+		if kk == "premium_skin" or kk == "rare_skin" or kk == "basic_skin" or kk == "double_coins" or kk == "dummy_gear" or kk == "agent_unlock":
 			big_wins.append(it)
 
 	big_wins.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -4076,14 +4140,16 @@ func _crate_bigwin_rank(item: Dictionary) -> int:
 			return 0
 		"premium_skin":
 			return 1
-		"double_coins":
+		"rare_skin":
 			return 2
-		"basic_skin":
+		"double_coins":
 			return 3
-		"dummy_gear":
+		"basic_skin":
 			return 4
-		_:
+		"dummy_gear":
 			return 5
+		_:
+			return 6
 
 
 func _show_big_win_spotlight(big_wins: Array) -> void:
@@ -4100,12 +4166,14 @@ func _show_big_win_spotlight(big_wins: Array) -> void:
 		_crate_bigwin_title.text = "★ ALL AGENTS OWNED! ★" if bool(top_it.get("is_duplicate", false)) else "★ NEW AGENT UNLOCKED! ★"
 	elif k == "premium_skin":
 		_crate_bigwin_title.text = "★ LEGENDARY PREMIUM SKIN! ★"
+	elif k == "rare_skin":
+		_crate_bigwin_title.text = "◆ RARE GUN SKIN UNLOCKED! ◆"
 	elif k == "double_coins":
 		_crate_bigwin_title.text = "★ 2x NC JACKPOT! ★"
 	elif k == "dummy_gear":
 		_crate_bigwin_title.text = "★ NEW COSMETIC UNLOCKED! ★"
 	else:
-		_crate_bigwin_title.text = "★ GUN SKIN UNLOCKED! ★"
+		_crate_bigwin_title.text = "● COMMON GUN SKIN UNLOCKED! ●"
 	_crate_bigwin_title.modulate = accent
 
 	var names: PackedStringArray = PackedStringArray()
@@ -4175,7 +4243,13 @@ func _update_ach_badge() -> void:
 	if not is_instance_valid(_ach_top_btn):
 		return
 	var unclaimed: int = AchievementManager.get_unclaimed_count()
-	_ach_top_btn.text = ("ACHIEVEMENTS (%d)" % unclaimed) if unclaimed > 0 else "ACHIEVEMENTS"
+	var lbl_txt: String = ("ACHIEVEMENTS (%d)" % unclaimed) if unclaimed > 0 else "ACHIEVEMENTS"
+	if _ach_top_btn.has_meta("card_label"):
+		var cl: Label = _ach_top_btn.get_meta("card_label") as Label
+		if is_instance_valid(cl):
+			cl.text = lbl_txt
+	else:
+		_ach_top_btn.text = lbl_txt
 	_ach_top_btn.modulate = Color(1.0, 0.92, 0.55) if unclaimed > 0 else Color.WHITE
 
 
@@ -4540,15 +4614,31 @@ func _build_coin_shop_overlay() -> void:
 	hdr.add_child(close_btn)
 
 	# 3x2 Pack Grid
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 12)
-	root_v.add_child(grid)
+	_coin_shop_grid = GridContainer.new()
+	_coin_shop_grid.columns = 3
+	_coin_shop_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_coin_shop_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_coin_shop_grid.add_theme_constant_override("h_separation", 14)
+	_coin_shop_grid.add_theme_constant_override("v_separation", 12)
+	root_v.add_child(_coin_shop_grid)
 
-	for p in ProfileManager.COIN_SHOP_PACKS:
+	_refresh_coin_shop_grid()
+
+	var foot := Label.new()
+	foot.text = "Play Store Preview Mode — No real payment API connected yet. Purchases grant Nameless Clash Cash (NC) immediately for testing."
+	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	foot.add_theme_font_size_override("font_size", 12)
+	foot.modulate = Color(0.68, 0.78, 0.92)
+	root_v.add_child(foot)
+
+
+func _refresh_coin_shop_grid() -> void:
+	if not is_instance_valid(_coin_shop_grid):
+		return
+	for c in _coin_shop_grid.get_children():
+		c.queue_free()
+
+	for p in ProfileManager.get_coin_shop_packs():
 		var sku: String = str(p["sku"])
 		var pname: String = str(p["name"])
 		var base_c: int = int(p["coins"])
@@ -4572,7 +4662,7 @@ func _build_coin_shop_overlay() -> void:
 		psb.shadow_color = Color(accent.r, accent.g, accent.b, 0.22 if tier >= 3 else 0.10)
 		psb.shadow_size = 6
 		pcard.add_theme_stylebox_override("panel", psb)
-		grid.add_child(pcard)
+		_coin_shop_grid.add_child(pcard)
 
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 6)
@@ -4636,13 +4726,6 @@ func _build_coin_shop_overlay() -> void:
 		buy_btn.custom_minimum_size = Vector2(0, 40)
 		buy_btn.pressed.connect(_on_buy_coin_pack.bind(sku))
 		vb.add_child(buy_btn)
-
-	var foot := Label.new()
-	foot.text = "Play Store Preview Mode — No real payment API connected yet. Purchases grant Nameless Clash Cash (NC) immediately for testing."
-	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	foot.add_theme_font_size_override("font_size", 12)
-	foot.modulate = Color(0.68, 0.78, 0.92)
-	root_v.add_child(foot)
 
 
 func _draw_coin_pack_graphic(ctrl: Control, tier: int, accent: Color) -> void:
@@ -4783,6 +4866,7 @@ func _open_coin_shop(return_overlay: Control = null) -> void:
 		_crate_overlay.visible = false
 	if is_instance_valid(_coin_shop_coin_lbl):
 		_coin_shop_coin_lbl.text = ProfileManager.format_coins(ProfileManager.coins)
+	_refresh_coin_shop_grid()
 	_coin_shop_overlay.visible = true
 
 
@@ -4928,7 +5012,7 @@ func _build_leaderboard_overlay() -> void:
 	hdr.add_child(title_lbl)
 
 	_lb_solo_tab_btn = _make_arcade_button("SOLO CAREER", Color(1.0, 0.84, 0.24), 38.0, 13, Color(0.24, 0.18, 0.05, 0.98))
-	_lb_solo_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_solo_tab_btn.custom_minimum_size = Vector2(166, 38)
 	_lb_solo_tab_btn.pressed.connect(func():
 		_lb_category = "solo"
 		_lb_selected_idx = 0
@@ -4937,7 +5021,7 @@ func _build_leaderboard_overlay() -> void:
 	hdr.add_child(_lb_solo_tab_btn)
 
 	_lb_local_tab_btn = _make_arcade_button("MULTIPLAYER", Color(1.0, 0.72, 0.22), 38.0, 13, Color(0.24, 0.14, 0.05, 0.98))
-	_lb_local_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_local_tab_btn.custom_minimum_size = Vector2(166, 38)
 	_lb_local_tab_btn.pressed.connect(func():
 		_lb_category = "local"
 		_lb_selected_idx = 0
@@ -4946,7 +5030,7 @@ func _build_leaderboard_overlay() -> void:
 	hdr.add_child(_lb_local_tab_btn)
 
 	_lb_top_tab_btn = _make_arcade_button("TOP 10 KILLS", Color(0.45, 0.96, 0.56), 38.0, 13, Color(0.08, 0.24, 0.12, 0.98))
-	_lb_top_tab_btn.custom_minimum_size = Vector2(138, 38)
+	_lb_top_tab_btn.custom_minimum_size = Vector2(166, 38)
 	_lb_top_tab_btn.pressed.connect(func():
 		_lb_category = "top_kills"
 		_lb_selected_idx = 0
@@ -4955,7 +5039,7 @@ func _build_leaderboard_overlay() -> void:
 	hdr.add_child(_lb_top_tab_btn)
 
 	var close_btn := _make_arcade_button("CLOSE", Color(0.92, 0.34, 0.34), 38.0, 14, Color(0.26, 0.08, 0.10, 0.96))
-	close_btn.custom_minimum_size = Vector2(92, 38)
+	close_btn.custom_minimum_size = Vector2(116, 38)
 	close_btn.pressed.connect(func():
 		_lb_overlay.visible = false
 		_hub_container.visible = true
@@ -5369,4 +5453,3 @@ func _add_h2h_card(parent_row: HBoxContainer, title_txt: String, count_col_txt: 
 		c_lbl.add_theme_font_size_override("font_size", 13)
 		c_lbl.modulate = accent
 		row_hb.add_child(c_lbl)
-

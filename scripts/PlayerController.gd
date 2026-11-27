@@ -207,7 +207,7 @@ var _contra_ult_shots_left: int = 0
 var _contra_ult_shot_timer: float = 0.0
 var _contra_ult_dmg: int = 0
 var _contra_ult_col: Color = Color(1.0, 0.35, 0.20)
-var _contra_ult_name: String = "Target-Follow Bazooka"
+var _contra_ult_name: String = "Target-Follow RPG 7"
 var _contra_ult_local: bool = false
 var _magnet_timer: float = 0.0
 var _magnet_anchor: Vector2 = Vector2.ZERO
@@ -1838,10 +1838,11 @@ func _apply_weapon_visuals() -> void:
 	_primary_weapon.position = Vector2(18, 0) if current_weapon_id == 17 else Vector2(16, 0)
 	match current_weapon_id:
 		11: _primary_weapon.scale = Vector2(0.24, 0.24)
+		12: _primary_weapon.scale = Vector2(0.25, 0.25)
 		17: _primary_weapon.scale = Vector2(0.27, 0.27)
 		19: _primary_weapon.scale = Vector2(0.20, 0.20)
 		20: _primary_weapon.scale = Vector2(0.21, 0.21)
-		22, 23: _primary_weapon.scale = Vector2(0.25, 0.25)
+		22, 23, 24: _primary_weapon.scale = Vector2(0.25, 0.25)
 		_: _primary_weapon.scale = Vector2(0.24, 0.24)
 	_secondary_weapon.texture = spec["tex"] as Texture2D
 	_secondary_weapon.hframes = int(spec["hframes"])
@@ -1859,6 +1860,7 @@ static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) 
 		return Vector2(float(ov["x"]), float(ov["y"]))
 	match weapon_id:
 		11: return Vector2(43.2, -4.0) # Flamethrower
+		12: return Vector2(39.5, -3.8) # Follow Rocket
 		13: return Vector2(41.9, -2.5) # Plasma Cannon
 		15: return Vector2(42.4, -4.7) # Hook Gun
 		16: return Vector2(37.6, -1.7) # Bubble Gun
@@ -1868,6 +1870,7 @@ static func get_weapon_muzzle_local_pos(weapon_id: int, sprite_frame: int = -1) 
 		20: return Vector2(38.5, -4.5) # Suppressed Pistol
 		22: return Vector2(44.5, -2.5) # OTs-14 Groza
 		23: return Vector2(45.0, -2.5) # M416
+		24: return Vector2(45.2, -3.4) # G3
 	var f: int = sprite_frame if sprite_frame >= 0 else clampi(weapon_id, 0, 10)
 	match f % 11:
 		0: return Vector2(44.1, -5.2) # AK-47

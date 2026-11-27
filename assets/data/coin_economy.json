@@ -1,13 +1,75 @@
 {
 	"agent_unlock_price": 8500,
+	"coin_shop_packs": [
+		{
+			"accent_hex": "6bd6ff",
+			"bonus_coins": 0,
+			"coins": 1200,
+			"name": "Pouch of NC",
+			"price_usd": "$0.99",
+			"sku": "coins_pack_starter",
+			"tag": "STARTER",
+			"tier": 0
+		},
+		{
+			"accent_hex": "5cf594",
+			"bonus_coins": 500,
+			"coins": 3000,
+			"name": "Stack of NC",
+			"price_usd": "$2.99",
+			"sku": "coins_pack_handful",
+			"tag": "+500 BONUS",
+			"tier": 1
+		},
+		{
+			"accent_hex": "ffd63d",
+			"bonus_coins": 1500,
+			"coins": 6500,
+			"name": "Tactical Chest",
+			"price_usd": "$4.99",
+			"sku": "coins_pack_chest",
+			"tag": "POPULAR",
+			"tier": 2
+		},
+		{
+			"accent_hex": "fa9438",
+			"bonus_coins": 5000,
+			"coins": 15000,
+			"name": "Warlord Vault",
+			"price_usd": "$9.99",
+			"sku": "coins_pack_vault",
+			"tag": "+33% BONUS",
+			"tier": 3
+		},
+		{
+			"accent_hex": "d675ff",
+			"bonus_coins": 15000,
+			"coins": 35000,
+			"name": "Champion Hoard",
+			"price_usd": "$19.99",
+			"sku": "coins_pack_royal",
+			"tag": "HOT DEAL",
+			"tier": 4
+		},
+		{
+			"accent_hex": "ffe04d",
+			"bonus_coins": 50000,
+			"coins": 100000,
+			"name": "Nameless Treasury",
+			"price_usd": "$49.99",
+			"sku": "coins_pack_mega",
+			"tag": "BEST VALUE",
+			"tier": 5
+		}
+	],
 	"gun_skin_prices": {
 		"0": {
 			"arctic": 8000,
-			"biohazard": 5000,
-			"crimson_royal": 675,
-			"desert_camo": 2000,
-			"gold": 8500,
-			"magma": 5000,
+			"biohazard": 6000,
+			"crimson_royal": 8000,
+			"desert_camo": 1500,
+			"gold": 8000,
+			"magma": 8000,
 			"nebula": 2000,
 			"neon": 5000,
 			"ocean_wave": 3500
@@ -40,6 +102,7 @@
 	"premium_gun_skins": {
 		"0": {
 			"arctic": true,
+			"biohazard": true,
 			"crimson_royal": true,
 			"gold": true,
 			"magma": true
@@ -47,27 +110,11 @@
 		"1": {
 			"biohazard": true,
 			"crimson_royal": true,
-			"magma": true
+			"gold": true
 		},
 		"2": {
 			"crimson_royal": true,
-			"gold": true,
-			"magma": true,
-			"nebula": true
-		},
-		"3": {
-			"gold": true,
-			"magma": true
-		},
-		"4": {
 			"gold": true
-		},
-		"5": {
-			"biohazard": true,
-			"crimson_royal": true,
-			"gold": true,
-			"magma": true,
-			"nebula": true
 		}
 	},
 	"treasure_reward": 15,

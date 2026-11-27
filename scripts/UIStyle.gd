@@ -33,7 +33,16 @@ const ICONS: Dictionary = {
 	"thunder": preload("res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Thunder.Png"),
 	"timer": preload("res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Timer.Png"),
 	"target": preload("res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Target.Png"),
-	"close": preload("res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Close.Png")
+	"close": preload("res://assets/Layer Lab/Sprite/Components/Icon_PictoIcons/32/Pictoicon_Close.Png"),
+	"trophy": preload("res://assets/ui/icons/icon_achievements.png"),
+	"leaderboard": preload("res://assets/ui/icons/icon_leaderboards.png"),
+	"weapons": preload("res://assets/ui/icons/icon_weapons.png"),
+	"star": preload("res://assets/ui/icons/icon_credits.png"),
+	"crate": preload("res://assets/ui/icons/icon_crate.png"),
+	"map": preload("res://assets/ui/icons/icon_map.png"),
+	"back": preload("res://assets/ui/icons/icon_back.png"),
+	"play": preload("res://assets/ui/icons/icon_play.png"),
+	"check": preload("res://assets/ui/icons/icon_check.png")
 }
 
 const CLASSIC_PALETTES: Dictionary = {
@@ -87,6 +96,51 @@ const CLASSIC_PALETTES: Dictionary = {
 
 static func get_icon(icon_name: String) -> Texture2D:
 	return ICONS.get(icon_name, null) as Texture2D
+
+
+static func infer_icon_for_text(text_str: String) -> String:
+	var upper: String = text_str.strip_edges().to_upper()
+	if upper.is_empty():
+		return ""
+	if upper in ["+", "-", "<", ">", "X", "✕"]:
+		return ""
+	if upper == "ABILITY" or upper.begins_with("ULT:"):
+		return ""
+	if upper == "NC SHOP" or upper == "+ NC" or upper.begins_with("BUY ") or upper.begins_with("OPEN 1X") or upper.begins_with("OPEN 10X") or upper.begins_with("COLLECT +"):
+		return ""
+	if upper.contains("ACHIEVEMENT"):
+		return "trophy"
+	if upper.contains("LEADERBOARD") or upper.contains("TOP 10"):
+		return "leaderboard"
+	if upper.contains("WEAPON") or upper.contains("GUNFIGHT") or upper.contains("ARSENAL"):
+		return "weapons"
+	if upper.contains("CRATE") or upper.contains("OPEN FREE"):
+		return "crate"
+	if upper.contains("CREDITS") or upper.contains("AWESOME") or upper.contains("MAKE LEADER"):
+		return "star"
+	if upper.contains("MAP"):
+		return "map"
+	if upper.contains("BACK") or upper.begins_with("< MENU"):
+		return "back"
+	if upper.contains("QUIT") or upper.contains("CLOSE") or upper.contains("LEAVE"):
+		return "close"
+	if upper.contains("SETTINGS") or upper.contains("TOUCH CONTROLS") or upper.contains("RESET"):
+		return "gear"
+	if upper.contains("CUSTOMIZE") or upper.contains("SOLO CAREER") or upper.contains("HERO"):
+		return "user"
+	if upper.contains("PRACTICE") or upper.contains("TEST SOUND"):
+		return "target"
+	if upper.contains("AGENT") or upper.contains("RANDOMIZE"):
+		return "thunder"
+	if upper.contains("WIFI") or upper.contains("HOST") or upper.contains("LOBBY") or upper.contains("CREATE ROOM") or upper.contains("JOIN") or upper.contains("MULTIPLAYER"):
+		return "wifi"
+	if upper.contains("SOLO") or upper.contains("BATTLE") or upper.contains("FREE-FOR-ALL") or upper.contains("TEAM"):
+		return "battle"
+	if upper.contains("EQUIP") or upper.contains("COLLECT") or upper.contains("SAVE") or upper.contains("READY") or upper.contains("LOCK IN"):
+		return "check"
+	if upper.contains("CONTINUE") or upper.contains("SKIP") or upper.contains("START"):
+		return "play"
+	return ""
 
 
 static func _get_classic_palette(variant: String) -> Dictionary:
@@ -189,7 +243,10 @@ static func style_layer_button(btn: Button, variant: String = "blue", icon_name:
 		if ic != null:
 			btn.icon = ic
 			btn.expand_icon = true
-			btn.add_theme_constant_override("icon_max_width", 24)
+			var btn_h: float = btn.custom_minimum_size.y
+			var ic_w: int = 34 if btn_h >= 48.0 else (28 if btn_h >= 38.0 else 24)
+			btn.add_theme_constant_override("icon_max_width", ic_w)
+			btn.add_theme_constant_override("h_separation", 8)
 			btn.add_theme_color_override("icon_normal_color", Color(0.88, 0.91, 0.95, 0.90))
 			btn.add_theme_color_override("icon_hover_color", Color(0.96, 0.98, 1.0, 0.96))
 			btn.add_theme_color_override("icon_pressed_color", Color(0.76, 0.80, 0.86, 0.90))

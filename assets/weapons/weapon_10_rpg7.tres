@@ -6,7 +6,7 @@
 script = ExtResource("1_wd")
 id = 10
 code_name = "rpg7"
-display_name = "Bazooka"
+display_name = "RPG 7"
 category = "Heavy Ordnance"
 description = "Rocket launcher firing slow warheads with massive splash and backblast."
 damage = 110

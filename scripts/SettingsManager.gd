@@ -47,7 +47,7 @@ var music_enabled: bool = true
 var sfx_enabled: bool = true
 
 # Graphics & Performance
-var resolution_index: int = 1
+var resolution_index: int = 3
 var fullscreen: bool = false
 var vsync_enabled: bool = true
 var fps_limit_mode: int = 1
@@ -111,7 +111,10 @@ static func get_builtin_default_ui_layout() -> Dictionary:
 
 static func load_default_ui_layout_dict() -> Dictionary:
 	var out: Dictionary = get_builtin_default_ui_layout()
-	for path in [DEFAULT_UI_LAYOUT_PATH, USER_DEFAULT_UI_LAYOUT_PATH]:
+	var layout_paths: Array[String] = [DEFAULT_UI_LAYOUT_PATH]
+	if OS.has_feature("editor"):
+		layout_paths.append(USER_DEFAULT_UI_LAYOUT_PATH)
+	for path in layout_paths:
 		if FileAccess.file_exists(path):
 			var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 			if parsed is Dictionary:
@@ -258,7 +261,11 @@ func load_settings() -> void:
 	music_enabled = bool(cfg.get_value("audio", "music_enabled", true))
 	sfx_enabled = bool(cfg.get_value("audio", "sfx_enabled", true))
 
-	resolution_index = clampi(int(cfg.get_value("graphics", "resolution_index", 1)), 0, RESOLUTIONS.size() - 1)
+	var saved_res_ver: int = int(cfg.get_value("graphics", "res_ver", 1))
+	var migrate_res: bool = saved_res_ver < 2
+	resolution_index = clampi(int(cfg.get_value("graphics", "resolution_index", 3)), 0, RESOLUTIONS.size() - 1)
+	if migrate_res and resolution_index == 1:
+		resolution_index = 3
 	fullscreen = bool(cfg.get_value("graphics", "fullscreen", false))
 	vsync_enabled = bool(cfg.get_value("graphics", "vsync_enabled", true))
 	fps_limit_mode = clampi(int(cfg.get_value("graphics", "fps_limit_mode", 1)), 0, FPS_VALUES.size() - 1)
@@ -280,7 +287,7 @@ func load_settings() -> void:
 	allow_shotguns = bool(cfg.get_value("game_rules", "allow_shotguns", true))
 	allow_explosives = bool(cfg.get_value("game_rules", "allow_explosives", true))
 	sync_rules_to_network()
-	if migrate_touch:
+	if migrate_touch or migrate_res:
 		save_settings()
 
 
@@ -308,6 +315,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "sfx_enabled", sfx_enabled)
 
 	cfg.set_value("graphics", "resolution_index", resolution_index)
+	cfg.set_value("graphics", "res_ver", 2)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
 	cfg.set_value("graphics", "vsync_enabled", vsync_enabled)
 	cfg.set_value("graphics", "fps_limit_mode", fps_limit_mode)
