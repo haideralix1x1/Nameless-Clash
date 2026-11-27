@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://8bqmfp05fxxv"
-path="res://.godot/imported/bomb_sticky.png-c70b6de4ff8129b1d82e6751c6c0db0e.ctex"
+uid="uid://cjcqfmkeshp3s"
+path="res://.godot/imported/splash_screen.png-3e23917c26a0643f387f04e5001b0087.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/weapons/bomb_sticky.png"
-dest_files=["res://.godot/imported/bomb_sticky.png-c70b6de4ff8129b1d82e6751c6c0db0e.ctex"]
+source_file="res://assets/splash_screen.png"
+dest_files=["res://.godot/imported/splash_screen.png-3e23917c26a0643f387f04e5001b0087.ctex"]
 
 [params]
 

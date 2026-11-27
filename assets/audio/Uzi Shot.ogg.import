@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://br4gtucx63a1i"
+path="res://.godot/imported/Uzi Shot.ogg-6d56bd041774d38bd2ba97cd230d1e6a.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/audio/Uzi Shot.ogg"
+dest_files=["res://.godot/imported/Uzi Shot.ogg-6d56bd041774d38bd2ba97cd230d1e6a.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

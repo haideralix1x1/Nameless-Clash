@@ -313,6 +313,7 @@ var _bomb_throw_timer: float = 0.0
 @onready var _name_label: Label = $OverheadUI/NameLabel
 @onready var _health_fill: ColorRect = $OverheadUI/HealthBarBg/HealthBarFill
 @onready var _audio_sfx: AudioStreamPlayer2D = $AudioSfx
+var _reload_audio: AudioStreamPlayer2D = null
 @onready var _jetpack_audio: AudioStreamPlayer2D = $JetpackAudio
 @onready var _camera: Camera2D = $Camera2D
 
@@ -388,6 +389,13 @@ func setup_player(
 
 func _ready() -> void:
 	add_to_group("players")
+	if is_instance_valid(_audio_sfx):
+		_audio_sfx.max_polyphony = 4
+	_reload_audio = AudioStreamPlayer2D.new()
+	_reload_audio.name = "ReloadAudio"
+	_reload_audio.bus = &"SFX"
+	_reload_audio.max_distance = 1600.0
+	add_child(_reload_audio)
 	spawn_invuln_timer = SPAWN_INVULN_SEC
 	_init_agent_kit()
 	_apply_modular_textures()
@@ -643,6 +651,8 @@ func _apply_modular_textures() -> void:
 func _exit_tree() -> void:
 	if is_instance_valid(_audio_sfx) and _audio_sfx.playing:
 		_audio_sfx.stop()
+	if is_instance_valid(_reload_audio) and _reload_audio.playing:
+		_reload_audio.stop()
 	if is_instance_valid(_jetpack_audio) and _jetpack_audio.playing:
 		_jetpack_audio.stop()
 
@@ -979,7 +989,10 @@ func _process_alive(delta: float) -> void:
 					if res_ammo > 0:
 						res_ammo -= 1
 						_set_active_reserve_ammo(res_ammo)
-					_play_local_sfx("res://assets/audio/pickup.wav", -10.0)
+					if _weapon.reload_sound_path.is_empty():
+						_play_local_sfx("res://assets/audio/pickup.wav", -10.0)
+					elif current_ammo < _weapon.mag_size and res_ammo != 0 and is_instance_valid(_reload_audio) and not _reload_audio.playing:
+						_play_reload_sfx(_weapon.reload_sound_path)
 				if current_ammo < _weapon.mag_size and res_ammo != 0:
 					_reload_timer = _weapon.reload_time
 				else:
@@ -1132,6 +1145,7 @@ func _process_alive(delta: float) -> void:
 			else:
 				if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
 					is_reloading = false
+					_stop_reload_sfx()
 					_emit_ammo()
 				if not is_reloading:
 					if current_ammo <= 0:
@@ -1223,6 +1237,7 @@ func _process_alive(delta: float) -> void:
 		else:
 			if is_reloading and _weapon.single_shell_reload and current_ammo > 0:
 				is_reloading = false
+				_stop_reload_sfx()
 				_emit_ammo()
 			if not is_reloading:
 				if current_ammo <= 0:
@@ -1461,6 +1476,11 @@ func start_reload() -> void:
 		return
 	is_reloading = true
 	_reload_timer = _weapon.reload_time
+	if not _weapon.reload_sound_path.is_empty():
+		if NetworkManager.is_network_active():
+			play_reload_sfx_rpc.rpc(_weapon.reload_sound_path)
+		else:
+			_play_reload_sfx(_weapon.reload_sound_path)
 	_emit_ammo()
 
 
@@ -1758,6 +1778,7 @@ func _apply_weapon(weapon_id: int) -> void:
 	current_weapon_id = safe_id
 	_weapon = WeaponData.get_weapon(safe_id, weapon_skin_id, m4a1_rail_mod)
 	is_reloading = false
+	_stop_reload_sfx()
 	var active_res: int = get_active_reserve_ammo()
 	var saved_ammo: int = _secondary_saved_ammo if _is_using_secondary_slot() else _primary_saved_ammo
 	if active_res >= 0 and saved_ammo >= 0:
@@ -1936,6 +1957,7 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 					_secondary_reserve_ammo = -1 if (new_w_id == _original_secondary_id) else pickup_res
 					current_ammo = picked_w.mag_size
 					is_reloading = false
+					_stop_reload_sfx()
 					_emit_ammo()
 				else:
 					secondary_weapon_id = new_w_id
@@ -1947,6 +1969,7 @@ func apply_pickup(pickup_type: String, value: int) -> void:
 				_primary_reserve_ammo = -1 if (new_w_id == primary_weapon_id) else pickup_res
 				current_ammo = picked_w.mag_size
 				is_reloading = false
+				_stop_reload_sfx()
 				_emit_ammo()
 			else:
 				_equipped_primary_id = new_w_id
@@ -2145,6 +2168,7 @@ func _trigger_death(attacker_id: int, weapon_name: String, attacker_name: String
 	is_dead = true
 	is_jetpacking = false
 	is_reloading = false
+	_stop_reload_sfx()
 	stun_timer = 0.0
 	invis_timer = 0.0
 	speed_boost_timer = 0.0
@@ -2399,6 +2423,7 @@ func _respawn_self() -> void:
 	jetpack_fuel = MAX_FUEL
 	is_dead = false
 	is_reloading = false
+	_stop_reload_sfx()
 	stun_timer = 0.0
 	invis_timer = 0.0
 	speed_boost_timer = 0.0
@@ -2770,12 +2795,40 @@ func _emit_ammo() -> void:
 
 
 func _play_local_sfx(path: String, volume_db_offset: float = 0.0, pitch_override: float = 0.0) -> void:
-	var stream: AudioStream = load(path) as AudioStream
+	if path.is_empty():
+		return
+	var stream: AudioStream = (load(path) as AudioStream) if ResourceLoader.exists(path) else null
+	if stream == null and path.ends_with(".ogg") and FileAccess.file_exists(path):
+		stream = AudioStreamOggVorbis.load_from_file(path)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
 	if stream != null and is_instance_valid(_audio_sfx):
-		_audio_sfx.stream = stream
+		if _audio_sfx.stream != stream:
+			_audio_sfx.stream = stream
 		_audio_sfx.volume_db = volume_db_offset
 		_audio_sfx.pitch_scale = pitch_override if pitch_override > 0.0 else randf_range(0.94, 1.06)
 		_audio_sfx.play()
+
+
+@rpc("any_peer", "call_local", "unreliable")
+func play_reload_sfx_rpc(path: String) -> void:
+	_play_reload_sfx(path)
+
+
+func _play_reload_sfx(path: String, volume_db_offset: float = -2.0) -> void:
+	if path.is_empty() or not is_instance_valid(_reload_audio):
+		return
+	var stream: AudioStream = load(path) as AudioStream
+	if stream != null:
+		_reload_audio.stream = stream
+		_reload_audio.volume_db = volume_db_offset
+		_reload_audio.pitch_scale = 1.0
+		_reload_audio.play()
+
+
+func _stop_reload_sfx() -> void:
+	if is_instance_valid(_reload_audio) and _reload_audio.playing:
+		_reload_audio.stop()
 
 
 func is_alive() -> bool:
@@ -3214,7 +3267,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_giant_sword":
 			_cast_cleave_or_giant(origin, cast_angle, dmg, stun_dur, col, ab_name, 3, 0.20, 2.35, local_auth)
 			add_screen_shake(2.2)
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.15)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 1.15)
 		"fireball":
 			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, 1, local_auth, p_style)
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -4.0, 1.15)
@@ -3244,14 +3297,14 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 								p.apply_hit(dmg, peer_id, ab_name, player_name, kb)
 								gain_ult_charge(2.0)
 			add_screen_shake(2.0)
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.15)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 1.15)
 		"lava_bomb":
 			_cast_lava_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth, str(ab.get("proj_style", "fireball")))
 			_play_local_sfx("res://assets/audio/shoot_rpg.wav", -3.0, 0.95)
 		"ult_firestorm":
 			_cast_fireballs(origin, cast_angle, dmg, stun_dur, col, ab_name, int(ab.get("shots", 7)), local_auth, p_style)
 			add_screen_shake(2.4)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.95)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 0.95)
 		"ice_shards":
 			_cast_multi_proj(origin, cast_angle, dmg, int(ab.get("shots", 4)), 22.0, "ice_shard", col, ab_name, stun_dur, 1080.0, 0.0, false, local_auth, 1.0, 1.2)
 			_play_local_sfx("res://assets/audio/shoot_vector.wav", -3.0, 1.45)
@@ -3273,7 +3326,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_blink_slash":
 			_cast_teleport(cast_pos, cast_angle, 310.0, dmg, stun_dur, col, ab_name, true, local_auth)
 			add_screen_shake(2.2)
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.25)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 1.25)
 		"speed":
 			speed_boost_timer = float(ab.get("duration", 4.0))
 			speed_boost_mult = float(ab.get("speed_mult", 1.8))
@@ -3307,7 +3360,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"dash_stun":
 			velocity += Vector2.from_angle(cast_angle) * 600.0
 			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth)
-			_play_local_sfx("res://assets/audio/explosion.wav", -4.0, 1.35)
+			_play_local_sfx("res://assets/audio/blast.ogg", -4.0, 1.35)
 		"stun_bolt", "stun_aoe", "stun_bomb":
 			# Always throw a visible Stun Bomb along aim that stuns enemies in its landing circle (never stuns self)
 			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth)
@@ -3315,7 +3368,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_stun_nova":
 			_cast_stun_bomb(origin, cast_angle, dmg, stun_dur, col, ab_name, local_auth, 280.0, 740.0)
 			add_screen_shake(2.4)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+			_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 0.85)
 		"wall":
 			_spawn_barrier_wall(cast_pos, cast_angle, int(ab.get("wall_hp", 240)), float(ab.get("duration", 5.5)), col)
 			_play_local_sfx("res://assets/audio/pickup.wav", -2.0, 0.72)
@@ -3324,7 +3377,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			_play_local_sfx("res://assets/audio/shoot_m4a1.wav", -3.0)
 		"shotgun_blast":
 			_cast_gun_burst(origin, cast_angle, maxi(dmg, 20), maxi(int(ab.get("shots", 7)), 7), 14.0, col, ab_name, stun_dur, 920.0, local_auth, 0.24)
-			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0)
+			_play_local_sfx("res://assets/audio/shoot_shotgun.ogg", -3.0)
 		"ult_gun_storm":
 			_cast_gun_burst(origin, cast_angle, dmg, int(ab.get("shots", 14)), 14.0, col, ab_name, stun_dur, 1340.0, local_auth)
 			add_screen_shake(2.0)
@@ -3341,7 +3394,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_backstab_tp":
 			_cast_backstab_teleport(cast_pos, dmg, col, ab_name, local_auth)
 			add_screen_shake(2.0)
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.3)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 1.3)
 		"impact_grenade":
 			var ig := _spawn_custom_bullet(origin, cast_angle, 740.0, dmg, "grenade", col, ab_name, stun_dur, 1.1, false, 2.2, local_auth)
 			if ig != null:
@@ -3376,13 +3429,13 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			if wl != null:
 				wl.flight_dir = Vector2.from_angle(cast_angle)
 			add_screen_shake(2.2)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.1)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.1)
 		"dual_shotguns":
 			dual_shotgun_timer = float(ab.get("duration", 4.0))
 			dual_shotgun_shots = int(ab.get("shots", 5))
 			_dual_shotgun_accum = 0.0
 			_fire_dual_shotgun_blast()
-			_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -2.0, 1.15)
+			_play_local_sfx("res://assets/audio/shoot_shotgun.ogg", -2.0, 1.15)
 		"sticky_bomb":
 			var sb := _spawn_bomb_instance(origin, cast_angle, "sticky", 720.0, dmg, 165.0, col, ab_name, local_auth)
 			if sb != null:
@@ -3413,7 +3466,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 							prop_obj.on_shot_hit(dmg, peer_id)
 			_spawn_vfx_burst(cast_pos, 270.0, col)
 			add_screen_shake(2.8)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.9)
+			_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 0.9)
 		"push_circle":
 			var rad: float = 320.0
 			var push_force: float = 1480.0
@@ -3431,7 +3484,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 							if stun_dur > 0.0 and p.has_method("apply_stun"):
 								p.apply_stun(stun_dur, peer_id)
 			_spawn_air_wave_circle(cast_pos, rad, Color(0.55, 0.90, 1.0))
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 1.35)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 1.35)
 		"scream_wave":
 			var sw_rad: float = 340.0
 			var sw_half_cone: float = deg_to_rad(48.0)
@@ -3451,7 +3504,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 								p.add_screen_shake(4.5)
 			_spawn_scream_wave_vfx(cast_pos, cast_angle, sw_rad, col)
 			add_screen_shake(2.0)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.35)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.35)
 		"ability_lock_smoke":
 			var sm := _spawn_custom_bullet(origin, cast_angle, 860.0, dmg, "smoke_orb", col, ab_name, 0.0, 0.0, false, 1.3, local_auth)
 			if sm != null:
@@ -3518,7 +3571,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_earth_quake_zone":
 			_spawn_earthquake_wave(cast_pos, 480.0, float(ab.get("duration", 5.0)), dmg, ab_name, local_auth)
 			add_screen_shake(2.2)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.75)
+			_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 0.75)
 		"bat_swarm":
 			var bat_targets: Array[Node2D] = []
 			for p in get_tree().get_nodes_in_group("players"):
@@ -3632,7 +3685,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				fg.radius_scale = 2.0
 				fg.knockback_mult = 2.5
 				fg.pierce_players = true
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.75)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 0.75)
 		"ult_jump_execute":
 			control_lock_timer = 0.95
 			var fwd_dir: Vector2 = Vector2.from_angle(cast_angle)
@@ -3738,7 +3791,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			control_lock_timer = 0.0
 			_spawn_vfx_burst(cast_pos, 95.0, col)
 			add_screen_shake(2.0)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.8)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 0.8)
 		"boomerang_sword", "headless_throw":
 			var is_head: bool = (kind == "headless_throw")
 			var bs := _spawn_custom_bullet(origin, cast_angle, 840.0, dmg, "mummy_head" if is_head else "thrown_spear", col, ab_name, 0.0, 0.0, false, 1.8, local_auth)
@@ -3884,7 +3937,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 		"ult_giant_snake":
 			_spawn_summon("giant_snake", origin, dmg, float(ab.get("duration", 4.0)), col, ab_name, local_auth)
 			add_screen_shake(2.2)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.0)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.0)
 		"zoom_out_4x":
 			zoom_out_timer = float(ab.get("duration", 5.0))
 			_play_local_sfx("res://assets/audio/pickup.wav", -1.0, 1.3)
@@ -3938,7 +3991,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			if tor != null:
 				tor.move_dir_x = t_fwd
 			add_screen_shake(2.0)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.8)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 0.8)
 		"lava_platform":
 			var lp := _spawn_custom_bullet(origin, cast_angle, 880.0, dmg, "fireball", col, ab_name, 0.0, 18.0, false, 1.4, local_auth)
 			if lp != null:
@@ -3978,7 +4031,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 				mb.stop_on_vertical_wall = false
 				mb.pierce_players = true
 				mb.spin_speed = 8.0
-			_play_local_sfx("res://assets/audio/explosion.wav", -3.0, 0.85)
+			_play_local_sfx("res://assets/audio/blast.ogg", -3.0, 0.85)
 		"piercing_crystal":
 			var pc := _spawn_custom_bullet(origin, cast_angle, 560.0, dmg, "ice_shard", col, ab_name, 0.0, 0.0, false, 3.0, local_auth)
 			if pc != null:
@@ -3992,7 +4045,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 			var cw_pos: Vector2 = cast_pos + Vector2.from_angle(cast_angle) * 180.0
 			_spawn_summon("crush_walls", cw_pos, dmg, 1.2, col, ab_name, local_auth)
 			add_screen_shake(2.4)
-			_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.8)
+			_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 0.8)
 		"long_spear":
 			_cast_beam_attack(origin, cast_angle, 230.0, 22.0, dmg, col, ab_name, 0.25, local_auth)
 			_play_local_sfx("res://assets/audio/jump.wav", -1.0, 0.85)
@@ -4061,7 +4114,7 @@ func _execute_ability_local(slot_idx: int, cast_pos: Vector2, cast_angle: float)
 									if stun_dur > 0.0 and p.has_method("apply_stun"):
 										p.apply_stun(stun_dur, peer_id)
 					add_screen_shake(2.4)
-					_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 0.85)
+					_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 0.85)
 			)
 		"ult_boxer_flurry":
 			var tgt_bf: Node2D = null
@@ -4359,7 +4412,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 				var fin_dir: float = 1.0 if facing_right else -1.0
 				_spawn_vfx_burst(tgt_p, 130.0, Color(1.0, 0.68, 0.22))
 				add_screen_shake(3.0)
-				_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 1.05)
+				_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 1.05)
 				if _flurry_auth and is_instance_valid(_flurry_target) and _flurry_target.has_method("apply_hit"):
 					_flurry_target.apply_hit(_flurry_dmg, peer_id, _flurry_name, player_name, Vector2(fin_dir * 520.0, -260.0))
 				_flurry_target = null
@@ -4388,7 +4441,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 				if _is_controlled_locally() and _bat_ult_target.has_method("apply_hit"):
 					_bat_ult_target.apply_hit(100, peer_id, "Bat Execution", player_name, Vector2.ZERO)
 				_spawn_rising_particles(_bat_ult_target.global_position, Color(0.95, 0.14, 0.25), false, 12)
-				_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.2)
+				_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.2)
 				_bat_ult_timer = minf(_bat_ult_timer, 0.18)
 		else:
 			_bat_ult_sprite.flip_h = not facing_right
@@ -4422,7 +4475,7 @@ func _tick_agent_buffs_and_dots(delta: float) -> void:
 				if is_instance_valid(_yagami_ult_target) and _yagami_ult_target.has_method("is_alive") and _yagami_ult_target.is_alive() and _yagami_ult_target.has_method("apply_hit"):
 					_yagami_ult_target.apply_hit(100, peer_id, "Shadow Execution", player_name, Vector2.ZERO)
 			add_screen_shake(2.6)
-			_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.25)
+			_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.25)
 		if _yagami_ult_timer <= 0.0:
 			control_lock_timer = 0.0
 		queue_redraw()
@@ -4609,7 +4662,7 @@ func _fire_dual_shotgun_blast() -> void:
 	# Two shotguns firing normal shotgun pellets & range (speed 960, lifetime 0.42 ~400px range)
 	for off_v in [-perp, perp]:
 		_cast_gun_burst(base_m + off_v, aim_angle, 12, 5, 13.0, Color(1.0, 0.78, 0.30), "Dual Shotguns", 0.0, 960.0, local_auth, 0.38)
-	_play_local_sfx("res://assets/audio/shoot_shotgun.wav", -3.0, 1.05)
+	_play_local_sfx("res://assets/audio/shoot_shotgun.ogg", -3.0, 1.05)
 
 
 func _update_dual_shotgun_visuals(show: bool) -> void:
@@ -4692,7 +4745,7 @@ func _fire_contra_ult_missile() -> void:
 		bz.explosion_radius = 165.0
 		bz.homing_turn_rate = 9.0
 	add_screen_shake(2.2)
-	_play_local_sfx("res://assets/audio/shoot_rpg.wav", -1.0, 0.85)
+	_play_local_sfx("res://assets/audio/RPG Launch.ogg", -1.0, 0.95)
 
 
 func _spawn_custom_bullet(origin: Vector2, angle: float, spd: float, dmg: int, style: String, col: Color, w_name: String, stun_dur: float, grav: float, homing: bool, life: float, local_auth: bool) -> Node:
@@ -6450,7 +6503,7 @@ func _execute_touch_fire_local(fire_pos: Vector2) -> void:
 		parent_fire.add_child(flame_fx)
 	_spawn_rising_particles(fire_pos, Color(1.0, 0.45, 0.12), false, 16)
 	add_screen_shake(1.6)
-	_play_local_sfx("res://assets/audio/explosion.wav", -2.0, 1.15)
+	_play_local_sfx("res://assets/audio/blast.ogg", -2.0, 1.15)
 
 
 func _pick_random_banish_pos(from_pos: Vector2) -> Vector2:
@@ -6831,9 +6884,9 @@ func _perform_inferno_ult_on_victim(tgt_inf: Node2D, cast_pos: Vector2, ab_name:
 				var mhp: float = float(tgt_inf.get("max_health")) if "max_health" in tgt_inf else 100.0
 				var tick_dmg: int = maxi(20, int(ceil(mhp / 5.0)))
 				tgt_inf.apply_hit(tick_dmg, peer_id, ab_name, player_name, Vector2.ZERO)
-			_play_local_sfx("res://assets/audio/explosion.wav", -6.0, 1.35)
+			_play_local_sfx("res://assets/audio/blast.ogg", -6.0, 1.35)
 		)
-	_play_local_sfx("res://assets/audio/explosion.wav", -1.0, 0.85)
+	_play_local_sfx("res://assets/audio/blast.ogg", -1.0, 0.85)
 	add_screen_shake(2.4)
 
 

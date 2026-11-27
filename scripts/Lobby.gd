@@ -55,6 +55,7 @@ var _draft_selected_arch: int = 0
 
 
 func _ready() -> void:
+	SettingsManager.play_bgm("menu")
 	if not NetworkManager.is_network_active():
 		NetworkManager.bot_count = 0
 	_local_bot_count = NetworkManager.bot_count

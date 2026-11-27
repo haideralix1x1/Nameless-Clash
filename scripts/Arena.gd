@@ -44,6 +44,7 @@ var _shooting_hud_lbl: Label = null
 
 
 func _ready() -> void:
+	SettingsManager.play_bgm("arena")
 	NetworkManager.ensure_offline_player()
 	if NetworkManager.selected_map_id in DOUBLE_MAP_IDS:
 		arena_width = DEFAULT_ARENA_WIDTH * 2.0
@@ -2217,7 +2218,13 @@ class InteractableMissileLauncher extends Node2D:
 			world_root.add_child(b)
 			var sfx := AudioStreamPlayer2D.new()
 			sfx.global_position = global_position + launcher_pos
-			sfx.stream = load("res://assets/audio/shoot_rpg.wav") as AudioStream
+			var rpg_path: String = "res://assets/audio/RPG Launch.ogg"
+			var rpg_stream: AudioStream = (load(rpg_path) as AudioStream) if ResourceLoader.exists(rpg_path) else null
+			if rpg_stream == null and FileAccess.file_exists(rpg_path):
+				rpg_stream = AudioStreamOggVorbis.load_from_file(rpg_path)
+			if rpg_stream is AudioStreamOggVorbis:
+				(rpg_stream as AudioStreamOggVorbis).loop = false
+			sfx.stream = rpg_stream
 			sfx.volume_db = -1.0
 			sfx.max_distance = 1800.0
 			sfx.bus = &"SFX"
@@ -3217,34 +3224,21 @@ class ArenaAutoMine extends Area2D:
 		queue_free()
 
 	func _draw() -> void:
-		draw_texture_rect(GroundBombIcon.TEX_BOMB_MINE, Rect2(-13.0, -14.0, 26.0, 26.0), false)
+		draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-13.0, -14.0, 26.0, 26.0), WeaponData.get_bomb_region("mine"))
 		var led_on: bool = _arm_timer <= 0.0 and sin(_pulse) > 0.0
 		if led_on:
 			draw_circle(Vector2(0, -1), 3.0, Color(1.0, 0.25, 0.18, 0.85))
 
 
 class GroundBombIcon extends Node2D:
-	const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
-	const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
-	const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
-	const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
-	const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
+	const BOMB_TYPE_BY_IDX: PackedStringArray = ["frag", "sticky", "time", "mine", "cluster"]
 	var bomb_idx: int = 0
 
 	func _draw() -> void:
 		draw_circle(Vector2.ZERO, 16.0, Color(0.08, 0.12, 0.18, 0.45))
 		var r := Rect2(-15.0, -15.0, 30.0, 30.0)
-		match bomb_idx:
-			1: # sticky
-				draw_texture_rect(TEX_BOMB_STICKY, r, false)
-			2: # time
-				draw_texture_rect(TEX_BOMB_TIME, r, false)
-			3: # mine
-				draw_texture_rect(TEX_BOMB_MINE, r, false)
-			4: # cluster
-				draw_texture_rect(TEX_BOMB_CLUSTER, r, false)
-			_: # frag
-				draw_texture_rect(TEX_BOMB_FRAG, r, false)
+		var b_key: String = BOMB_TYPE_BY_IDX[bomb_idx] if (bomb_idx >= 0 and bomb_idx < BOMB_TYPE_BY_IDX.size()) else "frag"
+		draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, r, WeaponData.get_bomb_region(b_key))
 
 
 class TreasurePointOrb extends Node2D:

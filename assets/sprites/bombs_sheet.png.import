@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ckrxmp5y032kh"
-path="res://.godot/imported/jackson_sheet.png-d61114e5a2780189358dbe7425f00889.ctex"
+uid="uid://mrko88womqvq"
+path="res://.godot/imported/bombs_sheet.png-d8f7d7fe2fbac181c3b73ee300df623c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/characters/jackson_sheet.png"
-dest_files=["res://.godot/imported/jackson_sheet.png-d61114e5a2780189358dbe7425f00889.ctex"]
+source_file="res://assets/sprites/bombs_sheet.png"
+dest_files=["res://.godot/imported/bombs_sheet.png-d8f7d7fe2fbac181c3b73ee300df623c.ctex"]
 
 [params]
 

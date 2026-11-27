@@ -45,6 +45,7 @@ var sfx_volume: float = 0.85
 var music_volume: float = 0.45
 var music_enabled: bool = true
 var sfx_enabled: bool = true
+var master_muted: bool = false
 
 # Graphics & Performance
 var resolution_index: int = 3
@@ -70,22 +71,39 @@ var allow_snipers: bool = true
 var allow_shotguns: bool = true
 var allow_explosives: bool = true
 
+const BGM_MENU_PATH: String = "res://assets/audio/menu_music.ogg"
+const BGM_ARENA_PATH: String = "res://assets/audio/Stage Music.ogg"
+const UI_CLICK_SFX_PATH: String = "res://assets/audio/reload_shotgun.ogg"
+
 var _bgm_player: AudioStreamPlayer
+var _bgm_track_key: String = ""
+var _bgm_tween: Tween = null
+var _bgm_target_db: float = -6.0
+var _ui_click_player: AudioStreamPlayer
+var _last_ui_click_msec: int = 0
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_reset_default_touch_layout(false)
 	_ensure_audio_buses()
 	load_settings()
 	_apply_audio_settings()
 	_apply_graphics_settings()
 	_setup_bgm()
+	_setup_ui_click_sfx()
 
 
 func _exit_tree() -> void:
+	if is_instance_valid(_bgm_tween):
+		_bgm_tween.kill()
+		_bgm_tween = null
 	if is_instance_valid(_bgm_player) and _bgm_player.playing:
 		_bgm_player.stop()
 		_bgm_player.stream = null
+	if is_instance_valid(_ui_click_player):
+		_ui_click_player.stop()
+		_ui_click_player.stream = null
 
 
 static func get_builtin_default_ui_layout() -> Dictionary:
@@ -211,17 +229,152 @@ func _setup_bgm() -> void:
 	_bgm_player = AudioStreamPlayer.new()
 	_bgm_player.name = "BGMPlayer"
 	_bgm_player.bus = "Music"
-	var stream: AudioStream = load("res://assets/audio/bgm_loop.wav") as AudioStream
-	if stream is AudioStreamWAV:
+	_bgm_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_bgm_player.volume_db = _bgm_target_db
+	add_child(_bgm_player)
+	call_deferred("_start_initial_bgm")
+
+
+func _start_initial_bgm() -> void:
+	if not is_instance_valid(_bgm_player) or _bgm_player.playing or not _bgm_track_key.is_empty():
+		return
+	var cur_path: String = ""
+	if get_tree() != null and get_tree().current_scene != null:
+		cur_path = str(get_tree().current_scene.scene_file_path)
+	if cur_path.contains("PoseEditor") or cur_path.contains("SplashScreen"):
+		return
+	elif cur_path.contains("Arena"):
+		play_bgm("arena", false)
+	else:
+		play_bgm("menu", false)
+
+
+func _load_bgm_stream(track_key: String) -> AudioStream:
+	var path: String = BGM_ARENA_PATH if track_key == "arena" else BGM_MENU_PATH
+	var stream: AudioStream = (load(path) as AudioStream) if ResourceLoader.exists(path) else null
+	if stream == null and path.ends_with(".ogg") and FileAccess.file_exists(path):
+		stream = AudioStreamOggVorbis.load_from_file(path)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	elif stream is AudioStreamWAV:
 		var wav := stream as AudioStreamWAV
 		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		wav.loop_begin = 0
 		wav.loop_end = int(wav.get_length() * wav.mix_rate)
-	_bgm_player.stream = stream
-	_bgm_player.volume_db = -4.0
-	add_child(_bgm_player)
-	if DisplayServer.get_name() != "headless" and stream != null:
+	return stream
+
+
+func play_bgm(track_key: String, fade: bool = true) -> void:
+	if not is_instance_valid(_bgm_player):
+		return
+	var target_path: String = BGM_ARENA_PATH if track_key == "arena" else BGM_MENU_PATH
+	var target_db: float = -6.0
+	if _bgm_player.stream != null and (_bgm_track_key == track_key or _bgm_player.stream.resource_path == target_path):
+		_bgm_track_key = track_key
+		_bgm_target_db = target_db
+		if DisplayServer.get_name() != "headless" and not _bgm_player.playing:
+			_bgm_player.volume_db = _bgm_target_db
+			_bgm_player.play()
+		return
+	var stream: AudioStream = _load_bgm_stream(track_key)
+	if stream == null:
+		return
+	_bgm_track_key = track_key
+	_bgm_target_db = target_db
+	if is_instance_valid(_bgm_tween):
+		_bgm_tween.kill()
+		_bgm_tween = null
+	if DisplayServer.get_name() == "headless":
+		_bgm_player.stream = stream
+		_bgm_player.volume_db = _bgm_target_db
+		return
+	if fade and _bgm_player.playing:
+		_bgm_tween = create_tween()
+		_bgm_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		_bgm_tween.tween_property(_bgm_player, "volume_db", -32.0, 0.25)
+		_bgm_tween.tween_callback(func():
+			if is_instance_valid(_bgm_player):
+				_bgm_player.stream = stream
+				_bgm_player.play()
+		)
+		_bgm_tween.tween_property(_bgm_player, "volume_db", _bgm_target_db, 0.35)
+	else:
+		_bgm_player.stream = stream
+		_bgm_player.volume_db = _bgm_target_db
 		_bgm_player.play()
+
+
+func stop_bgm(_fade: bool = false) -> void:
+	_bgm_track_key = ""
+	if is_instance_valid(_bgm_tween):
+		_bgm_tween.kill()
+		_bgm_tween = null
+	if is_instance_valid(_bgm_player) and _bgm_player.playing:
+		_bgm_player.stop()
+
+
+func _setup_ui_click_sfx() -> void:
+	_ui_click_player = AudioStreamPlayer.new()
+	_ui_click_player.name = "UIClickPlayer"
+	_ui_click_player.bus = "SFX"
+	_ui_click_player.max_polyphony = 4
+	_ui_click_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_ui_click_player.volume_db = -4.0
+	var stream: AudioStream = (load(UI_CLICK_SFX_PATH) as AudioStream) if ResourceLoader.exists(UI_CLICK_SFX_PATH) else null
+	if stream == null and FileAccess.file_exists(UI_CLICK_SFX_PATH):
+		stream = AudioStreamOggVorbis.load_from_file(UI_CLICK_SFX_PATH)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
+	_ui_click_player.stream = stream
+	add_child(_ui_click_player)
+
+
+func play_ui_click() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if not is_instance_valid(_ui_click_player) or _ui_click_player.stream == null:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now - _last_ui_click_msec < 65:
+		return
+	_last_ui_click_msec = now
+	_ui_click_player.pitch_scale = randf_range(0.96, 1.04)
+	_ui_click_player.play()
+
+
+func _input(event: InputEvent) -> void:
+	var is_touch_or_click: bool = false
+	if event is InputEventScreenTouch:
+		is_touch_or_click = (event as InputEventScreenTouch).pressed
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		is_touch_or_click = mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and mb.device != InputEvent.DEVICE_ID_EMULATION
+	if not is_touch_or_click:
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
+	var cur_scene: Node = tree.current_scene
+	if cur_scene == null:
+		return
+	var cur_path: String = str(cur_scene.scene_file_path)
+	if cur_path.contains("PoseEditor") or cur_path.contains("SplashScreen"):
+		return
+	if cur_path.contains("Arena"):
+		if not tree.paused and not _is_arena_ui_open(cur_scene):
+			return
+	play_ui_click()
+
+
+func _is_arena_ui_open(arena_scene: Node) -> bool:
+	var hud: Node = arena_scene.get_node_or_null("HUD")
+	if hud == null:
+		return false
+	for prop in ["_drawer_panel", "_preset_overlay", "_layout_overlay", "_match_end_overlay", "_chat_panel"]:
+		var panel: Variant = hud.get(prop)
+		if panel is Control and is_instance_valid(panel) and (panel as Control).visible:
+			return true
+	return false
 
 
 func load_settings() -> void:
@@ -260,6 +413,7 @@ func load_settings() -> void:
 	music_volume = clampf(float(cfg.get_value("audio", "music_volume", 0.45)), 0.0, 1.0)
 	music_enabled = bool(cfg.get_value("audio", "music_enabled", true))
 	sfx_enabled = bool(cfg.get_value("audio", "sfx_enabled", true))
+	master_muted = bool(cfg.get_value("audio", "master_muted", false))
 
 	var saved_res_ver: int = int(cfg.get_value("graphics", "res_ver", 1))
 	var migrate_res: bool = saved_res_ver < 2
@@ -313,6 +467,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_volume", music_volume)
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("audio", "sfx_enabled", sfx_enabled)
+	cfg.set_value("audio", "master_muted", master_muted)
 
 	cfg.set_value("graphics", "resolution_index", resolution_index)
 	cfg.set_value("graphics", "res_ver", 2)
@@ -368,9 +523,39 @@ func apply_and_save() -> void:
 
 
 func _apply_audio_settings() -> void:
-	_set_bus_linear("Master", master_volume)
-	_set_bus_linear("SFX", sfx_volume if sfx_enabled else 0.0)
-	_set_bus_linear("Music", music_volume if music_enabled else 0.0)
+	var all_muted: bool = is_game_muted()
+	_set_bus_linear("Master", 0.0 if all_muted else master_volume)
+	_set_bus_linear("SFX", 0.0 if (all_muted or not sfx_enabled) else sfx_volume)
+	_set_bus_linear("Music", 0.0 if (all_muted or not music_enabled) else music_volume)
+
+
+func is_game_muted() -> bool:
+	var no_music: bool = (not music_enabled) or (music_volume <= 0.005)
+	var no_sfx: bool = (not sfx_enabled) or (sfx_volume <= 0.005)
+	return master_muted or master_volume <= 0.005 or (no_music and no_sfx)
+
+
+func toggle_master_mute() -> bool:
+	if is_game_muted():
+		master_muted = false
+		music_enabled = true
+		sfx_enabled = true
+		if master_volume <= 0.005:
+			master_volume = 0.85
+		if sfx_volume <= 0.005:
+			sfx_volume = 0.85
+		if music_volume <= 0.005:
+			music_volume = 0.45
+		apply_and_save()
+		if DisplayServer.get_name() != "headless" and is_instance_valid(_bgm_player) and _bgm_player.stream != null and not _bgm_player.playing and not _bgm_track_key.is_empty():
+			_bgm_player.volume_db = _bgm_target_db
+			_bgm_player.play()
+		return false
+	master_muted = true
+	music_enabled = false
+	sfx_enabled = false
+	apply_and_save()
+	return true
 
 
 func _set_bus_linear(bus_name: String, linear_val: float) -> void:

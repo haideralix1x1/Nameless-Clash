@@ -230,6 +230,7 @@ func _physics_process(delta: float) -> void:
 					exp.explosion_radius = 155.0
 					exp.max_damage = 0
 					exp.can_deal_damage = false
+					exp.play_blast_sfx = true
 					get_parent().add_child(exp)
 				queue_free()
 				return

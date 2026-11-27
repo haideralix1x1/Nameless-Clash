@@ -112,14 +112,14 @@ z_index = 1
 position = Vector2(24, 10)
 scale = Vector2(0.85, 0.85)
 texture = ExtResource("8_weapons_tex")
-hframes = 16
+hframes = 15
 vframes = 10
 
 [node name="PrimaryWeapon" type="Sprite2D" parent="WeaponPivot"]
 position = Vector2(18, -2)
 scale = Vector2(0.9, 0.9)
 texture = ExtResource("8_weapons_tex")
-hframes = 16
+hframes = 15
 vframes = 10
 
 [node name="MuzzlePrimary" type="Marker2D" parent="WeaponPivot"]

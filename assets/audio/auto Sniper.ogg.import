@@ -1,0 +1,19 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+uid="uid://bh13y1bt155tb"
+path="res://.godot/imported/auto Sniper.ogg-913b8ea422d37b09abfbcfaef40e40a5.oggvorbisstr"
+
+[deps]
+
+source_file="res://assets/audio/auto Sniper.ogg"
+dest_files=["res://.godot/imported/auto Sniper.ogg-913b8ea422d37b09abfbcfaef40e40a5.oggvorbisstr"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

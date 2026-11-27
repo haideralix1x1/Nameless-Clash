@@ -33,5 +33,6 @@ is_explosive = false
 explosion_radius = 0.0
 muzzle_flash_scale = 1.35
 bullet_color = Color(1, 0.58, 0.2, 1)
-sound_path = "res://assets/audio/shoot_shotgun.wav"
+sound_path = "res://assets/audio/shoot_shotgun.ogg"
+reload_sound_path = "res://assets/audio/reload_shotgun.ogg"
 sprite_frame = 5

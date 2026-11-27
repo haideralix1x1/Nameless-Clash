@@ -33,5 +33,5 @@ is_explosive = false
 explosion_radius = 0.0
 muzzle_flash_scale = 1.4
 bullet_color = Color(0.4, 0.95, 1, 1)
-sound_path = "res://assets/audio/shoot_sniper.wav"
+sound_path = "res://assets/audio/shoot_sniper.ogg"
 sprite_frame = 7

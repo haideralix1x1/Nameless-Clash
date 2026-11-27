@@ -33,5 +33,5 @@ is_explosive = false
 explosion_radius = 0.0
 muzzle_flash_scale = 0.7
 bullet_color = Color(0.95, 0.9, 0.5, 1)
-sound_path = "res://assets/audio/shoot_vector.wav"
+sound_path = "res://assets/audio/Uzi Shot.ogg"
 sprite_frame = 4

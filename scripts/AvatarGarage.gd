@@ -43,6 +43,7 @@ var _custom_color_btn: ColorPickerButton
 
 
 func _ready() -> void:
+	SettingsManager.play_bgm("menu")
 	if not ProfileManager.is_using_custom_dummy():
 		ProfileManager.apply_dummy_preset(ProfileManager.dummy_id, true)
 	var cur_dm: Dictionary = ProfileManager.CUSTOM_DUMMIES[clampi(ProfileManager.dummy_id, 0, ProfileManager.CUSTOM_DUMMIES.size() - 1)]

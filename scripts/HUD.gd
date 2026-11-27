@@ -822,7 +822,10 @@ func _build_ui() -> void:
 	_btn_presets.text = "KIT"
 	_btn_presets.focus_mode = Control.FOCUS_NONE
 	_style_circle_btn(_btn_presets, Color(0.14, 0.16, 0.22, 0.65), Color(1.0, 1.0, 1.0, 0.85), 74, 16)
-	_btn_presets.pressed.connect(func(): _open_preset_selector(PRESET_SELECT_DURATION))
+	_btn_presets.pressed.connect(func():
+		SettingsManager.play_ui_click()
+		_open_preset_selector(PRESET_SELECT_DURATION)
+	)
 	add_child(_btn_presets)
 
 	var left_spacer := Control.new()
@@ -1281,6 +1284,7 @@ func _build_ui() -> void:
 	input_row.add_child(send_btn)
 
 	_chat_toggle_btn.pressed.connect(func():
+		SettingsManager.play_ui_click()
 		_chat_panel.visible = not _chat_panel.visible
 		if _chat_panel.visible:
 			_chat_toggle_btn.text = "CHAT"
@@ -1344,6 +1348,7 @@ func _build_ui() -> void:
 	pause_overlay.visible = false
 	add_child(pause_overlay)
 	drawer_btn.pressed.connect(func():
+		SettingsManager.play_ui_click()
 		pause_overlay.visible = not pause_overlay.visible
 		if pause_overlay.visible:
 			if is_instance_valid(_respawn_panel):
@@ -1480,11 +1485,19 @@ func _build_ui() -> void:
 	music_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	music_btn.focus_mode = Control.FOCUS_NONE
 	var sync_music_btn := func():
-		music_btn.text = "MUSIC: ON" if SettingsManager.music_enabled else "MUSIC: MUTED"
-		_style_action_button(music_btn, Color(0.10, 0.24, 0.34, 0.94), Color(0.35, 0.85, 1.0) if SettingsManager.music_enabled else Color(0.65, 0.35, 0.35), 14)
+		var on: bool = SettingsManager.music_enabled and not SettingsManager.master_muted
+		music_btn.text = "MUSIC: ON" if on else "MUSIC: MUTED"
+		_style_action_button(music_btn, Color(0.10, 0.24, 0.34, 0.94), Color(0.35, 0.85, 1.0) if on else Color(0.65, 0.35, 0.35), 14)
 	sync_music_btn.call()
 	music_btn.pressed.connect(func():
-		SettingsManager.music_enabled = not SettingsManager.music_enabled
+		var turn_on: bool = not (SettingsManager.music_enabled and not SettingsManager.master_muted)
+		SettingsManager.music_enabled = turn_on
+		if turn_on:
+			SettingsManager.master_muted = false
+			if SettingsManager.master_volume <= 0.005:
+				SettingsManager.master_volume = 0.85
+			if SettingsManager.music_volume <= 0.005:
+				SettingsManager.music_volume = 0.45
 		SettingsManager.apply_and_save()
 		sync_music_btn.call()
 	)
@@ -1495,11 +1508,19 @@ func _build_ui() -> void:
 	sfx_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sfx_btn.focus_mode = Control.FOCUS_NONE
 	var sync_sfx_btn := func():
-		sfx_btn.text = "SFX: ON" if SettingsManager.sfx_enabled else "SFX: MUTED"
-		_style_action_button(sfx_btn, Color(0.10, 0.26, 0.18, 0.94), Color(0.35, 0.92, 0.55) if SettingsManager.sfx_enabled else Color(0.65, 0.35, 0.35), 14)
+		var on: bool = SettingsManager.sfx_enabled and not SettingsManager.master_muted
+		sfx_btn.text = "SFX: ON" if on else "SFX: MUTED"
+		_style_action_button(sfx_btn, Color(0.10, 0.26, 0.18, 0.94), Color(0.35, 0.92, 0.55) if on else Color(0.65, 0.35, 0.35), 14)
 	sync_sfx_btn.call()
 	sfx_btn.pressed.connect(func():
-		SettingsManager.sfx_enabled = not SettingsManager.sfx_enabled
+		var turn_on: bool = not (SettingsManager.sfx_enabled and not SettingsManager.master_muted)
+		SettingsManager.sfx_enabled = turn_on
+		if turn_on:
+			SettingsManager.master_muted = false
+			if SettingsManager.master_volume <= 0.005:
+				SettingsManager.master_volume = 0.85
+			if SettingsManager.sfx_volume <= 0.005:
+				SettingsManager.sfx_volume = 0.85
 		SettingsManager.apply_and_save()
 		sync_sfx_btn.call()
 	)
@@ -2362,12 +2383,7 @@ func _refresh_preset_cards() -> void:
 			(row_h.get_node("SecIcon") as TextureRect).texture = _get_weapon_icon_tex(s_id, w_sec)
 			var b_icon := row_h.get_node("BombIcon") as TextureRect
 			b_icon.visible = bombs_n > 0
-			match b_type:
-				"cluster": b_icon.texture = BombHudIcon.TEX_BOMB_CLUSTER
-				"sticky": b_icon.texture = BombHudIcon.TEX_BOMB_STICKY
-				"time": b_icon.texture = BombHudIcon.TEX_BOMB_TIME
-				"mine": b_icon.texture = BombHudIcon.TEX_BOMB_MINE
-				_: b_icon.texture = BombHudIcon.TEX_BOMB_FRAG
+			b_icon.texture = WeaponData.get_bomb_atlas_texture(b_type)
 			var sh_col: Color = Color(1.0, 0.52, 0.22) if sh_tier == "heavy" else (Color(0.32, 0.86, 1.0) if sh_tier == "medium" else Color(0.75, 0.88, 0.98))
 			var hm_col: Color = Color(1.0, 0.58, 0.22) if hm_tier == "heavy" else (Color(1.0, 0.86, 0.32) if hm_tier == "medium" else Color(0.78, 0.86, 0.94))
 			var sh_lbl := row_h.get_node("ArmorBox/ShieldRow/ShieldLbl") as Label
@@ -2887,24 +2903,9 @@ func _move_hud_layout_handle(key: String, center_screen_pos: Vector2) -> void:
 
 
 class BombHudIcon extends Control:
-	const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
-	const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
-	const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
-	const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
-	const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
 	var bomb_type: String = "frag"
 
 	func _draw() -> void:
 		var c := Vector2(size.x * 0.5, size.y * 0.52)
 		var r := Rect2(c - Vector2(14.0, 14.0), Vector2(28.0, 28.0))
-		match bomb_type:
-			"cluster":
-				draw_texture_rect(TEX_BOMB_CLUSTER, r, false)
-			"sticky":
-				draw_texture_rect(TEX_BOMB_STICKY, r, false)
-			"time":
-				draw_texture_rect(TEX_BOMB_TIME, r, false)
-			"mine":
-				draw_texture_rect(TEX_BOMB_MINE, r, false)
-			_:
-				draw_texture_rect(TEX_BOMB_FRAG, r, false)
+		draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, r, WeaponData.get_bomb_region(bomb_type))

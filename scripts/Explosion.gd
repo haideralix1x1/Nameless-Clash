@@ -1,5 +1,7 @@
 extends Node2D
 
+const BLAST_SFX_PATH: String = "res://assets/audio/blast.ogg"
+
 var explosion_radius: float = 120.0
 var max_damage: int = 0
 var shooter_peer_id: int = 0
@@ -12,6 +14,7 @@ var stun_duration: float = 0.0
 var ring_color: Color = Color(1.0, 0.72, 0.25)
 var custom_splash_only: bool = false
 var lightning_orb_only: bool = false
+var play_blast_sfx: bool = false
 
 var _elapsed: float = 0.0
 var _duration: float = 0.38
@@ -32,10 +35,12 @@ func _ready() -> void:
 	if custom_splash_only or lightning_orb_only:
 		_sprite.visible = false
 	if _audio != null:
-		if max_damage > 0:
-			_audio.stream = _create_big_blast_stream()
-			_audio.volume_db = 4.0
-			_audio.pitch_scale = randf_range(0.90, 1.05)
+		if max_damage > 0 or play_blast_sfx:
+			var blast_stream: AudioStream = _load_blast_stream()
+			if blast_stream != null:
+				_audio.stream = blast_stream
+			_audio.volume_db = 2.0
+			_audio.pitch_scale = randf_range(0.92, 1.06)
 			_audio.play()
 		elif _audio.stream != null:
 			_audio.volume_db = -14.0
@@ -65,9 +70,18 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	if _elapsed >= _duration and not _audio.playing:
 		queue_free()
-	elif _elapsed >= 0.65:
+	elif _elapsed >= 3.0:
 		_audio.stop()
 		queue_free()
+
+
+func _load_blast_stream() -> AudioStream:
+	var stream: AudioStream = (load(BLAST_SFX_PATH) as AudioStream) if ResourceLoader.exists(BLAST_SFX_PATH) else null
+	if stream == null and FileAccess.file_exists(BLAST_SFX_PATH):
+		stream = AudioStreamOggVorbis.load_from_file(BLAST_SFX_PATH)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
+	return stream
 
 
 func _exit_tree() -> void:

@@ -264,6 +264,7 @@ func _ready() -> void:
 		push_error("Nameless Studio is editor-only and unavailable in exported builds.")
 		get_tree().quit()
 		return
+	SettingsManager.stop_bgm()
 	_load_pose_data()
 	_weapon_muzzles = WeaponData.load_weapon_muzzles().duplicate(true)
 	_load_ui_layout_data()
@@ -1255,9 +1256,7 @@ func _set_part_val(pname: String, val: Dictionary) -> void:
 	var base_w: Dictionary = (_drag_start_weapon_val if (_dragging and not _drag_start_weapon_val.is_empty()) else _get_part_val("weapon")) if pname == "hand_near" else {}
 	var skey := _get_target_stance_key()
 	var target_container: Dictionary
-	if not _per_frame_scope:
-		target_container = _temp_preview_overrides
-	elif _per_agent_scope:
+	if _per_agent_scope:
 		var agents: Dictionary = _pose_data["agents"]
 		var ak := str(_selected_part_id)
 		if not agents.has(ak):
@@ -1304,26 +1303,13 @@ func _set_part_val(pname: String, val: Dictionary) -> void:
 				"z": int(round(float(base_w.get("z", 0))))
 			}
 	# Live-sync ModularCharacter static cache so preview reflects edits immediately
-	var preview_data := _pose_data.duplicate(true)
-	if not _per_frame_scope and not _temp_preview_overrides.is_empty():
-		if _per_agent_scope:
-			var ak := str(_selected_part_id)
-			if not preview_data["agents"].has(ak):
-				preview_data["agents"][ak] = {}
-			if not preview_data["agents"][ak].has(skey):
-				preview_data["agents"][ak][skey] = {}
-			for pk in _temp_preview_overrides:
-				preview_data["agents"][ak][skey][pk] = (_temp_preview_overrides[pk] as Dictionary).duplicate(true)
-		else:
-			if not preview_data["stances"].has(skey):
-				preview_data["stances"][skey] = {}
-			for pk in _temp_preview_overrides:
-				preview_data["stances"][skey][pk] = (_temp_preview_overrides[pk] as Dictionary).duplicate(true)
-		if is_instance_valid(_status_lbl):
-			_status_lbl.text = "Unrecorded preview (enable ● REC to record)"
-			_status_lbl.modulate = Color(1.0, 0.78, 0.35)
-	ModularCharacter._pose_overrides = preview_data
+	if not _temp_preview_overrides.is_empty():
+		_temp_preview_overrides.clear()
+	ModularCharacter._pose_overrides = _pose_data.duplicate(true)
 	ModularCharacter._pose_overrides_loaded = true
+	if is_instance_valid(_status_lbl):
+		_status_lbl.text = "Edited %s (%s) — click SAVE POSE" % [pname, skey]
+		_status_lbl.modulate = Color(0.45, 0.90, 1.0)
 
 
 func _sync_spinboxes_from_pose() -> void:
@@ -1554,7 +1540,7 @@ func _get_part_screen_pos(pname: String) -> Vector2:
 		"head": local_p += Vector2(0, -18)
 		"torso": local_p += Vector2(0, 6)
 		"legs": local_p += Vector2(0, 24)
-		"back": local_p += Vector2(-14 * dir, 4)
+		"back": local_p += Vector2(-20 * dir, 12)
 	return _stage_root.position + local_p * _zoom_scale
 
 
@@ -1608,19 +1594,26 @@ func _on_overlay_gui_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT or mb.button_index == MOUSE_BUTTON_RIGHT:
 			if mb.pressed:
-				var best_p := ""
-				var best_d := 34.0
-				for pname in PARTS:
-					if pname == "weapon" and _selected_stance == "none" and not _agent_mode:
-						continue
-					if pname == "muzzle" and (_selected_stance == "none" or _agent_mode):
-						continue
-					var d := mb.position.distance_to(_get_part_screen_pos(pname))
-					if d < best_d:
-						best_d = d
-						best_p = pname
-				if best_p != "":
-					_select_part(best_p)
+				if mb.button_index == MOUSE_BUTTON_LEFT and not mb.shift_pressed:
+					var sel_active := not (
+						(_selected_part == "weapon" and _selected_stance == "none" and not _agent_mode)
+						or (_selected_part == "muzzle" and (_selected_stance == "none" or _agent_mode))
+					)
+					var keep_sel := sel_active and mb.position.distance_to(_get_part_screen_pos(_selected_part)) <= 24.0
+					if not keep_sel:
+						var best_p := ""
+						var best_d := 16.0
+						for pname in PARTS:
+							if pname == "weapon" and _selected_stance == "none" and not _agent_mode:
+								continue
+							if pname == "muzzle" and (_selected_stance == "none" or _agent_mode):
+								continue
+							var d := mb.position.distance_to(_get_part_screen_pos(pname))
+							if d < best_d:
+								best_d = d
+								best_p = pname
+						if best_p != "":
+							_select_part(best_p)
 				_push_undo()
 				_dragging = true
 				_drag_rotating = (mb.button_index == MOUSE_BUTTON_RIGHT) or mb.shift_pressed

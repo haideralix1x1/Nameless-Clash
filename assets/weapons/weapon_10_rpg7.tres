@@ -33,5 +33,5 @@ is_explosive = true
 explosion_radius = 155.0
 muzzle_flash_scale = 1.8
 bullet_color = Color(1, 0.35, 0.12, 1)
-sound_path = "res://assets/audio/shoot_rpg.wav"
+sound_path = "res://assets/audio/RPG Launch.ogg"
 sprite_frame = 10

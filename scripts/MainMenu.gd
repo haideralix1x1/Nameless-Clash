@@ -11,6 +11,9 @@ var _callsign_label: Label
 var _loadout_label: Label
 var _coin_pill_lbl: Label
 var _coin_icon_cache: Texture2D = null
+var _mute_top_btn: Button
+var _sound_on_icon_cache: Texture2D = null
+var _sound_off_icon_cache: Texture2D = null
 var _shop_overlay: Control
 var _shop_coin_lbl: Label
 var _shop_gun_preview: TextureRect
@@ -93,6 +96,7 @@ var _coin_shop_grid: GridContainer
 var _coin_shop_coin_lbl: Label
 var _coin_shop_return_overlay: Control = null
 var _coin_purchase_popup: Control
+var _settings_overlay: Control
 var _coin_purchase_card: PanelContainer
 var _coin_purchase_body: VBoxContainer
 var _practice_agent_bot_row: HBoxContainer
@@ -152,6 +156,7 @@ var _is_joining_lan: bool = false
 
 
 func _ready() -> void:
+	SettingsManager.play_bgm("menu")
 	_build_ui()
 	_play_enter_animation()
 
@@ -333,6 +338,19 @@ func _build_ui() -> void:
 	_crate_top_btn.custom_minimum_size = Vector2(194, 40)
 	_crate_top_btn.pressed.connect(_open_crate_overlay)
 	econ_bar.add_child(_crate_top_btn)
+
+	_mute_top_btn = Button.new()
+	_mute_top_btn.custom_minimum_size = Vector2(114, 40)
+	_mute_top_btn.focus_mode = Control.FOCUS_NONE
+	_mute_top_btn.expand_icon = true
+	_mute_top_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_mute_top_btn.add_theme_font_override("font", UIStyle.FONT_MAIN)
+	_mute_top_btn.add_theme_font_size_override("font_size", 14)
+	_mute_top_btn.add_theme_constant_override("icon_max_width", 22)
+	_mute_top_btn.add_theme_constant_override("h_separation", 7)
+	_mute_top_btn.pressed.connect(func(): SettingsManager.toggle_master_mute())
+	_refresh_mute_button()
+	econ_bar.add_child(_mute_top_btn)
 
 	# Main Split: Left Side Rail + Your Soldier Showcase + Right Big Touch Battle Modes
 	var split := HBoxContainer.new()
@@ -557,7 +575,7 @@ func _build_ui() -> void:
 
 	var btn_settings := _make_arcade_button("SETTINGS", Color(0.75, 0.84, 0.96), 50.0, 17)
 	btn_settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_settings.pressed.connect(func(): _transition_to(NetworkManager.go_to_settings))
+	btn_settings.pressed.connect(_open_settings_popup)
 	bottom_row.add_child(btn_settings)
 
 	var btn_quit := _make_arcade_button("QUIT", Color(0.92, 0.30, 0.30), 50.0, 17)
@@ -577,11 +595,130 @@ func _build_ui() -> void:
 	_build_leaderboard_overlay()
 	_build_coin_shop_overlay()
 	_build_coin_purchase_popup()
+	_build_settings_overlay()
 	_update_crate_badge()
 	_update_ach_badge()
 	_update_new_item_badges()
 	if not ProfileManager.new_badges_changed.is_connected(_update_new_item_badges):
 		ProfileManager.new_badges_changed.connect(_update_new_item_badges)
+	if not SettingsManager.settings_changed.is_connected(_refresh_mute_button):
+		SettingsManager.settings_changed.connect(_refresh_mute_button)
+
+
+func _get_sound_icon(muted: bool) -> Texture2D:
+	if not muted and _sound_on_icon_cache != null:
+		return _sound_on_icon_cache
+	if muted and _sound_off_icon_cache != null:
+		return _sound_off_icon_cache
+
+	var sz: int = 28
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	var cy: float = 13.5
+	var spk_col := Color(0.95, 0.72, 0.72) if muted else Color(0.88, 0.98, 1.0)
+	var wave_col := Color(0.62, 0.94, 1.0)
+	var x_col := Color(1.0, 0.42, 0.42)
+	var wave_center := Vector2(14.0, cy)
+
+	for y in range(sz):
+		for x in range(sz):
+			var fx := float(x)
+			var fy := float(y)
+			var px_col := Color(0.0, 0.0, 0.0, 0.0)
+
+			# Speaker body (x: 4..8) + flared cone (x: 8..15)
+			if fx >= 3.5 and fx <= 15.5:
+				var half_h: float = 3.5 if fx <= 8.0 else lerpf(3.5, 8.2, clampf((fx - 8.0) / 6.5, 0.0, 1.0))
+				var dy: float = absf(fy - cy)
+				var dx_edge: float = minf(fx - 3.5, 15.5 - fx)
+				var a_spk: float = clampf(minf(half_h + 0.6 - dy, dx_edge + 0.4), 0.0, 1.0)
+				if a_spk > 0.0:
+					px_col = Color(spk_col.r, spk_col.g, spk_col.b, a_spk)
+
+			if muted:
+				var pt := Vector2(fx, fy)
+				var d1: float = pt.distance_to(Geometry2D.get_closest_point_to_segment(pt, Vector2(18.0, 9.0), Vector2(25.0, 18.0)))
+				var d2: float = pt.distance_to(Geometry2D.get_closest_point_to_segment(pt, Vector2(25.0, 9.0), Vector2(18.0, 18.0)))
+				var d_min: float = minf(d1, d2)
+				var a_x: float = clampf(1.65 - d_min, 0.0, 1.0)
+				if a_x > px_col.a:
+					px_col = Color(x_col.r, x_col.g, x_col.b, a_x)
+			else:
+				var dx: float = fx - wave_center.x
+				if dx >= 1.2 and absf(fy - cy) <= dx * 1.12:
+					var dist: float = Vector2(fx, fy).distance_to(wave_center)
+					var a_arc1: float = clampf(1.35 - absf(dist - 5.2), 0.0, 1.0)
+					var a_arc2: float = clampf(1.35 - absf(dist - 9.0), 0.0, 1.0)
+					var a_arc: float = maxf(a_arc1, a_arc2)
+					if a_arc > px_col.a:
+						px_col = Color(wave_col.r, wave_col.g, wave_col.b, a_arc)
+
+			img.set_pixel(x, y, px_col)
+
+	var tex := ImageTexture.create_from_image(img)
+	if muted:
+		_sound_off_icon_cache = tex
+	else:
+		_sound_on_icon_cache = tex
+	return tex
+
+
+func _refresh_mute_button() -> void:
+	if not is_instance_valid(_mute_top_btn):
+		return
+	var muted: bool = SettingsManager.is_game_muted()
+	_mute_top_btn.text = "MUTED" if muted else "SOUND"
+	_mute_top_btn.icon = _get_sound_icon(muted)
+	_mute_top_btn.tooltip_text = "Unmute full game sound" if muted else "Mute full game sound"
+
+	var sb := StyleBoxFlat.new()
+	if muted:
+		sb.bg_color = Color(0.28, 0.08, 0.10, 0.98)
+		sb.border_color = Color(1.0, 0.36, 0.36, 0.98)
+		_mute_top_btn.add_theme_color_override("font_color", Color(1.0, 0.76, 0.76))
+		_mute_top_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.88, 0.88))
+		_mute_top_btn.add_theme_color_override("font_pressed_color", Color(1.0, 0.88, 0.88))
+	else:
+		sb.bg_color = Color(0.08, 0.16, 0.26, 0.98)
+		sb.border_color = Color(0.36, 0.86, 1.0, 0.96)
+		_mute_top_btn.add_theme_color_override("font_color", Color(0.88, 0.96, 1.0))
+		_mute_top_btn.add_theme_color_override("font_hover_color", Color.WHITE)
+		_mute_top_btn.add_theme_color_override("font_pressed_color", Color(0.75, 0.92, 1.0))
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	sb.content_margin_top = 4.0
+	sb.content_margin_bottom = 4.0
+
+	var sb_hl := sb.duplicate() as StyleBoxFlat
+	sb_hl.bg_color = sb.bg_color.lightened(0.08)
+	var sb_pr := sb.duplicate() as StyleBoxFlat
+	sb_pr.bg_color = sb.bg_color.darkened(0.10)
+
+	_mute_top_btn.add_theme_stylebox_override("normal", sb)
+	_mute_top_btn.add_theme_stylebox_override("hover", sb_hl)
+	_mute_top_btn.add_theme_stylebox_override("pressed", sb_pr)
+	_mute_top_btn.add_theme_stylebox_override("focus", sb)
+
+
+func _build_settings_overlay() -> void:
+	var packed := load("res://scenes/SettingsMenu.tscn") as PackedScene
+	if packed == null:
+		return
+	var inst := packed.instantiate() as Control
+	if inst == null:
+		return
+	_settings_overlay = inst
+	_settings_overlay.set("is_embedded_popup", true)
+	_settings_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_settings_overlay.z_index = 74
+	_settings_overlay.visible = false
+	add_child(_settings_overlay)
+
+
+func _open_settings_popup() -> void:
+	if _settings_overlay != null:
+		_settings_overlay.call("open_popup")
 
 
 func _build_credits_overlay() -> void:
@@ -597,34 +734,54 @@ func _build_credits_overlay() -> void:
 	_credits_overlay.add_child(cc)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(540, 320)
+	card.custom_minimum_size = Vector2(560, 440)
 	card.add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.11, 0.18, 0.98), Color(0.98, 0.72, 0.22, 0.95), 14))
 	cc.add_child(card)
 
 	var cv := VBoxContainer.new()
-	cv.add_theme_constant_override("separation", 16)
+	cv.add_theme_constant_override("separation", 10)
 	card.add_child(cv)
 
 	var c_title := Label.new()
 	c_title.text = "NAMELESS CLASH"
 	c_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c_title.add_theme_font_size_override("font_size", 28)
+	c_title.add_theme_font_size_override("font_size", 26)
 	c_title.modulate = Color(1.0, 0.82, 0.28)
 	cv.add_child(c_title)
+
+	const COMPANY_LOGO_PATH: String = "res://assets/company_logo.png"
+	var logo_tex: Texture2D = null
+	if ResourceLoader.exists(COMPANY_LOGO_PATH):
+		logo_tex = load(COMPANY_LOGO_PATH) as Texture2D
+	if logo_tex == null:
+		var logo_abs: String = ProjectSettings.globalize_path(COMPANY_LOGO_PATH)
+		if FileAccess.file_exists(logo_abs):
+			var logo_img := Image.load_from_file(logo_abs)
+			if logo_img != null and not logo_img.is_empty():
+				logo_tex = ImageTexture.create_from_image(logo_img)
+	if logo_tex != null:
+		var logo_rect := TextureRect.new()
+		logo_rect.texture = logo_tex
+		logo_rect.custom_minimum_size = Vector2(220, 220)
+		logo_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		logo_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		logo_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		logo_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		cv.add_child(logo_rect)
 
 	var c_body := Label.new()
 	c_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	c_body.autowrap_mode = TextServer.AUTOWRAP_WORD
-	c_body.add_theme_font_size_override("font_size", 16)
+	c_body.add_theme_font_size_override("font_size", 15)
 	c_body.text = (
-		"Fast-Paced 2D Multiplayer Arena Combat!\n\n"
-		+ "Play Solo against AI Bots or battle friends over Local Wi-Fi / Hotspot.\n\n"
-		+ "Visit Character Customization to personalize your fighter\n"
-		+ "and Weapons to unlock skins and gear."
+		"Developed by Nameless Forge\n\n"
+		+ "Fast-Paced 2D Multiplayer Arena Combat!\n"
+		+ "Play Solo against AI Bots or battle friends over Local Wi-Fi / Hotspot.\n"
+		+ "Visit Character Customization & Weapons to unlock skins and gear."
 	)
 	cv.add_child(c_body)
 
-	var close_btn := _make_arcade_button("CLOSE", Color(0.98, 0.56, 0.14), 52.0, 18)
+	var close_btn := _make_arcade_button("CLOSE", Color(0.98, 0.56, 0.14), 48.0, 18)
 	close_btn.pressed.connect(_close_credits)
 	cv.add_child(close_btn)
 

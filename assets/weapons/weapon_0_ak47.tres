@@ -33,5 +33,6 @@ is_explosive = false
 explosion_radius = 0.0
 muzzle_flash_scale = 1.2
 bullet_color = Color(1, 0.78, 0.22, 1)
-sound_path = "res://assets/audio/shoot_ak47.wav"
+sound_path = "res://assets/audio/shoot_ak47.ogg"
+reload_sound_path = "res://assets/audio/reload_ak47.ogg"
 sprite_frame = 0

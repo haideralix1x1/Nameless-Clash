@@ -188,7 +188,7 @@ func _process(delta: float) -> void:
 			rotation = 0.0
 		else:
 			rotation = lerpf(rotation, 0.0, clampf(delta * 12.0, 0.0, 1.0))
-	if (_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
+	if not freeze_procedural_anim and (_is_raven_wing or _is_wraith_cape or _is_nyx_tail) and _sprite_back != null and is_instance_valid(_sprite_back) and _sprite_back.texture != null:
 		var base_s: float = float(FRAME_SIZE.y) / float(maxi(_sprite_back.texture.get_height(), 1))
 		if _current_anim == "jetpack":
 			var dir_sign: float = -1.0 if _flip_h else 1.0

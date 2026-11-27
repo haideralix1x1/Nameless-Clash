@@ -1,11 +1,6 @@
 extends Node2D
 
 const EXPLOSION_SCENE: PackedScene = preload("res://scenes/Explosion.tscn")
-const TEX_BOMB_TIME: Texture2D = preload("res://assets/sprites/weapons/bomb_time.png")
-const TEX_BOMB_FRAG: Texture2D = preload("res://assets/sprites/weapons/bomb_frag.png")
-const TEX_BOMB_MINE: Texture2D = preload("res://assets/sprites/weapons/bomb_mine.png")
-const TEX_BOMB_CLUSTER: Texture2D = preload("res://assets/sprites/weapons/bomb_cluster.png")
-const TEX_BOMB_STICKY: Texture2D = preload("res://assets/sprites/weapons/bomb_sticky.png")
 
 var bomb_type: String = "frag"
 var velocity: Vector2 = Vector2.ZERO
@@ -234,10 +229,10 @@ func _draw() -> void:
 				draw_arc(Vector2.ZERO, _trigger_radius, 0.0, TAU, 28, Color(1.0, 0.32, 0.22, 0.55 + 0.25 * pulse), 2.0)
 			elif _settled:
 				draw_arc(Vector2.ZERO, _trigger_radius, 0.0, TAU, 24, Color(1.0, 0.78, 0.25, 0.35), 1.5)
-			draw_texture_rect(TEX_BOMB_MINE, Rect2(-14.0, -14.0, 28.0, 28.0), false)
+			draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-14.0, -14.0, 28.0, 28.0), WeaponData.get_bomb_region("mine"))
 		"time":
 			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
-			draw_texture_rect(TEX_BOMB_TIME, Rect2(-15.0, -15.0, 30.0, 30.0), false)
+			draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-15.0, -15.0, 30.0, 30.0), WeaponData.get_bomb_region("time"))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			if _beep_flash > 0.05:
 				draw_arc(Vector2.ZERO, 14.0 + (1.0 - _beep_flash) * 26.0, 0.0, TAU, 24, Color(1.0, 0.32, 0.22, _beep_flash * 0.85), 2.5)
@@ -245,14 +240,14 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, 16.0, -PI * 0.5, -PI * 0.5 + TAU * frac, 20, Color(1.0, 0.72, 0.22, 0.8), 2.0)
 		"sticky":
 			draw_set_transform(Vector2.ZERO, _spin if not _stuck else 0.0, Vector2.ONE)
-			draw_texture_rect(TEX_BOMB_STICKY, Rect2(-14.0, -14.0, 28.0, 28.0), false)
+			draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-14.0, -14.0, 28.0, 28.0), WeaponData.get_bomb_region("sticky"))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		"cluster":
 			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
-			draw_texture_rect(TEX_BOMB_CLUSTER, Rect2(-14.0, -14.0, 28.0, 28.0), false)
+			draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-14.0, -14.0, 28.0, 28.0), WeaponData.get_bomb_region("cluster"))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		_:
 			draw_set_transform(Vector2.ZERO, _spin if not _settled else 0.0, Vector2.ONE)
-			draw_texture_rect(TEX_BOMB_FRAG, Rect2(-14.0, -14.0, 28.0, 28.0), false)
+			draw_texture_rect_region(WeaponData.TEX_BOMBS_SHEET, Rect2(-14.0, -14.0, 28.0, 28.0), WeaponData.get_bomb_region("frag"))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 

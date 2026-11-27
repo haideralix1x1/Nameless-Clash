@@ -33,15 +33,25 @@ const USER_WEAPON_MUZZLES_PATH: String = "user://weapon_muzzles.json"
 const TEX_SELECTION_SHEET: Texture2D = preload("res://assets/sprites/weapons_selection_sheet.png")
 const TEX_FLOOR_SHEET: Texture2D = preload("res://assets/sprites/weapons_floor_sheet.png")
 const TEX_AGENT_SHEET: Texture2D = preload("res://assets/sprites/weapons_agent_sheet.png")
-const SELECTION_COLS: int = 16
+const TEX_BOMBS_SHEET: Texture2D = preload("res://assets/sprites/bombs_sheet.png")
+const SELECTION_COLS: int = 15
 const SELECTION_ROWS: int = 10
 const FLOOR_COLS: int = 8
 const AGENT_COLS: int = 11
+const BOMB_COLS: int = 5
+
+const BOMB_COL_BY_TYPE: Dictionary = {
+	"frag": 0,
+	"sticky": 1,
+	"time": 2,
+	"mine": 3,
+	"cluster": 4
+}
 
 const SELECTION_COL_BY_ID: Dictionary = {
 	0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10,
 	14: 2,
-	18: 11, 20: 13, 21: 14, 23: 15, 24: 12
+	18: 11, 20: 13, 23: 14, 24: 12
 }
 const FLOOR_COL_BY_ID: Dictionary = {
 	11: 0, 13: 1, 15: 2, 16: 3, 17: 4, 22: 5, 12: 6, 19: 7
@@ -103,6 +113,18 @@ static func get_agent_weapon_region(style_name: String) -> Rect2:
 	if col < 0:
 		return Rect2()
 	return Rect2(col * 256.0, 0.0, 256.0, 128.0)
+
+
+static func get_bomb_region(bomb_type: String) -> Rect2:
+	var col: int = clampi(int(BOMB_COL_BY_TYPE.get(bomb_type, 0)), 0, BOMB_COLS - 1)
+	return Rect2(float(col) * 128.0, 0.0, 128.0, 128.0)
+
+
+static func get_bomb_atlas_texture(bomb_type: String) -> AtlasTexture:
+	var at := AtlasTexture.new()
+	at.atlas = TEX_BOMBS_SHEET
+	at.region = get_bomb_region(bomb_type)
+	return at
 static var _range_cache_loaded: bool = false
 static var _range_cache: Dictionary = {}
 static var _stats_cache_loaded: bool = false
@@ -193,6 +215,7 @@ static func save_weapon_muzzles(data: Dictionary, save_to_project: bool = true) 
 @export var muzzle_flash_scale: float = 1.0
 @export var bullet_color: Color = Color(1.0, 0.85, 0.25)
 @export var sound_path: String = "res://assets/audio/shoot_ak47.wav"
+@export var reload_sound_path: String = ""
 @export var sprite_frame: int = 0
 
 const RESOURCE_PATHS: Array[String] = [
@@ -702,7 +725,7 @@ static func _get_special_weapon(w_id: int) -> WeaponData:
 			w.bullet_color = Color(1.0, 0.30, 0.22)
 			w.custom_visual_style = "homing_rocket"
 			w.custom_lifetime = 2.8
-			w.sound_path = "res://assets/audio/shoot_rpg.wav"
+			w.sound_path = "res://assets/audio/RPG Launch.ogg"
 			w.sprite_frame = 10
 		13:
 			w.code_name = "plasma_cannon"
