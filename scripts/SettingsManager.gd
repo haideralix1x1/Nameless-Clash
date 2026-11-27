@@ -73,14 +73,17 @@ var allow_explosives: bool = true
 
 const BGM_MENU_PATH: String = "res://assets/audio/menu_music.ogg"
 const BGM_ARENA_PATH: String = "res://assets/audio/Stage Music.ogg"
-const UI_CLICK_SFX_PATH: String = "res://assets/audio/reload_shotgun.ogg"
+const UI_CLICK_SFX_PATH: String = "res://assets/audio/Click 1.ogg"
+const UI_PURCHASE_SFX_PATH: String = "res://assets/audio/click 2.ogg"
 
 var _bgm_player: AudioStreamPlayer
 var _bgm_track_key: String = ""
 var _bgm_tween: Tween = null
 var _bgm_target_db: float = -6.0
 var _ui_click_player: AudioStreamPlayer
+var _ui_purchase_player: AudioStreamPlayer
 var _last_ui_click_msec: int = 0
+var _last_ui_purchase_msec: int = 0
 
 
 func _ready() -> void:
@@ -104,6 +107,9 @@ func _exit_tree() -> void:
 	if is_instance_valid(_ui_click_player):
 		_ui_click_player.stop()
 		_ui_click_player.stream = null
+	if is_instance_valid(_ui_purchase_player):
+		_ui_purchase_player.stop()
+		_ui_purchase_player.stream = null
 
 
 static func get_builtin_default_ui_layout() -> Dictionary:
@@ -313,20 +319,33 @@ func stop_bgm(_fade: bool = false) -> void:
 		_bgm_player.stop()
 
 
+func _load_sfx_stream(path: String) -> AudioStream:
+	var stream: AudioStream = (load(path) as AudioStream) if ResourceLoader.exists(path) else null
+	if stream == null and path.ends_with(".ogg") and FileAccess.file_exists(path):
+		stream = AudioStreamOggVorbis.load_from_file(path)
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
+	return stream
+
+
 func _setup_ui_click_sfx() -> void:
 	_ui_click_player = AudioStreamPlayer.new()
 	_ui_click_player.name = "UIClickPlayer"
 	_ui_click_player.bus = "SFX"
 	_ui_click_player.max_polyphony = 4
 	_ui_click_player.process_mode = Node.PROCESS_MODE_ALWAYS
-	_ui_click_player.volume_db = -4.0
-	var stream: AudioStream = (load(UI_CLICK_SFX_PATH) as AudioStream) if ResourceLoader.exists(UI_CLICK_SFX_PATH) else null
-	if stream == null and FileAccess.file_exists(UI_CLICK_SFX_PATH):
-		stream = AudioStreamOggVorbis.load_from_file(UI_CLICK_SFX_PATH)
-	if stream is AudioStreamOggVorbis:
-		(stream as AudioStreamOggVorbis).loop = false
-	_ui_click_player.stream = stream
+	_ui_click_player.volume_db = -2.0
+	_ui_click_player.stream = _load_sfx_stream(UI_CLICK_SFX_PATH)
 	add_child(_ui_click_player)
+
+	_ui_purchase_player = AudioStreamPlayer.new()
+	_ui_purchase_player.name = "UIPurchasePlayer"
+	_ui_purchase_player.bus = "SFX"
+	_ui_purchase_player.max_polyphony = 4
+	_ui_purchase_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	_ui_purchase_player.volume_db = 0.0
+	_ui_purchase_player.stream = _load_sfx_stream(UI_PURCHASE_SFX_PATH)
+	add_child(_ui_purchase_player)
 
 
 func play_ui_click() -> void:
@@ -340,6 +359,19 @@ func play_ui_click() -> void:
 	_last_ui_click_msec = now
 	_ui_click_player.pitch_scale = randf_range(0.96, 1.04)
 	_ui_click_player.play()
+
+
+func play_ui_purchase() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if not is_instance_valid(_ui_purchase_player) or _ui_purchase_player.stream == null:
+		return
+	var now: int = Time.get_ticks_msec()
+	if now - _last_ui_purchase_msec < 65:
+		return
+	_last_ui_purchase_msec = now
+	_ui_purchase_player.pitch_scale = randf_range(0.98, 1.03)
+	_ui_purchase_player.play()
 
 
 func _input(event: InputEvent) -> void:

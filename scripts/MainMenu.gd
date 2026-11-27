@@ -890,12 +890,7 @@ func _build_agent_select_overlay() -> void:
 		if not _agent_select_for_practice and not ProfileManager.is_agent_unlocked(_agent_preview_idx, false):
 			if ProfileManager.buy_agent(_agent_preview_idx):
 				ProfileManager.apply_archetype_preset(_agent_preview_idx, true)
-				var sfx := AudioStreamPlayer.new()
-				sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
-				sfx.bus = &"SFX"
-				sfx.finished.connect(sfx.queue_free)
-				add_child(sfx)
-				sfx.play()
+				SettingsManager.play_ui_purchase()
 				if is_instance_valid(_coin_pill_lbl):
 					_coin_pill_lbl.text = ProfileManager.format_coins(ProfileManager.coins)
 				if is_instance_valid(_preview):
@@ -2946,12 +2941,7 @@ func _refresh_shop_skins() -> void:
 					_shop_preview_skin_key = skey
 					_shop_status_lbl.text = "Purchased & equipped %s for %s NC!" % [sname, ProfileManager.format_coins(price)]
 					_shop_status_lbl.modulate = Color(0.45, 1.0, 0.65)
-					var sfx := AudioStreamPlayer.new()
-					sfx.stream = load("res://assets/audio/pickup.wav") as AudioStream
-					sfx.bus = &"SFX"
-					sfx.finished.connect(sfx.queue_free)
-					add_child(sfx)
-					sfx.play()
+					SettingsManager.play_ui_purchase()
 					_refresh_shop_skins()
 				else:
 					_shop_status_lbl.text = "Not enough NC! Need %s NC." % ProfileManager.format_coins(price)
@@ -3064,7 +3054,7 @@ func _build_crate_overlay() -> void:
 	_daily_claim_btn.custom_minimum_size = Vector2(226, 38)
 	_daily_claim_btn.pressed.connect(func():
 		if ProfileManager.claim_daily_bonus():
-			_play_ui_pickup_sfx()
+			SettingsManager.play_ui_purchase()
 			var act_ui: Dictionary = _crate_premium_ui if _crate_active_is_premium else _crate_supply_ui
 			var sl: Label = act_ui.get("status_lbl") as Label
 			if is_instance_valid(sl):
@@ -3693,6 +3683,7 @@ func _start_single_crate_open(is_premium_crate: bool, use_free_daily: bool) -> v
 		return
 
 	_crate_last_win = res
+	SettingsManager.play_ui_purchase()
 	if is_instance_valid(_crate_coin_lbl):
 		_crate_coin_lbl.text = ProfileManager.format_coins(int(res.get("coins_before_reward", ProfileManager.coins)))
 	if is_instance_valid(status_lbl):
@@ -4125,6 +4116,7 @@ func _start_batch_crate_open(is_premium_crate: bool, count: int = 10) -> void:
 		return
 
 	var items: Array = res.get("items", []) as Array
+	SettingsManager.play_ui_purchase()
 	var running_coins: int = int(res.get("coins_before_rewards", ProfileManager.coins))
 	if is_instance_valid(_crate_coin_lbl):
 		_crate_coin_lbl.text = ProfileManager.format_coins(running_coins)
@@ -4667,7 +4659,7 @@ func _refresh_achievements_list() -> void:
 			act.pressed.connect(func():
 				var cr: Dictionary = AchievementManager.claim_achievement(aid)
 				if bool(cr.get("ok", false)):
-					_play_ui_pickup_sfx()
+					SettingsManager.play_ui_purchase()
 					_refresh_achievements_list()
 					_update_ach_badge()
 			)
@@ -5031,7 +5023,7 @@ func _on_buy_coin_pack(sku: String) -> void:
 	var receipt: Dictionary = ProfileManager.purchase_coin_pack(sku)
 	if not bool(receipt.get("ok", false)):
 		return
-	_play_crate_chime_sfx()
+	SettingsManager.play_ui_purchase()
 	if is_instance_valid(_coin_shop_coin_lbl):
 		_coin_shop_coin_lbl.text = ProfileManager.format_coins(ProfileManager.coins)
 	_refresh_crate_ui()

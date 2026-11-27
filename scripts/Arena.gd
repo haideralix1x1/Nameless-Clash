@@ -7,6 +7,7 @@ const TEX_BG_DESERT: Texture2D = preload("res://assets/tilemaps/desert_bg.png")
 const TEX_TILES: Texture2D = preload("res://assets/tilemaps/bunker_tileset.png")
 const TEX_CRATE: Texture2D = preload("res://assets/sprites/weapon_crate.png")
 const FLOOR_BOMB_TYPES: Array[String] = ["frag", "sticky", "time", "mine", "cluster"]
+const MATCH_START_SFX_PATH: String = "res://assets/audio/reload_shotgun.ogg"
 
 const DEFAULT_ARENA_WIDTH: float = 2240.0
 const DEFAULT_ARENA_HEIGHT: float = 1248.0
@@ -45,6 +46,7 @@ var _shooting_hud_lbl: Label = null
 
 func _ready() -> void:
 	SettingsManager.play_bgm("arena")
+	_play_match_start_sfx()
 	NetworkManager.ensure_offline_player()
 	if NetworkManager.selected_map_id in DOUBLE_MAP_IDS:
 		arena_width = DEFAULT_ARENA_WIDTH * 2.0
@@ -70,6 +72,25 @@ func _ready() -> void:
 	NetworkManager.ult_pickup_relocated.connect(_on_ult_pickup_relocated)
 	NetworkManager.mine_event.connect(_on_mine_event)
 	NetworkManager.player_list_updated.connect(_on_network_players_updated)
+
+
+func _play_match_start_sfx() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var stream: AudioStream = (load(MATCH_START_SFX_PATH) as AudioStream) if ResourceLoader.exists(MATCH_START_SFX_PATH) else null
+	if stream == null and FileAccess.file_exists(MATCH_START_SFX_PATH):
+		stream = AudioStreamOggVorbis.load_from_file(MATCH_START_SFX_PATH)
+	if stream == null:
+		return
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
+	var sfx := AudioStreamPlayer.new()
+	sfx.stream = stream
+	sfx.bus = &"SFX"
+	sfx.volume_db = 0.0
+	sfx.finished.connect(sfx.queue_free)
+	add_child(sfx)
+	sfx.play()
 
 
 func _unhandled_input(event: InputEvent) -> void:

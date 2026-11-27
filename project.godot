@@ -14,9 +14,8 @@ config/name="Nameless Clash"
 config/description="Project Hotspot Militia - 2D Local Multiplayer Arena Shooter"
 run/main_scene="res://scenes/SplashScreen.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
-boot_splash/bg_color=Color(0.0235, 0.0314, 0.0824, 1)
-boot_splash/stretch_mode=4
-boot_splash/image="res://assets/splash_screen.png"
+boot_splash/bg_color=Color(0.0157, 0.0431, 0.1059, 1)
+boot_splash/show_image=false
 config/icon="res://icon.svg"
 
 [autoload]
@@ -102,7 +101,7 @@ open_lobby={
 
 [rendering]
 
-environment/defaults/default_clear_color=Color(0.0235, 0.0314, 0.0824, 1)
+environment/defaults/default_clear_color=Color(0.0157, 0.0431, 0.1059, 1)
 textures/canvas_textures/default_texture_filter=2
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method.mobile="gl_compatibility"
