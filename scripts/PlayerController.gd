@@ -407,8 +407,19 @@ func _ready() -> void:
 	_camera.enabled = is_local_human
 	if is_local_human:
 		_camera.make_current()
-		if not is_preview_dummy and NetworkManager.is_agent_clash_mode():
-			ProfileManager.mark_agent_played(archetype_id)
+		if not is_preview_dummy:
+			var audio_listener := AudioListener2D.new()
+			audio_listener.name = "LocalAudioListener2D"
+			add_child(audio_listener)
+			audio_listener.make_current()
+			if is_instance_valid(_audio_sfx):
+				_audio_sfx.panning_strength = 0.0
+			if is_instance_valid(_reload_audio):
+				_reload_audio.panning_strength = 0.0
+			if is_instance_valid(_jetpack_audio):
+				_jetpack_audio.panning_strength = 0.0
+			if NetworkManager.is_agent_clash_mode():
+				ProfileManager.mark_agent_played(archetype_id)
 	_muzzle_flash.visible = false
 	_update_overhead_ui()
 	_emit_hud_signals()

@@ -101,8 +101,8 @@ open_lobby={
 
 [rendering]
 
-environment/defaults/default_clear_color=Color(0.0157, 0.0431, 0.1059, 1)
 textures/canvas_textures/default_texture_filter=2
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.0157, 0.0431, 0.1059, 1)

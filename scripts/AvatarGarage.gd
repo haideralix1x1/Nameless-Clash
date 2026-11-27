@@ -157,15 +157,17 @@ func _build_ui() -> void:
 	top_bar.add_child(lobby_btn)
 
 	var play_btn := Button.new()
-	play_btn.text = "GUNFIGHT"
+	play_btn.text = "GUN GAME"
 	play_btn.custom_minimum_size = Vector2(184, 50)
 	play_btn.add_theme_font_size_override("font_size", 17)
 	_style_button(play_btn, Color(0.10, 0.34, 0.18, 0.98), Color(0.28, 0.92, 0.45))
 	play_btn.pressed.connect(func():
 		NetworkManager.disconnect_network()
 		NetworkManager.test_mode_enabled = false
+		NetworkManager.practice_shooting_range = false
 		NetworkManager.match_mode = 0
-		NetworkManager.go_to_arena()
+		NetworkManager.pending_menu_overlay = "gun_game_settings"
+		NetworkManager.go_to_main_menu()
 	)
 	top_bar.add_child(play_btn)
 

@@ -81,10 +81,12 @@ func _ready() -> void:
 			_sprite.scale = Vector2(1.6, 1.8)
 		elif is_laser:
 			_sprite.scale = Vector2(1.4, 1.1)
+		else:
+			_sprite.scale = Vector2(0.55, 0.72)
 
 	_trail.default_color = Color(bullet_color.r, bullet_color.g, bullet_color.b, 0.75)
-	_trail.width = 6.0 if is_explosive else (5.0 if is_laser else 3.0)
-	if visual_style == "slash_wave" or visual_style == "smoke_orb":
+	_trail.width = 6.0 if is_explosive else (5.0 if is_laser else 2.0)
+	if visual_style == "slash_wave" or visual_style == "smoke_orb" or (visual_style == "bullet" and not is_laser and not is_explosive):
 		_trail.visible = false
 	if on_hit_effect_kind == "hook_drag":
 		_trail.visible = false

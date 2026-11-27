@@ -3,7 +3,7 @@ extends Control
 const SPLASH_VIDEO_PATH: String = "res://assets/splash_video.ogv"
 const SPLASH_AUDIO_PATH: String = "res://assets/audio/Splash Audio.ogg"
 const MAIN_MENU_PATH: String = "res://scenes/MainMenu.tscn"
-const BG_COLOR: Color = Color(0.0157, 0.0431, 0.1059, 1.0)
+const BG_COLOR: Color = Color(0.0, 0.0, 0.0, 1.0)
 const DEFAULT_VIDEO_SIZE: Vector2 = Vector2(1280.0, 720.0)
 const MAX_VIDEO_SEC: float = 8.0
 
@@ -157,7 +157,7 @@ func _process(delta: float) -> void:
 		return
 
 	_menu_frames += 1
-	if not _fading_out and _menu_frames >= 2:
+	if not _fading_out and _menu_frames >= 1:
 		_start_reveal_fade()
 
 
@@ -217,14 +217,11 @@ func _start_reveal_fade() -> void:
 	_fading_out = true
 	if is_instance_valid(_overlay):
 		_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var fade_sec: float = 0.2 if _skip_requested else 0.35
+		var reveal_sec: float = 0.15 if _skip_requested else 0.25
 		var tw := create_tween()
-		tw.tween_property(_overlay, "modulate:a", 0.0, fade_sec)
+		tw.tween_property(_overlay, "modulate:a", 0.0, reveal_sec)
 		if is_instance_valid(_audio_player) and _audio_player.playing:
-			if _skip_requested:
-				_audio_player.stop()
-			else:
-				tw.parallel().tween_property(_audio_player, "volume_db", -32.0, fade_sec)
+			tw.parallel().tween_property(_audio_player, "volume_db", -40.0, reveal_sec)
 		tw.finished.connect(queue_free)
 	else:
 		if is_instance_valid(_audio_player) and _audio_player.playing:

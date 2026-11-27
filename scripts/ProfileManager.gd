@@ -88,8 +88,8 @@ const WEAPON_SKIN_META_OVERRIDES: Dictionary = {
 # Weapons whose columns in weapons_selection_sheet.png contain dedicated custom art for all 10 skin rows (no extra tint needed)
 const CUSTOM_SKIN_ART_WEAPONS: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 18, 20, 23, 24]
 # Weapons that never get skins (always shown with the base/default art)
-const NO_SKIN_WEAPONS: Array[int] = [19]
-const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 23, 24, 22, 3, 4, 5, 6, 7, 8, 9, 20, 10, 18]
+const NO_SKIN_WEAPONS: Array[int] = [11, 13, 15, 16, 17, 19]
+const SHOP_WEAPON_IDS: Array[int] = [0, 1, 2, 23, 24, 22, 3, 4, 5, 6, 7, 8, 9, 20, 10, 18, 12, 17, 11, 13, 15, 16, 19]
 
 const PROFILE_PATH: String = "user://player_profile.cfg"
 
@@ -1838,6 +1838,7 @@ func get_crate_skin_pools() -> Dictionary:
 
 
 func open_crate(is_premium_crate: bool, use_free_daily: bool = false) -> Dictionary:
+	var spent_amount: int = STANDARD_CRATE_PRICE
 	if use_free_daily:
 		if is_premium_crate or not can_open_free_daily_crate():
 			return {"ok": false, "error": "Free daily crate already opened today!"}
@@ -1847,9 +1848,10 @@ func open_crate(is_premium_crate: bool, use_free_daily: bool = false) -> Diction
 		var cost: int = PREMIUM_CRATE_PRICE if is_premium_crate else STANDARD_CRATE_PRICE
 		if not spend_coins(cost):
 			return {"ok": false, "error": "Not enough NC! Need %s NC." % format_coins(cost)}
+		spent_amount = cost
 
 	var coins_after_spend: int = coins
-	var res: Dictionary = _roll_single_crate_reward(is_premium_crate)
+	var res: Dictionary = _roll_single_crate_reward(is_premium_crate, spent_amount)
 	res["coins_before_reward"] = coins_after_spend
 	return res
 
@@ -1863,7 +1865,7 @@ func open_crates_batch(is_premium_crate: bool, count: int = 10) -> Dictionary:
 	var coins_after_spend: int = coins
 	var items: Array = []
 	for _i in range(n):
-		items.append(_roll_single_crate_reward(is_premium_crate))
+		items.append(_roll_single_crate_reward(is_premium_crate, total_cost))
 	return {
 		"ok": true,
 		"is_premium": is_premium_crate,
@@ -1873,7 +1875,7 @@ func open_crates_batch(is_premium_crate: bool, count: int = 10) -> Dictionary:
 	}
 
 
-func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
+func _roll_single_crate_reward(is_premium_crate: bool, spent_amount: int = 0) -> Dictionary:
 	_ensure_crate_daily_state()
 	var tkey: String = "premium" if is_premium_crate else "standard"
 	var entries: Array = crate_tables.get(tkey, get_default_crate_tables()[tkey]) as Array
@@ -1938,8 +1940,9 @@ func _roll_single_crate_reward(is_premium_crate: bool) -> Dictionary:
 		ctype = "basic_skin"
 
 	if ctype == "double_coins":
-		var floor_bonus: int = (PREMIUM_CRATE_PRICE if is_premium_crate else STANDARD_CRATE_PRICE) * 2
-		var bonus: int = mini(maxi(coins, floor_bonus), 50_000_000)
+		var unit_price: int = PREMIUM_CRATE_PRICE if is_premium_crate else STANDARD_CRATE_PRICE
+		var base_spent: int = spent_amount if spent_amount > 0 else unit_price
+		var bonus: int = base_spent * 2
 		daily_non_coin_wins += 1
 		add_coins(bonus)
 		if has_node("/root/AchievementManager"):

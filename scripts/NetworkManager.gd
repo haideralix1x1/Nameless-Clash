@@ -141,6 +141,7 @@ var agent_draft_active: bool = false
 var agent_draft_locks: Dictionary = {}
 var agent_draft_timer: float = 0.0
 const AGENT_DRAFT_DURATION: float = 25.0
+var pending_menu_overlay: String = ""
 
 
 func _ready() -> void:

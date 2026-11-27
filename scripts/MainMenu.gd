@@ -603,6 +603,9 @@ func _build_ui() -> void:
 		ProfileManager.new_badges_changed.connect(_update_new_item_badges)
 	if not SettingsManager.settings_changed.is_connected(_refresh_mute_button):
 		SettingsManager.settings_changed.connect(_refresh_mute_button)
+	if NetworkManager.pending_menu_overlay == "gun_game_settings":
+		NetworkManager.pending_menu_overlay = ""
+		_open_match_settings(false)
 
 
 func _get_sound_icon(muted: bool) -> Texture2D:
@@ -1613,7 +1616,7 @@ func _close_test_mode_overlay() -> void:
 
 func _build_map_select_overlay() -> void:
 	_map_select_overlay = ColorRect.new()
-	_map_select_overlay.z_index = 20
+	_map_select_overlay.z_index = 70
 	_map_select_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_map_select_overlay.color = Color(0.02, 0.03, 0.06, 0.90)
 	_map_select_overlay.visible = false
@@ -1691,6 +1694,21 @@ func _build_map_select_overlay() -> void:
 
 	var select_btn := _make_arcade_button("SELECT MAP", Color(0.30, 0.92, 0.54), 56.0, 20)
 	select_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if select_btn.icon != null:
+		var pin_tr := TextureRect.new()
+		pin_tr.texture = select_btn.icon
+		pin_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pin_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pin_tr.custom_minimum_size = Vector2(30, 30)
+		pin_tr.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+		pin_tr.offset_left = 14.0
+		pin_tr.offset_right = 44.0
+		pin_tr.offset_top = -15.0
+		pin_tr.offset_bottom = 15.0
+		pin_tr.modulate = Color(0.88, 0.91, 0.95, 0.92)
+		pin_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		select_btn.add_child(pin_tr)
+		select_btn.icon = null
 	select_btn.pressed.connect(func():
 		if is_instance_valid(_map_opt):
 			_map_opt.selected = NetworkManager.selected_map_id
@@ -2800,8 +2818,11 @@ func _refresh_shop_skins() -> void:
 	for c in _shop_skin_grid.get_children():
 		c.queue_free()
 
+	var no_skins: bool = ProfileManager.NO_SKIN_WEAPONS.has(wid)
 	for sdef in ProfileManager.GUN_SKIN_CATALOG:
 		var skey: String = str(sdef["key"])
+		if no_skins and skey != "default":
+			continue
 		var sname: String = ProfileManager.get_gun_skin_name(wid, skey)
 		var price: int = ProfileManager.get_gun_skin_price(wid, skey)
 		var tint: Color = ProfileManager.get_gun_skin_tint(wid, skey)
